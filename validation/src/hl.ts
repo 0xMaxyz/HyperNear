@@ -9,7 +9,7 @@ import {
   type HlExtraAgentsResult,
   type HlTransport,
 } from '@perps-platform/core';
-import { REPO_ROOT, requireEnv } from './env';
+import { REPO_ROOT, labWallet } from './env';
 
 const NET = 'testnet' as const;
 
@@ -69,7 +69,7 @@ export function testnetClient(keys: ClientKeys = {}): HlClient {
 }
 
 export function funderKey(): Hex {
-  return requireEnv('HL_TESTNET_FUNDER_KEY') as Hex;
+  return labWallet(1).key; // lab wallet #1 funds every live test
 }
 
 export function funderAddress(): HexAddress {
@@ -258,7 +258,7 @@ export async function submitSignedAction(
 
 // ----------------------------------------------------------- funder transfers
 
-/** usdSend from the funder (HL_TESTNET_FUNDER_KEY) to `to`; returns HL's response. */
+/** usdSend from the funder (lab wallet #1) to `to`; returns HL's response. */
 export async function fundFromFunder(to: HexAddress, amount: string) {
   const client = testnetClient({ master: funderKey() });
   return client.usdSend({ destination: to, amount });

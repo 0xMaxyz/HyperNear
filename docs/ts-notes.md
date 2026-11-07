@@ -17,7 +17,7 @@ Running log for TypeScript work (core, validation/, agent/). Newest decisions fi
 - User-signed action nonce: `approveAgent`/`usdClassTransfer` use field `nonce`, `usdSend`/`withdraw3` use field `time`; the request body nonce equals that field. Typed-data primary types: `HyperliquidTransaction:{ApproveAgent,UsdSend,Withdraw,UsdClassTransfer}` (withdraw3's wire type is `withdraw3`, primary type `...:Withdraw`). Domain: `HyperliquidSignTransaction` v1, chainId = `parseInt(signatureChainId)`, zero verifyingContract. The harness table is checked against the Python SDK golden vectors (approveAgent, usdSend, withdraw3) in `validation/tests/harness.test.ts`.
 
 ## validation/
-- `LIVE=1` gates everything that touches the network; live tests that spend money additionally need `HL_TESTNET_FUNDER_KEY` (read from env or the gitignored repo-root `.env`). Without them `pnpm test` is green offline.
+- `LIVE=1` gates everything that touches the network; live tests that spend money additionally need `LAB_WALLETS_PATH` (lab wallet file, indices 1-10 only; read from env or the gitignored repo-root `.env`). Without them `pnpm test` is green offline.
 - Each claim test writes `validation/results/<id>.json` (`status` ✅/❌/⚠️, `numbers`, `refs`, `notes`). Blocked-on-input claims write ⚠️ "not run: reason" and skip.
 - `@perps-platform/core` is aliased to the core source (no build step).
 - Files contract-dev must produce (testnet, shape below). All consumed by `loadSignedActionFile`:
@@ -31,6 +31,7 @@ Running log for TypeScript work (core, validation/, agent/). Newest decisions fi
   ```
   Offline, the tests recover the signer from `action` + `signature` and compare it with `derivedAddress` (no key, no network).
 - Self-check for C2 ("harness self-check", not C2): a local viem key signs ApproveAgent through core's `HlClient`, the body is captured and then submitted through the same `submitSignedAction` path as the contract artefact.
-- C4/C5/C10 use local fresh keys as stand-ins for derived addresses (HL behaviour only); C11 approves a throwaway agent `hypernear-c11` on the funder account and needs `HL_TESTNET_SUBACCOUNT`.
+- Funding: lab wallet #1 is the funder (usdSend to fresh keys and derived addresses). C4/C5/C10 use fresh local keys as stand-ins for derived addresses (HL behaviour only). C11 (tests/c11-subaccounts.test.ts) uses lab wallet #10: raises volume to 100k with BTC IOC round trips (skipped if a subaccount exists or volume is met), createSubAccount, approves a fresh API wallet, and has it sign subAccountTransfer.
+- On ci32 the wallet file lives at ~/secrets/lab-wallets.json (0600, indices 1-10 only, copied from the laptop outside git); jobs set LAB_WALLETS_PATH to it.
 - HL testnet is reachable directly from ci32 (no proxy needed for these reads).
 - Unverified until run live: funding amounts (5 to 25 USDC per leg), the 30 s balance-poll windows, whether a never-seen address can `approveAgent` before it holds funds (C10/C2 fund first).
