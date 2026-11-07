@@ -1,0 +1,103 @@
+{
+  "at": "2026-11-07T20:38:18.184Z",
+  "via": "agent server process: POST /decision/propose {strategyId}, then a signed accept on /decision/:id/accept",
+  "proposal": {
+    "kind": "strategy",
+    "strategyId": "btc-dca",
+    "id": "fe4f6964-ec5e-4413-85d2-437c46597d8e",
+    "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+    "coin": "BTC",
+    "action": "continue_strategy",
+    "source": "claude",
+    "flagged": false,
+    "factors": {
+      "nearLiquidation": {
+        "p": 0.17,
+        "decidedBy": "claude"
+      },
+      "losing": {
+        "p": 0.14,
+        "decidedBy": "claude"
+      },
+      "budgetLow": {
+        "p": 0.07,
+        "decidedBy": "jev"
+      },
+      "offPlan": {
+        "p": 0.14,
+        "decidedBy": "claude"
+      },
+      "volatile": {
+        "p": 0.11,
+        "decidedBy": "claude"
+      }
+    },
+    "rationale": "Margin is far above maintenance (over 6x), PnL is flat, price is inside the limit, and volatility is normal, so the undecided questions all resolve to no from the facts. The TWAP has completed 4 of 4 slices, so nothing remains at risk and no top-up is needed.",
+    "latencyMs": 2772,
+    "model": "claude-sonnet-5-5"
+  },
+  "accept": {
+    "status": "accepted",
+    "id": "fe4f6964-ec5e-4413-85d2-437c46597d8e",
+    "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+    "coin": "BTC",
+    "action": "continue_strategy",
+    "kind": "strategy",
+    "strategyId": "btc-dca",
+    "auto": false,
+    "result": null
+  },
+  "events": [
+    {
+      "type": "decision.proposed",
+      "data": {
+        "kind": "strategy",
+        "strategyId": "btc-dca",
+        "id": "fe4f6964-ec5e-4413-85d2-437c46597d8e",
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "coin": "BTC",
+        "action": "continue_strategy",
+        "source": "claude",
+        "flagged": false,
+        "factors": {
+          "nearLiquidation": {
+            "p": 0.17,
+            "decidedBy": "claude"
+          },
+          "losing": {
+            "p": 0.14,
+            "decidedBy": "claude"
+          },
+          "budgetLow": {
+            "p": 0.07,
+            "decidedBy": "jev"
+          },
+          "offPlan": {
+            "p": 0.14,
+            "decidedBy": "claude"
+          },
+          "volatile": {
+            "p": 0.11,
+            "decidedBy": "claude"
+          }
+        },
+        "rationale": "Margin is far above maintenance (over 6x), PnL is flat, price is inside the limit, and volatility is normal, so the undecided questions all resolve to no from the facts. The TWAP has completed 4 of 4 slices, so nothing remains at risk and no top-up is needed.",
+        "latencyMs": 2772,
+        "model": "claude-sonnet-5-5"
+      }
+    },
+    {
+      "type": "decision.accepted",
+      "data": {
+        "id": "fe4f6964-ec5e-4413-85d2-437c46597d8e",
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "coin": "BTC",
+        "action": "continue_strategy",
+        "kind": "strategy",
+        "strategyId": "btc-dca",
+        "auto": false,
+        "result": null
+      }
+    }
+  ]
+}
