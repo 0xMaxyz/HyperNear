@@ -121,7 +121,20 @@ export async function runGuardDemo(o: GuardDemoOptions = {}) {
   // ---- guard loop (2 s ticks for the demo), timeline from the event bus
   const timeline: { t: number; event: string; detail?: Record<string, unknown> }[] = [];
   bus.subscribe((e: AgentEvent) => {
-    if (e.type.startsWith('guard.')) timeline.push({ t: e.at, event: e.type, detail: e.data });
+    if (!e.type.startsWith('guard.')) return;
+    timeline.push({ t: e.at, event: e.type, detail: e.data });
+    const d = e.data as Record<string, any>;
+    const brief =
+      e.type === 'guard.trigger'
+        ? `${(d.triggered ?? []).map((x: any) => `${x.id} ${x.reasons.join('+')}`).join(', ')} -> ${d.plan?.kind}${d.plan?.reason ? ` (${d.plan.reason})` : ''}`
+        : e.type === 'guard.rebalance.start'
+          ? `leg${d.from?.leg} -> leg${d.to?.leg} $${d.amount}`
+          : e.type === 'guard.rebalance.signed'
+            ? `${d.method} tx ${d.txHash}`
+            : e.type === 'guard.error'
+              ? String(d.error)
+              : '';
+    log(`  [${new Date(e.at).toISOString().slice(11, 23)}] ${e.type} ${brief}`);
   });
   const loop = new GuardLoop({
     legs,
@@ -146,8 +159,19 @@ export async function runGuardDemo(o: GuardDemoOptions = {}) {
 
   // ---- wait for detect -> rebalance -> recovery
   const seen = (type: string) => timeline.find((x) => x.event === type && x.t >= tStress);
-  await until(async () => seen('guard.rebalance.posted') && timeline.some((x) => x.event === 'guard.ok' && x.t > seen('guard.rebalance.posted')!.t), (v) => Boolean(v), 'guard rebalance + recovery', 180_000);
-  loop.stop();
+  const watch = setInterval(() => {
+    legs.snapshot(ow).then(
+      (x) => log(`  leg1 margin ratio ${ratio(x, 1).toFixed(2)}x (account $${Number(leg(x, 1).clearinghouse.marginSummary.accountValue).toFixed(3)}, ` +
+        `maintenance $${Number(leg(x, 1).clearinghouse.crossMaintenanceMarginUsed).toFixed(3)})`),
+      () => {}
+    );
+  }, 10_000);
+  try {
+    await until(async () => seen('guard.rebalance.posted') && timeline.some((x) => x.event === 'guard.ok' && x.t > seen('guard.rebalance.posted')!.t), (v) => Boolean(v), 'guard rebalance + recovery', 120_000);
+  } finally {
+    clearInterval(watch);
+    loop.stop();
+  }
   s = await legs.snapshot(ow);
   const rel = (x?: { t: number }) => (x ? x.t - tStress : null);
   const signed = seen('guard.rebalance.signed');
