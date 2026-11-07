@@ -1,0 +1,31 @@
+{
+  "claim": "C19",
+  "title": "scheduleCancel by an API wallet clears resting orders at the scheduled time",
+  "status": "⚠️",
+  "at": "2026-11-07T16:13:10.619Z",
+  "network": "testnet",
+  "numbers": {
+    "volumeRequiredUsd": 1000000
+  },
+  "refs": {
+    "order": {
+      "status": "ok",
+      "response": {
+        "type": "order",
+        "data": {
+          "statuses": [
+            {
+              "resting": {
+                "oid": 64766426038
+              }
+            }
+          ]
+        }
+      }
+    },
+    "armed": "the exchange rejected the relayed action: Cannot set scheduled cancel time until enough volume traded. Required: $1000000. Traded: $0."
+  },
+  "notes": [
+    "scheduleCancel refused: the exchange rejected the relayed action: Cannot set scheduled cancel time until enough volume traded. Required: $1000000. Traded: $0."
+  ]
+}

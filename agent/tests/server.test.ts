@@ -6,7 +6,7 @@ import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 import { commandTypedData, HyperNearClient, newCommand, type Command, type NearBackend } from '@hypernear/client';
 import { privateKeyToAccount } from 'viem/accounts';
-import { ReplayCache } from '../src/commands.ts';
+import { ReplayCache, verifyCommand } from '../src/commands.ts';
 import { DEFAULT_GUARD_CONFIG } from '../src/guard.ts';
 import { loadConfig } from '../src/config.ts';
 import { EventBus } from '../src/events.ts';
@@ -177,6 +177,19 @@ describe('HTTP API', () => {
     const base = await serve(d);
     expect((await fetch(`${base}/nope`)).status).toBe(404);
     expect(new HttpError(418, 'x').status).toBe(418);
+  });
+});
+
+describe('Command specHash', () => {
+  const v = () => ({ chainTag: async () => 'near-testnet' as const, contractId: 'leash.testnet', cache: new ReplayCache() });
+  it('zero for every action but startStrategy, which needs a spec hash; missing or malformed -> 400', async () => {
+    const spec = `0x${'cd'.repeat(32)}` as const;
+    await expect(verifyCommand(v(), await signed(newCommand(OWNER, 'closeHedge', 'BTC', '0', 30, Date.now(), spec)), 'closeHedge')).rejects.toThrow(/must be zero/);
+    await expect(verifyCommand(v(), await signed(newCommand(OWNER, 'startStrategy', '')), 'startStrategy')).rejects.toThrow(/must be the spec hash/);
+    const { specHash: _drop, ...noHash } = newCommand(OWNER, 'closeHedge', 'BTC');
+    await expect(verifyCommand(v(), { command: noHash, sig: SIG }, 'closeHedge')).rejects.toThrow(/bytes32/);
+    const ok = await verifyCommand(v(), await signed(newCommand(OWNER, 'startStrategy', '', '0', 30, Date.now(), spec)), 'startStrategy');
+    expect(ok.specHash).toBe(spec);
   });
 });
 

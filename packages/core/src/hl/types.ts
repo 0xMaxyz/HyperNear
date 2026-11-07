@@ -543,6 +543,11 @@ export interface HlApproveBuilderFeeParams {
   builder: HexAddress;
 }
 
+export interface HlScheduleCancelParams {
+  /** ms since epoch, at least 5 s in the future; omit to remove the scheduled cancel. */
+  time?: number;
+}
+
 export interface HlUpdateLeverageParams {
   asset: number;
   isCross: boolean;

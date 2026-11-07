@@ -31,6 +31,8 @@ export interface AgentConfig {
     /** trigger at accountValue / maintenance <= this (plan: 2) */
     marginFloor: number;
     latencyP95Sec: number;
+    /** USD of the contract's daily cap kept for the hedge guard; strategies cannot budget it (at most half the cap applies) */
+    hedgeReserveUsd: number;
     annualVol: number;
     /** extra owners to watch besides those we hold agent keys for */
     watchOwners: string[];
@@ -67,6 +69,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AgentConfig {
       intervalSec: num(env.HYPERNEAR_GUARD_INTERVAL_SEC, 10),
       marginFloor: num(env.HYPERNEAR_GUARD_MARGIN_FLOOR, 2),
       latencyP95Sec: num(env.HYPERNEAR_GUARD_LATENCY_SEC, 9),
+      hedgeReserveUsd: num(env.HYPERNEAR_HEDGE_RESERVE_USD, 20),
       annualVol: num(env.HYPERNEAR_GUARD_ANNUAL_VOL, 0.6),
       watchOwners: (env.HYPERNEAR_WATCH_OWNERS ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
     },

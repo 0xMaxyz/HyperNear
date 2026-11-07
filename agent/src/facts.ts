@@ -12,13 +12,13 @@ export interface DecisionInput {
   ctx: DecideContext;
 }
 
-const marginBucket = (ratio: number) =>
+export const marginBucket = (ratio: number) =>
   ratio > 6 ? 'far: over 6x maintenance margin'
   : ratio >= 3 ? 'comfortable: 3x to 6x maintenance margin'
   : ratio >= 1.5 ? 'close: 1.5x to 3x maintenance margin'
   : 'very close: under 1.5x maintenance margin';
 
-function marginRatio(ch: OwnerSnapshot['legs'][number]['clearinghouse']) {
+export function marginRatio(ch: OwnerSnapshot['legs'][number]['clearinghouse']) {
   const maint = Number(ch.crossMaintenanceMarginUsed);
   return maint > 0 ? Number(ch.marginSummary.accountValue) / maint : Number.POSITIVE_INFINITY;
 }

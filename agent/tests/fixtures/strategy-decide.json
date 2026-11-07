@@ -1,0 +1,17 @@
+{
+  "facts": { "strategy": "twap", "pnl": "about flat", "budget": "unused", "fillRate": "high: most fill", "slicesLeft": "many left", "liqDistance": "far: over 30%", "price": "inside the limit price", "vol": "normal" },
+  "calm": { "nearLiquidation": 0.02, "losing": 0.03, "budgetLow": 0.04, "offPlan": 0.05, "volatile": 0.06 },
+  "cases": [
+    { "name": "everything calm: Jev decides, continue", "probs": {}, "action": "continue_strategy", "source": "jev", "flagged": false, "models": [] },
+    { "name": "near liquidation: pause", "probs": { "nearLiquidation": 0.97 }, "action": "pause_strategy", "source": "jev", "flagged": false, "models": [] },
+    { "name": "losing with the budget used up: pause", "probs": { "losing": 0.95, "budgetLow": 0.93 }, "action": "pause_strategy", "source": "jev", "flagged": false, "models": [] },
+    { "name": "price left the range: adjust", "probs": { "offPlan": 0.96 }, "action": "adjust_strategy", "source": "jev", "flagged": false, "models": [] },
+    { "name": "volatile and losing: adjust", "probs": { "volatile": 0.92, "losing": 0.91 }, "action": "adjust_strategy", "source": "jev", "flagged": false, "models": [] },
+    { "name": "one factor undecided: Sonnet settles it and agrees with the table", "probs": { "losing": 0.95, "budgetLow": 0.55 }, "claude": [{ "action": "pause_strategy" }], "action": "pause_strategy", "source": "claude", "flagged": false, "models": ["claude-sonnet-5-5"] },
+    { "name": "Sonnet disagrees with the table: Opus is asked; they still differ from the table, the safer is taken", "probs": { "offPlan": 0.55 }, "claude": [{ "action": "continue_strategy" }, { "action": "continue_strategy" }], "action": "adjust_strategy", "source": "disagree", "flagged": true, "models": ["claude-sonnet-5-5", "claude-opus-5-5"] },
+    { "name": "Sonnet disagrees, Opus sides with the table", "probs": { "offPlan": 0.55 }, "claude": [{ "action": "pause_strategy" }, { "action": "adjust_strategy" }], "action": "adjust_strategy", "source": "claude", "flagged": false, "models": ["claude-sonnet-5-5", "claude-opus-5-5"] },
+    { "name": "Claude is riskier than the table: the safer (the table's) wins", "probs": { "nearLiquidation": 0.5 }, "claude": [{ "action": "continue_strategy" }, { "action": "continue_strategy" }], "action": "pause_strategy", "source": "disagree", "flagged": true, "models": ["claude-sonnet-5-5", "claude-opus-5-5"] },
+    { "name": "Jev down: Claude alone, flagged", "jevDown": true, "claude": [{ "action": "pause_strategy" }], "action": "pause_strategy", "source": "claude", "flagged": true, "models": ["claude-sonnet-5-5"] },
+    { "name": "Jev and Claude both fail: no change proposed, flagged, with the error", "jevDown": true, "claudeThrows": true, "action": "continue_strategy", "source": "claude", "flagged": true, "models": ["claude-sonnet-5-5"], "error": "claude: overloaded" }
+  ]
+}

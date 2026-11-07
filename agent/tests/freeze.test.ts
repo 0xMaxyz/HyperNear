@@ -51,4 +51,30 @@ describe('freeze relay: revoking approveAgent actions go to HL and to /events', 
     const e = bus.since().find((x) => x.type === 'agents.revoked')!;
     expect(e.data).toMatchObject({ owner: OWNER, legs: [{ leg: 0, ok: true }, { leg: 1, ok: false, hl: 'MPC sign failed' }] });
   });
+
+  it('a hanging onBeforeRevoke hook times out: agents.revoke.hook_timeout, revocations posted anyway', async () => {
+    const burn0 = '0x00000000000000000000000000000000000000b0';
+    const { relayer, posted, bus } = setup([{ leg: 0, name: 'leash-leg0', burn_address: burn0, signature: sigOut('leash-leg0', burn0) as never }]);
+    relayer.onBeforeRevoke = () => new Promise(() => {}); // an HL call that never answers
+    relayer.revokeHookTimeoutMs = 50; // 8000 in production
+    const t0 = Date.now();
+    const out = await relayer.relay('1.2.3.4', { owner: OWNER, nonce: 4, intent: { type: 'freeze', frozen: true }, sig: SIG });
+    expect(Date.now() - t0).toBeLessThan(2000);
+    expect(out).toMatchObject({ kind: 'freeze', revoked: [{ leg: 0, ok: true }] });
+    expect(posted).toHaveLength(1);
+    const types = bus.since().map((x) => x.type);
+    expect(types).toEqual(['agents.revoke.hook_timeout', 'agents.revoked']);
+    expect(bus.since()[0]!.data).toMatchObject({ owner: OWNER, ms: 50 });
+  });
+
+  it('a hook that finishes in time does not emit a timeout', async () => {
+    const { relayer, bus } = setup([]);
+    let ran = false;
+    relayer.onBeforeRevoke = async () => {
+      ran = true;
+    };
+    await relayer.postRevocations(OWNER, []);
+    expect(ran).toBe(true);
+    expect(bus.since().map((x) => x.type)).toEqual(['agents.revoked']);
+  });
 });

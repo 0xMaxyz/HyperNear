@@ -1,0 +1,216 @@
+{
+  "at": "2026-11-07T16:11:03.341Z",
+  "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+  "leg": 3,
+  "legAddress": "0x5cba8512a2933a08fc3d33874871fe430b6e3d91",
+  "ok": true,
+  "spec": {
+    "id": "grid-live-1",
+    "type": "grid",
+    "leg": 3,
+    "coin": "BTC",
+    "params": {
+      "lower": 75679,
+      "upper": 75695,
+      "levels": 5,
+      "sizePerLevel": "0.00014"
+    },
+    "limits": {
+      "maxNotional": 100,
+      "maxLeverage": 3,
+      "maxDailyLoss": 5,
+      "topUpCapPerDay": 20
+    },
+    "onStop": "flatten"
+  },
+  "validatedBy": "StrategyManager.validate (contract policy, order policy, reserved legs, approved agent key)",
+  "refusals": {
+    "reservedLeg": {
+      "ok": false,
+      "errors": [
+        "leg 1 is reserved (hedge pair or guard reserve)"
+      ]
+    },
+    "overPolicyLeverage": {
+      "ok": false,
+      "errors": [
+        "limits.maxLeverage 10 is above the order policy max 5 (a spec can only tighten the policy)"
+      ]
+    }
+  },
+  "fills": "all fills came from the live testnet market (no counterparty); lab wallet #3 only funded the leg",
+  "kill": {
+    "stateAfterPause": "paused",
+    "openOrdersAfterPause": 0,
+    "openOrdersTwoTicksLater": 0,
+    "ordersPlacedAfterPause": 0,
+    "positionBeforeStop": 0.00028,
+    "positionAfterStop": 0
+  },
+  "deadman": "unavailable",
+  "equityUsd": {
+    "legBefore": 24.970637,
+    "legAfter": 24.957544,
+    "labBefore": 972.990612,
+    "labAfter": 972.990612
+  },
+  "events": [
+    {
+      "t": 1799,
+      "type": "strategy.started",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "id": "grid-live-1",
+        "leg": 3,
+        "type": "grid",
+        "coin": "BTC"
+      }
+    },
+    {
+      "t": 5918,
+      "type": "strategy.order",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "id": "grid-live-1",
+        "leg": 3,
+        "oid": "64766320455",
+        "level": 0,
+        "side": "buy",
+        "px": 75679,
+        "sz": 0.00014
+      }
+    },
+    {
+      "t": 6838,
+      "type": "strategy.order",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "id": "grid-live-1",
+        "leg": 3,
+        "oid": "64766320774",
+        "level": 1,
+        "side": "buy",
+        "px": 75683,
+        "sz": 0.00014
+      }
+    },
+    {
+      "t": 8078,
+      "type": "strategy.deadman",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "id": "grid-live-1",
+        "leg": 3,
+        "armed": false,
+        "reason": "the exchange rejected the relayed action: Cannot set scheduled cancel time until enough volume traded. Required: $1000000. Traded: $126.96."
+      }
+    },
+    {
+      "t": 15031,
+      "type": "strategy.order",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "id": "grid-live-1",
+        "leg": 3,
+        "oid": "64766327427",
+        "level": 2,
+        "side": "buy",
+        "px": 75687,
+        "sz": 0.00014
+      }
+    },
+    {
+      "t": 15806,
+      "type": "strategy.order",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "id": "grid-live-1",
+        "leg": 3,
+        "oid": "64766328363",
+        "level": 3,
+        "side": "buy",
+        "px": 75691,
+        "sz": 0.00014
+      }
+    },
+    {
+      "t": 16648,
+      "type": "strategy.order",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "id": "grid-live-1",
+        "leg": 3,
+        "oid": "64766329112",
+        "level": 4,
+        "side": "buy",
+        "px": 75695,
+        "sz": 0.00014
+      }
+    },
+    {
+      "t": 23428,
+      "type": "strategy.fill",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "id": "grid-live-1",
+        "leg": 3,
+        "oid": "64766329112",
+        "level": 4,
+        "side": "buy",
+        "px": 75695,
+        "sz": 0.00014
+      }
+    },
+    {
+      "t": 25154,
+      "type": "strategy.order",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "id": "grid-live-1",
+        "leg": 3,
+        "oid": "64766335910",
+        "level": 4,
+        "side": "sell",
+        "px": 75699,
+        "sz": 0.00014
+      }
+    },
+    {
+      "t": 43438,
+      "type": "strategy.fill",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "id": "grid-live-1",
+        "leg": 3,
+        "oid": "64766335910",
+        "level": 4,
+        "side": "sell",
+        "px": 75699,
+        "sz": 0.00014
+      }
+    },
+    {
+      "t": 51304,
+      "type": "strategy.paused",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "id": "grid-live-1",
+        "leg": 3,
+        "reason": "kill switch (live run)",
+        "cancelled": 4
+      }
+    },
+    {
+      "t": 65621,
+      "type": "strategy.stopped",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "id": "grid-live-1",
+        "leg": 3,
+        "reason": "end of run",
+        "cancelled": 0,
+        "flattened": true
+      }
+    }
+  ]
+}

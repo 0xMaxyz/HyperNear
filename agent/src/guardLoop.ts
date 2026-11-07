@@ -18,6 +18,8 @@ export interface GuardLoopConfig {
   minUsd: number;
   /** Share of the source leg's withdrawable the guard may take. */
   withdrawableShare: number;
+  /** A leg with a strategy budget (see planRebalance) is only ever topped up from this leg. */
+  reserveLeg: number;
 }
 
 export const DEFAULT_LOOP_CONFIG: GuardLoopConfig = {
@@ -27,6 +29,7 @@ export const DEFAULT_LOOP_CONFIG: GuardLoopConfig = {
   targetMultiple: 5,
   minUsd: 1,
   withdrawableShare: 0.9,
+  reserveLeg: 2,
 };
 
 export type RebalancePlan =
@@ -49,7 +52,9 @@ export function planRebalance(
   policy: OwnerState | null,
   agentId: string | undefined,
   nowMs: number,
-  cfg: GuardLoopConfig = DEFAULT_LOOP_CONFIG
+  cfg: GuardLoopConfig = DEFAULT_LOOP_CONFIG,
+  /** USD a strategy leg may still be topped up today (the strategy's topUpCapPerDay); undefined: the leg has no strategy budget */
+  budgetLeftUsd?: (leg: number) => number | undefined
 ): RebalancePlan {
   const triggered = results.filter((r) => r.trigger);
   if (!triggered.length) return { kind: 'none' };
@@ -63,16 +68,21 @@ export function planRebalance(
   if (policy.last_rebalance_ns > 0 && nowMs < cooldownEndsMs) return blocked(`cooldown for ${Math.ceil((cooldownEndsMs - nowMs) / 1000)} s`);
   const spent = policy.day === Math.floor(nowMs / DAY_MS) ? policy.spent_today : 0;
   const capLeftUsd = Math.max(0, policy.daily_cap - spent) / 1e6;
+  const budget = budgetLeftUsd?.(stressed);
   const sources = s.legs
     .filter((l) => !stressedLegs.includes(l.leg))
+    .filter((l) => budget === undefined || l.leg === cfg.reserveLeg)
+    // a leg with any strategy budget (a running strategy) is never drained to top up another leg
+    .filter((l) => budgetLeftUsd?.(l.leg) === undefined)
     .map((l) => ({ leg: l.leg, address: l.address, ...legRatio(s, l.leg) }))
     .filter((l) => l.withdrawable > 0)
     .sort((a, b) => b.ratio - a.ratio || b.withdrawable - a.withdrawable);
   const src = sources[0];
-  if (!src) return blocked('no other leg has withdrawable USDC');
+  if (!src) return blocked(budget === undefined ? 'no other leg without a strategy has withdrawable USDC' : `reserve leg ${cfg.reserveLeg} has no withdrawable USDC`);
+  if (budget !== undefined && budget < cfg.minUsd) return blocked(`strategy top-up budget used (leg ${stressed}: $${budget.toFixed(2)} left today)`);
   const st = legRatio(s, stressed);
   const needed = Math.max(cfg.targetMultiple * st.maint - st.accountValue, cfg.minUsd);
-  const amount = Math.floor(Math.min(needed, src.withdrawable * cfg.withdrawableShare, capLeftUsd) * 100) / 100;
+  const amount = Math.floor(Math.min(needed, src.withdrawable * cfg.withdrawableShare, capLeftUsd, budget ?? Number.POSITIVE_INFINITY) * 100) / 100;
   if (amount < cfg.minUsd) return blocked(`only $${amount.toFixed(2)} available (withdrawable / daily cap)`);
   const to = s.legs.find((l) => l.leg === stressed)!;
   return {
@@ -91,6 +101,10 @@ export interface GuardLoopDeps {
   agentId?: string;
   bus: EventBus;
   owners: () => Hex[];
+  /** per-strategy daily top-up budget left on a leg (manager.topUpLeft); undefined = no strategy there */
+  budgetLeftUsd?: (owner: Hex, leg: number) => number | undefined;
+  /** called after a top-up was posted to HL (manager.recordTopUp) */
+  onTopUp?: (owner: Hex, leg: number, usd: number) => void;
   cfg?: Partial<GuardLoopConfig>;
   now?: () => number;
 }
@@ -132,7 +146,7 @@ export class GuardLoop {
       const now = this.d.now ?? Date.now;
       const snap = await this.d.legs.snapshot(owner);
       const results = evaluateGuard(guardInputs(snap, this.cfg.annualVol), this.cfg.guard);
-      const plan = planRebalance(snap, results, await this.d.legs.client.getOwner(owner), this.d.agentId, now(), this.cfg);
+      const plan = planRebalance(snap, results, await this.d.legs.client.getOwner(owner), this.d.agentId, now(), this.cfg, (leg) => this.d.budgetLeftUsd?.(owner, leg));
       const triggered = results.filter((r) => r.trigger);
       if (plan.kind === 'none') {
         this.#emitChange(owner, 'ok', 'guard.ok', { legs: results.map((r) => r.id) });
@@ -156,6 +170,7 @@ export class GuardLoop {
       });
       const res = await hlClient(this.d.legs.network, { master: signer }).usdSend({ destination: plan.to.address, amount: plan.amount });
       this.d.bus.emit('guard.rebalance.posted', { owner, hl: res, ms: now() - t0 });
+      this.d.onTopUp?.(owner, plan.to.leg, Number(plan.amount));
       this.#last.delete(owner); // the next tick reports the new state (ok, or still stressed)
       return plan;
     } finally {

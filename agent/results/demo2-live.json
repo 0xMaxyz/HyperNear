@@ -1,0 +1,472 @@
+{
+  "at": "2026-11-07T20:09:21.875Z",
+  "ok": true,
+  "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+  "strategy": {
+    "id": "bot-demo2",
+    "type": "twap",
+    "leg": 3,
+    "coin": "BTC",
+    "params": {
+      "side": "buy",
+      "sizePerSlice": "0.00014",
+      "slices": 9,
+      "intervalSec": 10,
+      "limitPx": 77116
+    },
+    "limits": {
+      "maxNotional": 100,
+      "maxLeverage": 20,
+      "maxDailyLoss": 15,
+      "topUpCapPerDay": 5
+    },
+    "onStop": "flatten"
+  },
+  "reserveLeg": 2,
+  "botLeg": 3,
+  "thresholds": {
+    "guardFloorMultiple": 10,
+    "topUpTargetMultiple": 15,
+    "why": "HL keeps about 10% of the notional as non-withdrawable margin, so a 20x leg whose spare margin is withdrawn sits near 8x maintenance, never near the default 2x; the demo raises the floor so that state counts as stressed",
+    "operatorMaxLeverage": 20
+  },
+  "funding": {},
+  "before": {
+    "leg2": 31.095724,
+    "leg3": 29.709743,
+    "ownerPolicy": {
+      "nonce": 50,
+      "frozen": false,
+      "agent": "fcagent.leash-spike-1107.testnet",
+      "daily_cap": 50000000,
+      "cooldown_sec": 30,
+      "day": 20764,
+      "spent_today": 15800000,
+      "last_rebalance_ns": 1794082035771344000
+    }
+  },
+  "position": {
+    "btc": 0.00126,
+    "notionalUsd": 95.26041000000001,
+    "equity": 29.683674,
+    "marginRatio": 24.92103913243876
+  },
+  "stress1": {
+    "movedToSpot": "20.14",
+    "equity": 9.543674,
+    "marginRatio": 8.012427074264403
+  },
+  "stress2": {
+    "movedToSpot": "5.00",
+    "equity": 9.547454,
+    "marginRatio": 8.015284312046449
+  },
+  "topUpTxs": [
+    "Gi2X657Rgv25ALJzxgzkHYfp3MiDGNR1BQZuC7zk1Hv9"
+  ],
+  "strategyBudget": {
+    "topUpCapPerDayUsd": 5
+  },
+  "contractCapRefusal": {
+    "amount": "30",
+    "capLeftUsd": 29.2,
+    "refused": true,
+    "error": "Smart contract panicked: daily cap exceeded"
+  },
+  "decisionProposal": {
+    "facts": {
+      "strategy": "twap",
+      "margin": "far: over 6x maintenance margin",
+      "dayPnl": "large loss: over half the daily loss limit",
+      "topUpBudget": "unused",
+      "price": "inside the limit price",
+      "vol": "normal",
+      "progress": "9 of 9 slices"
+    },
+    "id": "534d092e-aff7-450e-980e-0731fcd9b331",
+    "kind": "strategy",
+    "strategyId": "bot-demo2",
+    "factors": {
+      "nearLiquidation": {
+        "p": 0.47,
+        "decidedBy": "claude"
+      },
+      "losing": {
+        "p": 0.94,
+        "decidedBy": "jev"
+      },
+      "budgetLow": {
+        "p": 0.03,
+        "decidedBy": "jev"
+      },
+      "offPlan": {
+        "p": 0.26,
+        "decidedBy": "claude"
+      },
+      "volatile": {
+        "p": 0.17,
+        "decidedBy": "claude"
+      }
+    },
+    "latencyMs": 5929,
+    "trace": {
+      "jevMs": 514,
+      "calls": [
+        {
+          "model": "claude-sonnet-5-5",
+          "ms": 2795
+        },
+        {
+          "model": "claude-opus-5-5",
+          "ms": 2619
+        }
+      ],
+      "tableAction": "continue_strategy"
+    },
+    "action": "continue_strategy",
+    "source": "claude",
+    "rationale": "Margin is far from liquidation (over 6x maintenance), price is inside the limit, and volatility is normal, so none of the undecided risk questions resolve to yes. The day's loss is large but still under the daily limit, top-up budget is unused, and the TWAP has completed all 9 of 9 slices, so pausing would not prevent further exposure and there is nothing left to redraft.",
+    "model": "claude-opus-5-5",
+    "flagged": false
+  },
+  "after": {
+    "leg2": 26.095724,
+    "leg3": 34.65087,
+    "ownerPolicy": {
+      "nonce": 53,
+      "frozen": false,
+      "agent": "fcagent.leash-spike-1107.testnet",
+      "daily_cap": 50000000,
+      "cooldown_sec": 30,
+      "day": 20764,
+      "spent_today": 20800000,
+      "last_rebalance_ns": 1794082293549120500
+    }
+  },
+  "timeline": [
+    {
+      "t": 4829,
+      "type": "strategy.started",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "id": "bot-demo2",
+        "leg": 3,
+        "type": "twap",
+        "coin": "BTC"
+      }
+    },
+    {
+      "t": 8823,
+      "type": "strategy.slice",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "id": "bot-demo2",
+        "leg": 3,
+        "slice": 1,
+        "side": "buy",
+        "sz": 0.00014,
+        "avgPx": 75608,
+        "done": 1,
+        "of": 9
+      }
+    },
+    {
+      "t": 23244,
+      "type": "strategy.slice",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "id": "bot-demo2",
+        "leg": 3,
+        "slice": 2,
+        "side": "buy",
+        "sz": 0.00014,
+        "avgPx": 75609,
+        "done": 2,
+        "of": 9
+      }
+    },
+    {
+      "t": 38400,
+      "type": "strategy.slice",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "id": "bot-demo2",
+        "leg": 3,
+        "slice": 3,
+        "side": "buy",
+        "sz": 0.00014,
+        "avgPx": 75608,
+        "done": 3,
+        "of": 9
+      }
+    },
+    {
+      "t": 52867,
+      "type": "strategy.slice",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "id": "bot-demo2",
+        "leg": 3,
+        "slice": 4,
+        "side": "buy",
+        "sz": 0.00014,
+        "avgPx": 75608,
+        "done": 4,
+        "of": 9
+      }
+    },
+    {
+      "t": 63485,
+      "type": "strategy.slice",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "id": "bot-demo2",
+        "leg": 3,
+        "slice": 5,
+        "side": "buy",
+        "sz": 0.00014,
+        "avgPx": 75608,
+        "done": 5,
+        "of": 9
+      }
+    },
+    {
+      "t": 77854,
+      "type": "strategy.slice",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "id": "bot-demo2",
+        "leg": 3,
+        "slice": 6,
+        "side": "buy",
+        "sz": 0.00014,
+        "avgPx": 75607,
+        "done": 6,
+        "of": 9
+      }
+    },
+    {
+      "t": 88182,
+      "type": "strategy.slice",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "id": "bot-demo2",
+        "leg": 3,
+        "slice": 7,
+        "side": "buy",
+        "sz": 0.00014,
+        "avgPx": 75618,
+        "done": 7,
+        "of": 9
+      }
+    },
+    {
+      "t": 98218,
+      "type": "strategy.slice",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "id": "bot-demo2",
+        "leg": 3,
+        "slice": 8,
+        "side": "buy",
+        "sz": 0.00014,
+        "avgPx": 75622,
+        "done": 8,
+        "of": 9
+      }
+    },
+    {
+      "t": 113569,
+      "type": "strategy.slice",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "id": "bot-demo2",
+        "leg": 3,
+        "slice": 9,
+        "side": "buy",
+        "sz": 0.00014,
+        "avgPx": 75626,
+        "done": 9,
+        "of": 9
+      }
+    },
+    {
+      "t": 113570,
+      "type": "strategy.done",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "id": "bot-demo2",
+        "leg": 3,
+        "filled": 9,
+        "skipped": 0,
+        "filledSize": 0.0012599999999999996
+      }
+    },
+    {
+      "t": 125363,
+      "type": "stress.1",
+      "data": {
+        "movedToSpot": "20.14",
+        "equity": 9.543674,
+        "marginRatio": 8.012427074264403
+      }
+    },
+    {
+      "t": 130406,
+      "type": "guard.trigger",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "detectedAt": 1794082292281,
+        "triggered": [
+          {
+            "id": "leg3:BTC",
+            "trigger": true,
+            "reasons": [
+              "margin_floor"
+            ],
+            "distance": 0.08874075799986376,
+            "plausibleMove": 0.0013594297632883313
+          }
+        ],
+        "plan": {
+          "kind": "rebalance",
+          "from": {
+            "leg": 2,
+            "address": "0x2a32c77d9b5e3e0ed8780e9fc5def0aa629c62ab"
+          },
+          "to": {
+            "leg": 3,
+            "address": "0x5cba8512a2933a08fc3d33874871fe430b6e3d91"
+          },
+          "amount": "5.00",
+          "reasons": [
+            "margin_floor"
+          ]
+        }
+      }
+    },
+    {
+      "t": 130406,
+      "type": "guard.rebalance.start",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "kind": "rebalance",
+        "from": {
+          "leg": 2,
+          "address": "0x2a32c77d9b5e3e0ed8780e9fc5def0aa629c62ab"
+        },
+        "to": {
+          "leg": 3,
+          "address": "0x5cba8512a2933a08fc3d33874871fe430b6e3d91"
+        },
+        "amount": "5.00",
+        "reasons": [
+          "margin_floor"
+        ]
+      }
+    },
+    {
+      "t": 137394,
+      "type": "guard.rebalance.signed",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "method": "rebalance",
+        "txHash": "Gi2X657Rgv25ALJzxgzkHYfp3MiDGNR1BQZuC7zk1Hv9",
+        "ms": 6988
+      }
+    },
+    {
+      "t": 138751,
+      "type": "guard.rebalance.posted",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "hl": {
+          "status": "ok",
+          "response": {
+            "type": "default"
+          }
+        },
+        "ms": 8345
+      }
+    },
+    {
+      "t": 140764,
+      "type": "guard.ok",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "legs": [
+          "leg3:BTC"
+        ]
+      }
+    },
+    {
+      "t": 148604,
+      "type": "guard.trigger",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "detectedAt": 1794082310479,
+        "triggered": [
+          {
+            "id": "leg3:BTC",
+            "trigger": true,
+            "reasons": [
+              "margin_floor"
+            ],
+            "distance": 0.08875883244384099,
+            "plausibleMove": 0.0013594297632883313
+          }
+        ],
+        "plan": {
+          "kind": "blocked",
+          "stressedLeg": 3,
+          "reason": "cooldown for 14 s"
+        }
+      }
+    },
+    {
+      "t": 148814,
+      "type": "stress.2",
+      "data": {
+        "movedToSpot": "5.00",
+        "equity": 9.547454,
+        "marginRatio": 8.015284312046449
+      }
+    },
+    {
+      "t": 162393,
+      "type": "guard.trigger",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "detectedAt": 1794082324268,
+        "triggered": [
+          {
+            "id": "leg3:BTC",
+            "trigger": true,
+            "reasons": [
+              "margin_floor"
+            ],
+            "distance": 0.08877088167483219,
+            "plausibleMove": 0.0013594297632883313
+          }
+        ],
+        "plan": {
+          "kind": "blocked",
+          "stressedLeg": 3,
+          "reason": "strategy top-up budget used (leg 3: $0.00 left today)"
+        }
+      }
+    },
+    {
+      "t": 167806,
+      "type": "strategy.stopped",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "id": "bot-demo2",
+        "leg": 3,
+        "reason": "end of demo",
+        "cancelled": 0,
+        "flattened": true
+      }
+    }
+  ]
+}

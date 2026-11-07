@@ -7,8 +7,10 @@ import { hypernearDomain, type ChainTag, type OwnerIntentTypedData } from './int
 export type DecisionAction = 'hold' | 'close_both' | 'reduce_hedge' | 'add_hedge' | 'take_profit';
 
 /** setDecisionMode: the mode ('off' | 'propose' | 'auto') goes in `coin`, ratio "0". prepareAgents: coin "", ratio "0".
- * reject: dismisses a proposal, coin = the proposal's coin. */
-export type CommandAction = 'openHedge' | 'closeHedge' | DecisionAction | 'setDecisionMode' | 'prepareAgents' | 'reject';
+ * reject: dismisses a proposal, coin = the proposal's coin.
+ * startStrategy: coin "", specHash = specHash(spec) of the spec sent beside the command;
+ * pauseStrategy / stopStrategy: coin = the strategy id. ratio "0" for all three. */
+export type CommandAction = 'openHedge' | 'closeHedge' | DecisionAction | 'setDecisionMode' | 'prepareAgents' | 'reject' | 'startStrategy' | 'pauseStrategy' | 'stopStrategy' | 'continue_strategy' | 'pause_strategy' | 'adjust_strategy';
 
 export interface Command {
   owner: Hex;
@@ -21,7 +23,12 @@ export interface Command {
   expiry: number;
   /** any unused uint64 (e.g. Date.now()); the service keeps a replay cache */
   nonce: number;
+  /** bytes32: the strategy spec's hash for startStrategy, ZERO_SPEC_HASH for every other action */
+  specHash: Hex;
 }
+
+/** specHash of every non-strategy command. */
+export const ZERO_SPEC_HASH = `0x${'0'.repeat(64)}` as Hex;
 
 export const COMMAND_TYPES = {
   Command: [
@@ -31,6 +38,7 @@ export const COMMAND_TYPES = {
     { name: 'ratio', type: 'string' },
     { name: 'expiry', type: 'uint64' },
     { name: 'nonce', type: 'uint64' },
+    { name: 'specHash', type: 'bytes32' },
   ],
 } as const;
 
@@ -40,13 +48,13 @@ export function commandTypedData(chainTag: ChainTag, contractId: string, c: Comm
     domain: hypernearDomain(chainTag, contractId),
     types: COMMAND_TYPES,
     primaryType: 'Command',
-    message: { ...c, owner: c.owner.toLowerCase() },
+    message: { ...c, owner: c.owner.toLowerCase(), specHash: c.specHash.toLowerCase() },
   };
 }
 
-/** Convenience for clients: a command expiring in `ttlSec` (default 30 s), nonce = now in ms. */
-export function newCommand(owner: Hex, action: CommandAction, coin: string, ratio = '0', ttlSec = 30, nowMs = Date.now()): Command {
-  return { owner: owner.toLowerCase() as Hex, action, coin, ratio, expiry: Math.floor(nowMs / 1000) + ttlSec, nonce: nowMs };
+/** Convenience for clients: a command expiring in `ttlSec` (default 30 s), nonce = now in ms; specHash only for startStrategy. */
+export function newCommand(owner: Hex, action: CommandAction, coin: string, ratio = '0', ttlSec = 30, nowMs = Date.now(), specHash: Hex = ZERO_SPEC_HASH): Command {
+  return { owner: owner.toLowerCase() as Hex, action, coin, ratio, expiry: Math.floor(nowMs / 1000) + ttlSec, nonce: nowMs, specHash: specHash.toLowerCase() as Hex };
 }
 
 export async function recoverCommandSigner(chainTag: ChainTag, contractId: string, c: Command, signature: Hex): Promise<Hex> {

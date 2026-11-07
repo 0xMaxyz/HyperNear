@@ -74,3 +74,49 @@ describe('GuardLoop.tick (detect-only, no agent key)', () => {
     expect(bus.since().some((e) => e.type.startsWith('guard.rebalance'))).toBe(false);
   });
 });
+
+describe('planRebalance for a strategy leg (per-strategy budget, reserve leg only)', () => {
+  const withReserve = () => {
+    const s = snap(healthy(), stressed());
+    s.legs.push({ leg: 2, address: '0x1111111111111111111111111111111111111111', agent: null, clearinghouse: ch({ accountValue: 30, maint: 0, withdrawable: 30 }), spotUsdc: 0 });
+    return s;
+  };
+  const run = (budget: number | undefined, cfg = { ...DEFAULT_LOOP_CONFIG, targetMultiple: 100 }) => {
+    const s = withReserve();
+    return planRebalance(s, evaluateGuard(guardInputs(s, 0.6), DEFAULT_GUARD_CONFIG), policy(), 'agent.testnet', NOW, cfg, (leg) => (leg === 1 ? budget : undefined));
+  };
+
+  it('draws from the reserve leg only, never from the hedge leg 0, and no more than the strategy budget', () => {
+    expect(run(5)).toMatchObject({ kind: 'rebalance', from: { leg: 2 }, to: { leg: 1 }, amount: '5.00' }); // needs 18.6, reserve has 27, budget 5
+  });
+
+  it('refuses once the strategy budget is used, even though the reserve and the contract cap have plenty', () => {
+    expect(run(0)).toMatchObject({ kind: 'blocked', stressedLeg: 1, reason: expect.stringContaining('strategy top-up budget used') });
+    expect(run(0.5)).toMatchObject({ kind: 'blocked' }); // below the $1 minimum
+  });
+
+  it('without a reserve leg funded there is nothing to draw from', () => {
+    const s = snap(healthy(), stressed());
+    expect(planRebalance(s, evaluateGuard(guardInputs(s, 0.6), DEFAULT_GUARD_CONFIG), policy(), 'agent.testnet', NOW, DEFAULT_LOOP_CONFIG, () => 5)).toMatchObject({ kind: 'blocked', reason: expect.stringContaining('reserve leg 2') });
+  });
+
+  it('a hedge-leg top-up never drains a strategy leg, even the healthiest one', () => {
+    const s = withReserve();
+    s.legs = s.legs.filter((l) => l.leg !== 2);
+    // leg 3 runs a grid: richest and healthiest, so it would win the sort without the filter
+    s.legs.push({ leg: 3, address: '0x3333333333333333333333333333333333333333', agent: null, clearinghouse: ch({ accountValue: 50, maint: 0, withdrawable: 50 }), spotUsdc: 0 });
+    const grid = (leg: number) => (leg === 3 ? 5 : undefined);
+    const p = (snapshot: typeof s) => planRebalance(snapshot, evaluateGuard(guardInputs(snapshot, 0.6), DEFAULT_GUARD_CONFIG), policy(), 'agent.testnet', NOW, DEFAULT_LOOP_CONFIG, grid);
+    expect(p(s)).toMatchObject({ kind: 'rebalance', from: { leg: 0 }, to: { leg: 1 } });
+    // a budget already used (0) is still a strategy leg; with leg 0 dry there is no source at all
+    s.legs[0] = { ...s.legs[0]!, clearinghouse: ch({ accountValue: 14.8, maint: 0.38, withdrawable: 0, positions: [{ coin: 'BTC', szi: '0.0004', liq: '50000' }] }) };
+    expect(p(s)).toMatchObject({ kind: 'blocked', reason: expect.stringContaining('without a strategy') });
+    expect(planRebalance(s, evaluateGuard(guardInputs(s, 0.6), DEFAULT_GUARD_CONFIG), policy(), 'agent.testnet', NOW, DEFAULT_LOOP_CONFIG, (leg) => (leg === 3 ? 0 : undefined))).toMatchObject({ kind: 'blocked' });
+  });
+
+  it('a leg with no strategy keeps the old behaviour (healthiest other leg)', () => {
+    expect(run(undefined, DEFAULT_LOOP_CONFIG)).toMatchObject({ kind: 'rebalance', from: { leg: 2 } }); // leg 2 is the healthiest anyway
+    const s = snap(healthy(), stressed());
+    expect(planRebalance(s, evaluateGuard(guardInputs(s, 0.6), DEFAULT_GUARD_CONFIG), policy(), 'agent.testnet', NOW, DEFAULT_LOOP_CONFIG, () => undefined)).toMatchObject({ from: { leg: 0 } });
+  });
+});

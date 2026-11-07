@@ -26,6 +26,7 @@ A Hyperliquid master key is a bare EOA. Whoever holds it can approve any agent, 
 - **Hedge.** `open hedge` shorts a ratio of leg 0's position on leg 1; `close hedge` closes both. The agent checks leverage, notional and coin before trading.
 - **Freeze.** One owner-signed intent stops every contract-signed action except the owner's withdraw, and in the same NEAR transaction the contract signs `approveAgent` calls that replace each trading agent with a keyless burn address, so the old API wallets are refused by Hyperliquid (details in [docs/readme-notes.md](docs/readme-notes.md)).
 - **Decisions (propose mode).** For each hedge the agent asks Jev (TypeSafe AI) five yes/no questions, escalates to Claude (Sonnet 5.5; Opus 5.5 for large notional) when a factor is not decisive (below 0.90 or above 0.10), and shows the result as a proposal. The owner accepts or rejects it; nothing runs until accepted.
+- **Strategies (Phase 2).** Grid and TWAP/DCA bots, each on its own leg with its own top-up budget, drafted from plain language and started only by an owner signature; see [Phase 2](#phase-2-strategies-each-on-its-own-leg).
 - **Chat.** A tool-calling chat over the owner's state (`agent/src/chat.ts`) with deliberately unfiltered tools, used for the prompt-injection demo below.
 
 ## What we guarantee, and what we don't
@@ -134,6 +135,47 @@ cd web && node e2e/explore-check.mjs
 
 Expected: five `PASS page shows "..."` lines and exit code 0.
 
+## Phase 2: strategies, each on its own leg
+
+Phase 1 protects an account; Phase 2 shows the same primitive running bots. A strategy (a grid or a TWAP/DCA) runs on its own leg, so its losses stay on that leg, the margin guard can top it up only from the reserve leg and only within the strategy's own daily budget (and the contract's cap and cooldown on top), and `freeze` stops all of it. Design, what was cut (funding carry) and the details: [docs/phase2-strategies.md](docs/phase2-strategies.md).
+
+- **Spec.** One JSON object per strategy (`agent/src/strategy/spec.ts`). The owner signs a `startStrategy` Command whose `specHash` is the hash of the spec; a spec changed after signing is refused.
+- **Builder.** `POST /strategy/draft {owner, text}`: Claude (Sonnet 5.5, structured output) drafts a spec from plain language, `validateSpec` checks it against the order policy and the contract policy, and the response is `{spec, specHash, diff, warnings}` or a refusal with the reasons. It starts nothing.
+- **Kill switch and restart.** Owner-signed pause and stop; a pause that cannot clear the book keeps retrying. After a service restart every saved strategy comes back paused, its orphaned orders are cancelled, and the owner resumes it with a signed start over the stored spec.
+- **Strategy decisions (propose mode).** Same Jev-then-Claude pipeline as the hedge, with the strategy's own facts (PnL against its loss limit, top-up budget used, fill rate, slices left, distance to liquidation): `pause`, `continue` or `adjust`, accepted through the existing signed accept.
+
+**Policy, and where each limit is enforced**
+
+| Limit | Value | Enforced by |
+|---|---|---|
+| Daily cap and cooldown on moves between legs | $50/day, 30 s (testnet setup) | contract |
+| Where funds may go | the owner's registered legs, or the owner | contract |
+| Order policy: leverage, notional per order, coins, slippage | 5x, $100, BTC and ETH, 3% | agent (`checkOrder` on every strategy order) |
+| Strategy limits: `maxNotional`, `maxLeverage` (only tighter than the order policy), `maxDailyLoss` (strategy PnL), `topUpCapPerDay` | per spec | agent (spec validation, runner) |
+| Hedge reserve: share of the contract's daily cap strategies cannot budget | min(half the cap, $20), `HYPERNEAR_HEDGE_RESERVE_USD` | agent (spec validation) |
+| Strategy leg | leg 3 (the agent scans legs 0 to 3); legs 0 to 2 are the hedge pair and the reserve | agent |
+| Top-up source | reserve leg 2 only, within the strategy's remaining daily budget | agent (guard) |
+| Draft route | 600 characters, rate-limited per IP | agent |
+
+**Run the strategy path with no keys.** With the dry-run server from step 5 running (`node agent/src/server.ts --dry-run --serve`; the web page's Strategies panel shows the same data):
+
+```bash
+curl -s localhost:8787/strategies/0x2c7536e3605d9c16a7a3d7b1898e529396a65c23
+curl -s -X POST localhost:8787/strategy/draft -H 'content-type: application/json' \
+  -d '{"owner":"0x2c7536e3605d9c16a7a3d7b1898e529396a65c23","text":"Run a grid on BTC about 2% either side of the current price with 5 levels, about 11 dollars per level."}'
+```
+
+Expected: the first returns the recorded running grid `grid-live-1` on leg 3 (marked `simulated`); the second returns a recorded draft from the live Claude run (`"ok":true`, a `grid` spec, a `specHash`; the text "Grid on BTC with 20x leverage and 500 dollars." returns the recorded refusal, HTTP 422 with the reason). `/events` replays the recorded `strategy.*` events of the live grid and TWAP runs. Nothing here calls a model or the network.
+
+**Demo 2 on testnet: one account per bot with capped top-ups** ([`agent/results/demo2-live.json`](agent/results/demo2-live.json)). A TWAP bot ran at 20x on leg 3 with a $5 daily top-up budget. The owner moved the leg's spare margin to spot; the guard moved $5 from the reserve leg 2 to leg 3 through the contract's `rebalance` (NEAR tx [Gi2X657R…](https://testnet.nearblocks.io/txns/Gi2X657Rgv25ALJzxgzkHYfp3MiDGNR1BQZuC7zk1Hv9)). A second stress was refused by the guard ("strategy top-up budget used"), and a direct `rebalance` above the contract's remaining daily cap was refused by the contract ("daily cap exceeded"). Other live runs: a grid ([`grid-live.json`](agent/results/grid-live.json)), a TWAP with a service restart in the middle ([`twap-live.json`](agent/results/twap-live.json)), the builder through a real server process ([`builder-e2e-live.json`](agent/results/builder-e2e-live.json)), strategy proposals ([`strategy-decision-live.json`](agent/results/strategy-decision-live.json); the losing-bot case uses synthetic input with real Jev and Claude calls, [`strategy-decision-losing-live.json`](agent/results/strategy-decision-losing-live.json)).
+
+**Known limits**
+
+- **No exchange-side dead-man below $1M of traded volume** (claim C19: Hyperliquid refuses `scheduleCancel`, testnet too). A crashed agent leaves at most `levels` resting grid buys until it restarts; the restore then cancels them. A freeze posted by someone other than our relayer also leaves resting orders until a fresh agent cancels them.
+- **`/strategy/draft` and strategy proposals are unauthenticated and spend model credits**; they are rate-limited per IP, nothing more.
+- **Demo 2 used demo thresholds.** The operator's max leverage was raised from 5x to 20x for the run, and the guard floor from 2x to 10x maintenance: Hyperliquid keeps about 10% of the notional non-withdrawable, so a 20x leg stripped of its spare margin sits near 8x maintenance and never near 2x. The service defaults are unchanged.
+- The loss limit counts the strategy's PnL since it started (not per day), and assumes the leg started flat. The strategy decision facts are bucketed from the same PnL.
+
 ## Live evidence (NEAR testnet and Hyperliquid testnet, 2026-11-07)
 
 Every claim has a committed test or script and a result file; the full ledger with all numbers is [docs/claims.md](docs/claims.md). Contract: `leash-spike-1107.testnet`.
@@ -174,6 +216,7 @@ Copy `.env.example` to `.env` (git-ignored) and fill in what you use. Never comm
 | `HYPERNEAR_RELAYER_ACCOUNT_ID`, `HYPERNEAR_RELAYER_PRIVATE_KEY` | relayer (pays gas and storage deposits) |
 | `HYPERNEAR_AGENT_ACCOUNT_ID`, `HYPERNEAR_AGENT_PRIVATE_KEY` | the agent's function-call key |
 | `LAB_WALLETS_PATH`, `LAB_WALLET_INDICES` | funded Hyperliquid testnet wallets for `validation/` |
+| `HYPERNEAR_HEDGE_RESERVE_USD` | share of the contract daily cap strategies cannot budget (default 20, at most half the cap) |
 | `TYPESAFE_API_KEY` | Jev |
 | `ANTHROPIC_API_KEY` | Claude (escalation and chat) |
 | `PRIVY_APP_ID` (web: `VITE_PRIVY_APP_ID`) | owner login |

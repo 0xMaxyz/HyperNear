@@ -3,12 +3,17 @@
 //   POST /relay         {owner, nonce, intent, sig} -> owner_execute (or {owner, intent:{type:'registerLeg', leg}})
 //   POST /hedge/open    {command, sig}: owner-signed EIP-712 Command (action openHedge, expiry <= 60 s, fresh nonce)
 //   POST /hedge/close   {command, sig}: same, action closeHedge. Both also need the owner's setPolicy opt-in.
-//   POST /decision/propose        {owner}: queue a proposal now (202; it arrives on /events as decision.proposed)
+//   POST /decision/propose        {owner, strategyId?}: queue a proposal now (with strategyId: pause/continue/adjust for that running strategy; accept = pause) (202; it arrives on /events as decision.proposed)
 //   POST /agents/prepare          {command, sig}: action prepareAgents; creates one HL agent key per registered leg and
 //                                 enrols the owner in the guard/decision loops (GET /owner never creates state)
 //   POST /decision/:id/accept     {command, sig}: command.action/coin must equal the proposal's; executed within the order policy
 //   POST /decision/:id/reject     {command, sig}: action reject, coin = the proposal's; emits decision.rejected {reason:'owner'}
 //   POST /decision/mode           {command, sig}: action setDecisionMode, mode ('off'|'propose'|'auto') in command.coin
+//   POST /strategy/start  {command, sig, spec}: action startStrategy, command.specHash = specHash(validated spec)
+//   POST /strategy/resume {command, sig}: action startStrategy, command.coin = strategy id, command.specHash = hash of the stored spec of a paused/restored strategy
+//   POST /strategy/pause|stop {command, sig}: action pauseStrategy|stopStrategy, command.coin = strategy id (kill switch)
+//   GET  /strategies/:owner  the owner's strategies (state, held levels, resting orders, dead-man status)
+//   POST /strategy/draft  {owner, text}: plain language -> {spec, specHash, diff, warnings} (Claude drafts, spec.ts validates; starts nothing)
 //   GET  /events        SSE: hedge, guard and decision log
 // The guard loop (guardLoop.ts) runs in the same process when the NEAR agent key is set.
 // Run: node agent/src/server.ts            (keys from env, see config.ts)
@@ -30,6 +35,11 @@ import { Decider, DECISION_MODES, DecisionModes, proposalEvent, type DecisionMod
 import { jevAsk } from './jev.ts';
 import { breakevens, openTime, readPnlData, type LegPnlData } from './pnl.ts';
 import { hlPoster, HttpError, RateLimiter, Relayer } from './relayer.ts';
+import { claudeAsk, drafter, MAX_DRAFT_TEXT, type Draft } from './strategy/builder.ts';
+import { proposeStrategyAction, type StrategyClients } from './strategy/decide.ts';
+import { claudeStrategyEscalator, jevAskStrategy } from './strategy/decideClients.ts';
+import { StartConflict, StrategyManager } from './strategy/manager.ts';
+import { specHash } from './strategy/spec.ts';
 
 export interface Deps {
   config: AgentConfig;
@@ -43,6 +53,10 @@ export interface Deps {
   guardLoop?: GuardLoop;
   /** proposals, accept, modes; its loop runs only with TYPESAFE_API_KEY and ANTHROPIC_API_KEY set (or in the dry run) */
   decider?: Decider;
+  /** Phase 2 strategy runners (absent in the dry run) */
+  strategies?: StrategyManager;
+  /** plain language -> validated spec draft (needs ANTHROPIC_API_KEY) */
+  drafter?: (owner: Hex, text: string) => Promise<Draft>;
   annualVol?: number;
   /** fills, fee rate, funding per leg for the break-even (default: read from HL) */
   pnlData?: (s: OwnerSnapshot) => Promise<LegPnlData[]>;
@@ -151,8 +165,15 @@ export function handler(d: Deps) {
       if (req.method === 'POST' && url.pathname === '/decision/propose') {
         if (!d.relayer.limiter.allow(req.socket.remoteAddress ?? 'unknown')) throw new HttpError(429, 'rate limited');
         if (!d.decider || (!d.dryRun && !d.config.decide.live)) throw new HttpError(503, 'decision layer off (TYPESAFE_API_KEY and ANTHROPIC_API_KEY not set)');
-        const body = (await readJson(req)) as { owner?: unknown; forceAction?: unknown };
+        const body = (await readJson(req)) as { owner?: unknown; forceAction?: unknown; strategyId?: unknown };
         const owner = ownerOf(body?.owner);
+        if (body?.strategyId !== undefined) {
+          if (typeof body.strategyId !== 'string') throw new HttpError(400, 'strategyId must be a string');
+          const sp = await d.decider.prepareStrategies(owner, body.strategyId);
+          if ('skipped' in sp) throw new HttpError(409, sp.skipped);
+          for (const input of sp.inputs) void d.decider.runStrategy(input).catch((e) => console.error('strategy proposal failed:', (e as Error).message));
+          return reply(202, { owner, strategyId: body.strategyId, queued: true });
+        }
         // test-only override for live checks of the execution path; refused unless the process runs with HYPERNEAR_TEST=1
         const force = body?.forceAction;
         if (force !== undefined && (process.env.HYPERNEAR_TEST !== '1' || !ACTION_IDS.includes(force as Action))) throw new HttpError(400, 'forceAction is test-only (HYPERNEAR_TEST=1) and must be a decision action');
@@ -189,6 +210,54 @@ export function handler(d: Deps) {
         const out = open ? await d.hedger.openHedge(cmd.owner, cmd.coin, Number(cmd.ratio)) : await d.hedger.closeHedge(cmd.owner, cmd.coin);
         return reply(200, out);
       }
+      const strategies = /^\/strategies\/(0x[0-9a-fA-F]{40})$/.exec(url.pathname);
+      if (req.method === 'GET' && strategies) {
+        if (!d.strategies) throw new HttpError(503, 'strategies off');
+        const owner = ownerOf(strategies[1]);
+        return reply(200, { owner, strategies: d.strategies.list(owner) });
+      }
+      if (req.method === 'POST' && url.pathname === '/strategy/draft') {
+        if (!d.relayer.limiter.allow(req.socket.remoteAddress ?? 'unknown')) throw new HttpError(429, 'rate limited');
+        if (!d.drafter) throw new HttpError(503, 'strategy builder off (ANTHROPIC_API_KEY not set)');
+        const b = (await readJson(req)) as { owner?: unknown; text?: unknown };
+        if (typeof b.text !== 'string' || !b.text.trim() || b.text.length > MAX_DRAFT_TEXT) throw new HttpError(400, `text must be 1-${MAX_DRAFT_TEXT} characters`);
+        const draft = await d.drafter(ownerOf(b.owner), b.text);
+        return reply(draft.ok ? 200 : 422, draft);
+      }
+      if (req.method === 'POST' && url.pathname === '/strategy/start') {
+        if (!d.strategies) throw new HttpError(503, 'strategies off');
+        const body = (await readJson(req)) as { spec?: unknown };
+        const cmd = await verifyCommand(verifier(d), body, 'startStrategy');
+        await assertOptedIn(d, cmd.owner);
+        const v = await d.strategies.validate(cmd.owner, body.spec);
+        if (!v.ok) throw new HttpError(422, v.errors.join('; '));
+        if (specHash(v.spec) !== cmd.specHash) throw new HttpError(401, 'command.specHash must be the specHash of the spec (the owner signed another spec)');
+        d.bus.emit('command', { ...cmd });
+        return reply(200, await d.strategies.start(cmd.owner, v.spec));
+      }
+      if (req.method === 'POST' && url.pathname === '/strategy/resume') {
+        if (!d.strategies) throw new HttpError(503, 'strategies off');
+        const cmd = await verifyCommand(verifier(d), await readJson(req), 'startStrategy');
+        await assertOptedIn(d, cmd.owner);
+        const stored = d.strategies.get(cmd.owner, cmd.coin);
+        if (!stored) throw new HttpError(404, `no strategy ${cmd.coin} for ${cmd.owner}`);
+        if (specHash(stored) !== cmd.specHash) throw new HttpError(401, 'command.specHash is not the hash of the stored spec');
+        const v = await d.strategies.validate(cmd.owner, stored); // contract policy again; only a paused strategy passes
+        if (!v.ok) throw new HttpError(422, v.errors.join('; '));
+        d.bus.emit('command', { ...cmd });
+        return reply(200, await d.strategies.start(cmd.owner, v.spec));
+      }
+      const strategyOp = /^\/strategy\/(pause|stop)$/.exec(url.pathname);
+      if (req.method === 'POST' && strategyOp) {
+        if (!d.strategies) throw new HttpError(503, 'strategies off');
+        const stop = strategyOp[1] === 'stop';
+        const cmd = await verifyCommand(verifier(d), await readJson(req), stop ? 'stopStrategy' : 'pauseStrategy');
+        d.bus.emit('command', { ...cmd });
+        const out = await (stop ? d.strategies.stop(cmd.owner, cmd.coin) : d.strategies.pause(cmd.owner, cmd.coin)).catch((e) => {
+          throw new HttpError(404, (e as Error).message);
+        });
+        return reply(200, out);
+      }
       if (req.method === 'GET' && url.pathname === '/events') {
         res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive', 'access-control-allow-origin': '*' });
         const write = (e: { id: number; type: string }) => res.write(`id: ${e.id}\nevent: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`);
@@ -203,7 +272,7 @@ export function handler(d: Deps) {
       }
       reply(404, { error: 'not found' });
     } catch (e) {
-      const status = e instanceof HttpError ? e.status : e instanceof HedgeRefused ? 422 : 500;
+      const status = e instanceof HttpError ? e.status : e instanceof HedgeRefused ? 422 : e instanceof StartConflict ? 409 : 500;
       if (status === 500) console.error('request failed:', (e as Error).message);
       reply(status, { error: (e as Error).message });
     }
@@ -225,6 +294,9 @@ export function buildDeps(config: AgentConfig): Deps {
     agentId: config.nearAgent?.accountId,
     agentClient: agentSender && new HyperNearClient({ contractId: config.contractId, network: config.network, rpcUrl: rpc, sender: agentSender }),
     owners: () => [...new Set([...legs.keys.owners(), ...config.guard.watchOwners])] as Hex[],
+    // a strategy leg is topped up only from the reserve leg and within the strategy's own daily budget
+    budgetLeftUsd: (o, leg) => d.strategies?.topUpLeft(o, leg),
+    onTopUp: (o, leg, usd) => d.strategies?.recordTopUp(o, leg, usd),
     cfg: { intervalMs: config.guard.intervalSec * 1000, guard: guardConfig, annualVol: config.guard.annualVol },
   });
   const hedger = new Hedger(legs, config.policy, bus);
@@ -243,7 +315,26 @@ export function buildDeps(config: AgentConfig): Deps {
     owners: () => [...new Set([...legs.keys.owners(), ...config.guard.watchOwners])] as Hex[],
     openedAt: async (s, coin) => openTime((await readPnlData(legs.hl, s)).find((x) => x.leg === 1)?.fills ?? [], coin),
     intervalMs: config.decide.intervalSec * 1000,
+    // strategy decisions (propose only): accept pauses the strategy
+    proposeStrategy: (i) => (clients ? proposeStrategyAction(i, strategyClients!) : Promise.reject(new Error('decision layer off'))),
+    strategyInputs: async (owner, id) => await d.strategies!.inputs(owner, await legs.snapshot(owner), config.guard.annualVol, id),
+    executeStrategy: (owner, id) => d.strategies!.pause(owner, id, 'accepted strategy proposal'),
   });
+  const strategyClients: StrategyClients | undefined = clients && { ask: jevAskStrategy(), escalate: claudeStrategyEscalator() };
+  const strategies = new StrategyManager({ legs, client, policy: config.policy, agentId: config.nearAgent?.accountId, hedgeReserveUsd: config.guard.hedgeReserveUsd, dataDir: config.dataDir, emit: (t, data) => void bus.emit(t, data) });
+  d.strategies = strategies;
+  if (process.env.ANTHROPIC_API_KEY) {
+    d.drafter = drafter({
+      ask: claudeAsk(),
+      context: (owner, selfId) => strategies.context(owner, selfId),
+      current: (owner, id) => strategies.get(owner, id),
+      strategies: (owner) => strategies.specs(owner),
+      mids: async () => (await legs.hl.allMids()) as Record<string, string>,
+      keyReady: (owner, leg) => Boolean(legs.keys.get(owner, leg)?.approvedAt),
+    });
+  }
+  // freeze: cancel resting strategy orders before the revocations kill the agent keys
+  d.relayer.onBeforeRevoke = (owner) => d.strategies!.cancelAll(owner);
   return d;
 }
 
@@ -260,6 +351,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const config = loadConfig();
     const deps = buildDeps(config);
     const server = createServer(handler(deps));
+    // saved strategies come back paused and their orphaned orders are cancelled; the owner resumes them with a signed start
+    void deps.strategies?.restore().then((r) => r.length && console.log(`strategies restored (paused): ${JSON.stringify(r)}`), (e) => console.error('strategy restore failed:', (e as Error).message));
     if (config.nearAgent) deps.guardLoop?.start();
     if (config.decide.live) deps.decider?.start(); // its own timer: the guard never waits on it
     server.listen(config.port, () => {
