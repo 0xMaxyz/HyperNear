@@ -1,0 +1,118 @@
+{
+  "at": "2026-11-07T20:44:02.889Z",
+  "note": "synthetic input, real Jev and Claude calls",
+  "cases": {
+    "losing_budget_used_up": {
+      "facts": {
+        "strategy": "twap",
+        "pnl": "large loss: over half the loss limit",
+        "budget": "used up",
+        "fillRate": "normal",
+        "slicesLeft": "many left",
+        "liqDistance": "near: 3% to 10%",
+        "price": "inside the limit price",
+        "vol": "normal"
+      },
+      "proposal": {
+        "id": "e2b5efe2-8c2f-4272-99e8-f954709b4794",
+        "kind": "strategy",
+        "strategyId": "dca-btc-1",
+        "factors": {
+          "nearLiquidation": {
+            "p": null,
+            "decidedBy": "claude"
+          },
+          "losing": {
+            "p": null,
+            "decidedBy": "claude"
+          },
+          "budgetLow": {
+            "p": null,
+            "decidedBy": "claude"
+          },
+          "offPlan": {
+            "p": null,
+            "decidedBy": "claude"
+          },
+          "volatile": {
+            "p": null,
+            "decidedBy": "claude"
+          }
+        },
+        "latencyMs": 12853,
+        "trace": {
+          "jevMs": 10005,
+          "calls": [
+            {
+              "model": "claude-sonnet-5-5",
+              "ms": 2848
+            }
+          ],
+          "tableAction": null
+        },
+        "action": "pause_strategy",
+        "source": "claude",
+        "rationale": "The budget is used up while many slices remain, the loss is over half the loss limit, and liquidation is only 3-10% away, so continuing risks further losses with no budget to execute the plan. Pausing preserves capital, and the owner can resume or redraft later.",
+        "model": "claude-sonnet-5-5",
+        "flagged": true,
+        "error": "jev: Request timed out after 10000ms."
+      }
+    },
+    "healthy_control": {
+      "facts": {
+        "strategy": "twap",
+        "pnl": "about flat",
+        "budget": "unused",
+        "fillRate": "high: most fill",
+        "slicesLeft": "many left",
+        "liqDistance": "near: 3% to 10%",
+        "price": "inside the limit price",
+        "vol": "normal"
+      },
+      "proposal": {
+        "id": "e2b36603-bb61-4135-bd41-599a0ae6f950",
+        "kind": "strategy",
+        "strategyId": "dca-btc-1",
+        "factors": {
+          "nearLiquidation": {
+            "p": null,
+            "decidedBy": "claude"
+          },
+          "losing": {
+            "p": null,
+            "decidedBy": "claude"
+          },
+          "budgetLow": {
+            "p": null,
+            "decidedBy": "claude"
+          },
+          "offPlan": {
+            "p": null,
+            "decidedBy": "claude"
+          },
+          "volatile": {
+            "p": null,
+            "decidedBy": "claude"
+          }
+        },
+        "latencyMs": 12525,
+        "trace": {
+          "jevMs": 10000,
+          "calls": [
+            {
+              "model": "claude-sonnet-5-5",
+              "ms": 2525
+            }
+          ],
+          "tableAction": null
+        },
+        "action": "pause_strategy",
+        "source": "claude",
+        "rationale": "Liquidation distance of 3% to 10% is near enough that continuing to add exposure with many slices left risks pushing the account closer to liquidation, and capital preservation takes priority. PnL is flat, budget is unused, fills are healthy, price is within the limit and volatility is normal, so nothing else is wrong and the owner can safely resume or redraft after reviewing margin.",
+        "model": "claude-sonnet-5-5",
+        "flagged": true,
+        "error": "jev: Request timed out after 10000ms."
+      }
+    }
+  }
+}
