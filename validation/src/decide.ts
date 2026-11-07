@@ -35,3 +35,20 @@ export function percentile(xs: number[], p: number): number {
   return s[Math.min(s.length - 1, Math.ceil((p / 100) * s.length) - 1)]!;
 }
 
+
+const COMPACT_KEYS: Record<string, string> = {
+  hedgeCoverage: 'cover',
+  longLegLiquidationDistance: 'longLiq',
+  shortLegLiquidationDistance: 'shortLiq',
+  combinedPnl: 'pnl',
+  fundingOnHedge: 'funding',
+  volatility: 'vol',
+  trend: 'trend',
+  hedgeAge: 'age',
+  reserveMargin: 'reserve',
+};
+
+/** Same buckets, shorter keys and values (text before the colon): keeps Jev request bodies small. */
+export function compactFacts(facts: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(Object.entries(facts).map(([k, v]) => [COMPACT_KEYS[k] ?? k, v.split(':')[0]!]));
+}

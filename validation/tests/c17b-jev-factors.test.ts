@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { noul } from '@typesafe-ai/sdk';
 import { LIVE } from '../src/env';
 import { jevClient } from '../src/jev';
-import { loadStates, percentile, shuffled } from '../src/decide';
+import { compactFacts, loadStates, percentile, shuffled } from '../src/decide';
 import { FACTOR_KEYS, FACTOR_QUESTIONS, actionFromFactors, gateFactors, type Action, type FactorBools, type FactorKey, type FactorProbs } from '../../agent/src/decide';
 import { runClaim } from '../src/results';
 
@@ -35,9 +35,11 @@ describe.skipIf(!live)('C17b: Jev factor questions', () => {
       const errors: string[] = [];
       let attempts = 0;
       let failedAttempts = 0;
+      let consecutiveFailures = 0;
 
       for (const [si, s] of states.entries()) {
         for (const run of [0, 1]) {
+          if (consecutiveFailures >= 4) break;
           const order = shuffled(FACTOR_KEYS, 5000 + si * 2 + run);
           let res;
           let lastErr = '';
@@ -46,7 +48,7 @@ describe.skipIf(!live)('C17b: Jev factor questions', () => {
             attempts++;
             try {
               res = await client.systemOne({
-                state: s.facts,
+                state: compactFacts(s.facts),
                 questions: Object.fromEntries(order.map((k) => [k, noul(FACTOR_QUESTIONS[k])])),
                 model: MODEL,
               });
@@ -57,8 +59,10 @@ describe.skipIf(!live)('C17b: Jev factor questions', () => {
           }
           if (!res) {
             errors.push(`${s.id}#${run}: ${lastErr}`);
+            consecutiveFailures++;
             continue;
           }
+          consecutiveFailures = 0;
           const ms = performance.now() - t0;
           const answers = res.answers as unknown as Record<FactorKey, { noul: number }>;
           const probs = Object.fromEntries(FACTOR_KEYS.map((k) => [k, answers[k].noul])) as FactorProbs;
