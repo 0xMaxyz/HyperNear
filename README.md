@@ -77,10 +77,10 @@ pnpm test
 Expected: exit code 0 and these summary lines (live tests are skipped without credentials):
 
 ```
-packages/core test:       Tests  287 passed (287)
-packages/hypernear-client test:       Tests  31 passed | 1 skipped (32)
-validation test:       Tests  4 passed | 20 skipped (24)
-agent test:       Tests  157 passed | 4 skipped (161)
+packages/core test:       Tests  289 passed (289)
+packages/hypernear-client test:       Tests  35 passed | 1 skipped (36)
+validation test:       Tests  4 passed | 21 skipped (25)
+agent test:       Tests  300 passed | 6 skipped (306)
 ```
 
 **3. Contract tests.**
