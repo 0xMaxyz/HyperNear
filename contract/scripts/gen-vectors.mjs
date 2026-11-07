@@ -39,7 +39,7 @@ export function hlDigest(hyperliquidChain, action) {
 }
 
 async function ownerVectors() {
-  // fixed, publicly known test key: never fund it
+  // well-known PUBLIC web3 test key, fixed so the vectors are deterministic: never fund it, never use off testnet
   const acct = privateKeyToAccount("0x4c0883a69102937d6231471b5dbb6204fe5129617082792ae468d01a3f362318");
   const [chainTag, contractId, owner] = ["near-testnet", "leash-spike-1107.testnet", acct.address.toLowerCase()];
   const agent = "0x7bfcce9237bb278b0e166f11955a90595fa9c2c6";

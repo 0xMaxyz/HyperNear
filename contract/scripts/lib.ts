@@ -15,6 +15,17 @@ export const provider = new JsonRpcProvider({ url: RPC });
 
 const SECP256K1_N = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
 
+// Well-known PUBLIC web3 test key (anyone can sign with it): only ever a testnet owner, never funded.
+const PUBLIC_TEST_OWNER_KEY = "0x4c0883a69102937d6231471b5dbb6204fe5129617082792ae468d01a3f362318";
+
+/** Owner key for the live scripts: $HYPERNEAR_TEST_OWNER_KEY, else the public test key, and that only when NEAR_NETWORK=testnet. */
+export function testOwnerKey(): Hex {
+  const k = process.env.HYPERNEAR_TEST_OWNER_KEY;
+  if (k) return k as Hex;
+  if (process.env.NEAR_NETWORK === "testnet") return PUBLIC_TEST_OWNER_KEY;
+  throw new Error("set HYPERNEAR_TEST_OWNER_KEY, or NEAR_NETWORK=testnet to use the public test key");
+}
+
 /** Storage deposits the relayer attaches (contract refunds the excess). */
 export const OWNER_DEPOSIT = 10n ** 22n; // 0.01 NEAR
 export const REGISTER_LEG_DEPOSIT = 5n * 10n ** 21n; // 0.005 NEAR

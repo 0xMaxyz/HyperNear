@@ -102,6 +102,29 @@
 - Gotcha: an FC key's allowance must cover prepaid gas at the pessimistic price (300 TGas ~ 0.30 NEAR): agent calls use 100 TGas.
 - Script: scripts/c7-agent-fc-key.ts (run after owner-smoke.ts).
 
+## Fable review fixes (2026-11-07, deployed from 0b9ed3c)
+- rebalance: cap spend + cooldown are committed before the promise and travel to `on_signed` as `CapRefund`
+  {owner, amount, at_ns, prev_last_ns}. `on_signed` is `&mut self` and, on MPC failure, gives the amount back (same UTC
+  day only) and restores `last_rebalance_ns` (only if no later rebalance replaced it). It no longer panics: it returns
+  null + log "MPC sign failed", because a panic would revert the give-back. Owner nonces stay burned.
+- rebalance requires the source leg to be registered ("source leg not registered").
+- on_leg_derived: a failed view OR a non-secp256k1 key refunds the whole deposit (no panic, nothing stuck).
+- `migrate` (+ LeashV0) only exist with `--features spike`. Default (mainnet) ABI checked: no sign_raw/admin_sign_hl/migrate.
+- MAINNET: build WITHOUT `spike`, init with `new`, then DELETE the account's full-access key(s) (the account id is the
+  custody root of every derived address; upgrades then need a new account = new addresses).
+- Tests: 36 default / 39 spike.
+
+## FC-key allowance, measured 2026-11-07 (agent.leash-spike-1107.testnet, allowance 0.2 NEAR, 100 TGas per call)
+- At rest: 0.19505 -> 0.19256 NEAR over 2 rebalances = ~0.00124 NEAR per call (= gas actually burnt, ~13 TGas).
+- Mid-flight the allowance dips by ~0.0557 NEAR per pending call (prepaid gas reserved at the pessimistic price) and the
+  unused part comes back a few blocks later (reads straight after a call show 0.143, at rest 0.195).
+- So the review's "drains after a few calls" is not what testnet does today: unused gas IS refunded to the allowance.
+  Limits that remain: ~160 calls per 0.2 NEAR, and ~3 concurrent calls before NotEnoughAllowance.
+- Decision anyway: agent key with UNLIMITED allowance (`allowance: null`): `fcagent.leash-spike-1107.testnet`, key
+  ed25519:5cfqn3h8…, FunctionCall{receiver leash-spike-1107.testnet, [rebalance, agent_usd_class_transfer], allowance null}.
+  No extra risk (two non-payable methods; gas paid from the agent account's own 0.2 NEAR). C7 PASS with it
+  (tx 3AEHRpnhZtLbmDTovv9N6QoFb4pMmiauUCa5KFCeZv77). The test owner's policy now points at fcagent.
+
 ## Open / next
 - sign_raw and admin_sign_hl must be removed before mainnet (they sign for any path, owners' included).
 - Min outer gas not measured; scripts attach 300 TGas (needs >= ~65 TGas given the static allocations).
@@ -111,3 +134,7 @@
 - Re-sign on demand (fresh nonce): on ci32 `node contract/scripts/sign-approve.mjs <path> <agentAddr> <nonceMs> [agentName]`
   (env LEASH_CONTRACT, default leash-spike-1107.testnet). Empty agentName => omitted from action, signed as "" (python SDK behaviour).
 - All ci32 network traffic (rustup, crates, pnpm, faucet, NEAR RPC) goes via the Surfshark proxy env.sh sets.
+- 2026-11-07: live scripts take the owner key from `LEASH_TEST_OWNER_KEY`; the public web3 test key 0x4c08…2318 is used
+  only with `NEAR_NETWORK=testnet` (gen-vectors keeps it fixed for deterministic vectors). Spike guards: deploy-testnet.sh
+  refuses non-.testnet accounts; a `spike` build panics in `new`/`migrate` and in the admin methods unless
+  hl_mainnet == false and the account ends with `.testnet`. Tests 33 default / 36 spike. Redeployed (026654e).

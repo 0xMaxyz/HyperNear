@@ -1,14 +1,14 @@
 // Live testnet smoke of the policy contract (owner intents, legs, agent rebalance). Signs, never submits to HL.
-// Run on ci32: node owner-smoke.ts <hypernear-account.testnet>
-// Owner = the public test key from the vectors (never fund it). Agent = the contract account itself.
+// Run on ci32: NEAR_NETWORK=testnet node owner-smoke.ts <hypernear-account.testnet>
+// Owner = $HYPERNEAR_TEST_OWNER_KEY, or with NEAR_NETWORK=testnet the public test key (never fund it). Agent = the contract account.
 import { privateKeyToAccount } from "viem/accounts";
-import { accountFromKeychain, callSign, derivedEvmAddress, outcomeHeights, OWNER_DEPOSIT, provider, recover, REGISTER_LEG_DEPOSIT, tgas } from "./lib.ts";
+import { accountFromKeychain, callSign, derivedEvmAddress, outcomeHeights, OWNER_DEPOSIT, provider, recover, REGISTER_LEG_DEPOSIT, tgas, testOwnerKey } from "./lib.ts";
 import { ownerIntentTypedData } from "./owner-intents.mjs";
 import { hlDigest } from "./gen-vectors.mjs";
 
 const contractId = process.argv[2];
 if (!contractId) throw new Error("usage: node owner-smoke.ts <hypernear-account>");
-const acct = privateKeyToAccount("0x4c0883a69102937d6231471b5dbb6204fe5129617082792ae468d01a3f362318");
+const acct = privateKeyToAccount(testOwnerKey());
 const owner = acct.address.toLowerCase();
 const near = accountFromKeychain(contractId);
 const view = (method: string, args: object) => provider.callFunction<any>({ contractId, method, args });
@@ -42,10 +42,10 @@ const execOwner = async (intent: any) => {
   return { ...r, nonce, signature };
 };
 
-const pol = await execOwner({ type: "setPolicy", agent: contractId, dailyCap: "5", cooldownSec: 0 });
+const pol = await execOwner({ type: "setPolicy", agent: contractId, dailyCap: "1000", cooldownSec: 0 });
 check(pol.out === null, `setPolicy tx ${pol.txHash} gas ${tgas(pol.gasBurnt)} TGas`);
 await expectFail("replayed owner intent", "bad nonce", () => callSign(near, contractId, "owner_execute",
-  { owner, nonce: pol.nonce, intent: { type: "setPolicy", agent: contractId, dailyCap: "5", cooldownSec: 0 }, signature: pol.signature }));
+  { owner, nonce: pol.nonce, intent: { type: "setPolicy", agent: contractId, dailyCap: "1000", cooldownSec: 0 }, signature: pol.signature }));
 
 const hlNonce = Date.now();
 const uct = await execOwner({ type: "usdClassTransfer", leg: 0, amount: "1", toPerp: true, hlNonce });
@@ -59,7 +59,7 @@ const rebDigest = hlDigest("Testnet", { type: "usdSend", destination: legs[1], a
 check(`0x${reb.out.payload}` === rebDigest && (await recover(rebDigest, reb.out)).toLowerCase() === legs[0],
   `agent rebalance leg0->leg1 signed by leg0, tx ${reb.txHash} gas ${tgas(reb.gasBurnt)} TGas`);
 await expectFail("rebalance over the daily cap", "daily cap exceeded", () =>
-  callSign(near, contractId, "rebalance", { owner, from_leg: 0, to_address: legs[1], amount: "5", hl_time: time + 1 }));
+  callSign(near, contractId, "rebalance", { owner, from_leg: 0, to_address: legs[1], amount: "1000", hl_time: time + 1 }));
 await expectFail("rebalance to a foreign address", "not a registered leg", () =>
   callSign(near, contractId, "rebalance", { owner, from_leg: 0, to_address: "0x75c450e9597b5ca41aa86b18f630f51278c350e3", amount: "1", hl_time: time + 2 }));
 

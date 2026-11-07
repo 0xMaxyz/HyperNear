@@ -76,6 +76,28 @@ fn transfers() -> Vec<(String, u128)> {
         .collect()
 }
 
+/// Args of the `on_signed` callback the last call scheduled.
+fn on_signed_args() -> Value {
+    get_created_receipts()
+        .iter()
+        .flat_map(|r| r.actions.iter())
+        .find_map(|a| match a {
+            MockAction::FunctionCallWeight { method_name, args, .. } if method_name == b"on_signed" => {
+                Some(serde_json::from_slice(args).unwrap())
+            }
+            _ => None,
+        })
+        .expect("no on_signed callback")
+}
+
+fn fake_mpc_sig() -> MpcSignature {
+    MpcSignature {
+        big_r: MpcAffinePoint { affine_point: format!("02{}", "11".repeat(32)) },
+        s: MpcScalar { scalar: "22".repeat(32) },
+        recovery_id: 0,
+    }
+}
+
 /// (path, payload hex) of every MPC `sign` call created since the last context reset.
 fn signed() -> Vec<(String, String)> {
     get_created_receipts()
@@ -222,9 +244,7 @@ fn nonce_stays_burned_when_mpc_callback_fails() {
     let sig0 = o.sign(0, &withdraw("1"));
     let _ = c.owner_execute(o.addr.clone(), 0, withdraw("1"), sig0.clone());
     ctx(CONTRACT, T0);
-    expect_panic("MPC sign failed", || {
-        c.on_signed("00".repeat(32), None, Err(PromiseError::Failed));
-    });
+    assert!(c.on_signed("00".repeat(32), None, None, Err(PromiseError::Failed)).is_none());
     ctx(RELAYER, T0);
     assert_eq!(c.get_owner(o.addr.clone()).unwrap().nonce, 1);
     expect_panic("bad nonce", || {
@@ -408,6 +428,52 @@ fn rebalance_cap_and_cooldown() {
     expect_panic("daily cap exceeded", || reb(&mut c, day0 + 2 * 86_400, "10.000001"));
 }
 
+#[test]
+fn failed_mpc_sign_gives_back_rebalance_cap_and_cooldown() {
+    let mut c = contract();
+    let o = owner(1);
+    set_policy(&mut c, &o, "10", 600);
+    register(&mut c, &o, 0, 20);
+    let leg1 = register(&mut c, &o, 1, 21);
+    let day0 = (T0 / 86_400 + 1) * 86_400;
+
+    ctx(AGENT, day0);
+    let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "4".into(), 1);
+    let ok = on_signed_args();
+    ctx(CONTRACT, day0 + 5);
+    let refund: CapRefund = serde_json::from_value(ok["refund"].clone()).unwrap();
+    assert!(c.on_signed(ok["payload"].as_str().unwrap().into(), None, Some(refund), Ok(fake_mpc_sig())).is_some());
+    let st = c.get_owner(o.addr.clone()).unwrap();
+    assert_eq!((st.spent_today, st.last_rebalance_ns), (4_000_000, day0 * 1_000_000_000), "success keeps the spend");
+
+    let t1 = day0 + 600;
+    ctx(AGENT, t1);
+    let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "6".into(), 2);
+    let failed = on_signed_args();
+    ctx(CONTRACT, t1 + 5);
+    let refund: CapRefund = serde_json::from_value(failed["refund"].clone()).unwrap();
+    assert!(c.on_signed(failed["payload"].as_str().unwrap().into(), None, Some(refund), Err(PromiseError::Failed)).is_none());
+    let st = c.get_owner(o.addr.clone()).unwrap();
+    assert_eq!(st.spent_today, 4_000_000, "the failed 6 is given back");
+    assert_eq!(st.last_rebalance_ns, day0 * 1_000_000_000, "cooldown restarts from the last successful rebalance");
+
+    ctx(AGENT, t1 + 10); // would hit "cooldown" if the failed rebalance had restarted it
+    let _ = c.rebalance(o.addr.clone(), 0, leg1, "6".into(), 3);
+    assert_eq!(c.get_owner(o.addr.clone()).unwrap().spent_today, 10_000_000);
+}
+
+#[test]
+fn rebalance_from_unregistered_source_rejected() {
+    let mut c = contract();
+    let o = owner(1);
+    set_policy(&mut c, &o, "10", 0);
+    let leg1 = register(&mut c, &o, 1, 21);
+    ctx(AGENT, T0);
+    expect_panic("source leg not registered", || {
+        let _ = c.rebalance(o.addr.clone(), 7, leg1, "1".into(), 1);
+    });
+}
+
 // ---- legs ----
 
 #[test]
@@ -444,6 +510,19 @@ fn register_leg_refunds_everything_when_mpc_view_fails() {
     let o = owner(1);
     ctx(CONTRACT, T0);
     let got = c.on_leg_derived(o.addr.clone(), leg_path(&o.addr, 0), RELAYER.parse().unwrap(), REGISTER_LEG_DEPOSIT, Err(PromiseError::Failed));
+    assert_eq!(got, None);
+    assert_eq!(c.get_leg(o.addr.clone(), 0), None);
+    assert_eq!(transfers(), vec![(RELAYER.to_string(), REGISTER_LEG_DEPOSIT.as_yoctonear())]);
+}
+
+#[test]
+fn register_leg_refunds_everything_on_a_non_secp256k1_key() {
+    let mut c = contract();
+    let o = owner(1);
+    ctx(CONTRACT, T0);
+    let ed = PublicKey::from_parts(CurveType::ED25519, vec![7; 32]).unwrap();
+    let ed_str: String = serde_json::from_value(serde_json::to_value(&ed).unwrap()).unwrap();
+    let got = c.on_leg_derived(o.addr.clone(), leg_path(&o.addr, 0), RELAYER.parse().unwrap(), REGISTER_LEG_DEPOSIT, Ok(ed_str));
     assert_eq!(got, None);
     assert_eq!(c.get_leg(o.addr.clone(), 0), None);
     assert_eq!(transfers(), vec![(RELAYER.to_string(), REGISTER_LEG_DEPOSIT.as_yoctonear())]);
@@ -531,6 +610,21 @@ fn admin_methods_reject_strangers() {
     ctx(CONTRACT, T0);
     let _ = c.admin_sign_hl("test/leg0".into(), HlAction::UsdClassTransfer { amount: "1".into(), to_perp: true, nonce: 1 });
     assert_eq!(signed().len(), 1);
+}
+
+#[cfg(feature = "spike")]
+#[test]
+fn spike_build_refuses_mainnet() {
+    ctx(RELAYER, T0);
+    expect_panic("spike build: testnet only", || {
+        Leash::new("admin.testnet".parse().unwrap(), "v1.signer-prod.testnet".parse().unwrap(), true);
+    });
+    let mut b = VMContextBuilder::new();
+    b.current_account_id("leash.near".parse().unwrap()).predecessor_account_id("leash.near".parse().unwrap());
+    testing_env!(b.build());
+    expect_panic("spike build: testnet only", || {
+        Leash::new("admin.near".parse().unwrap(), "v1.signer".parse().unwrap(), false);
+    });
 }
 
 #[cfg(feature = "spike")]

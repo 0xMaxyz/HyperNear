@@ -80,7 +80,8 @@ pub struct Leash {
     leg_owner: LookupMap<String, String>,
 }
 
-/// State layout of the D1 spike deployment, read once by `migrate`.
+/// State layout of the D1 spike deployment, read once by `migrate` (testnet only).
+#[cfg(feature = "spike")]
 #[near(serializers = [borsh])]
 struct LeashV0 {
     admin: AccountId,
@@ -104,6 +105,16 @@ pub struct MpcSignature {
     pub recovery_id: u8,
 }
 
+/// What `rebalance` committed before the MPC promise, so `on_signed` can give it back on failure.
+#[near(serializers = [json])]
+pub struct CapRefund {
+    pub owner: String,
+    pub amount: u64,
+    /// block time of the rebalance (also identifies it in `last_rebalance_ns`)
+    pub at_ns: u64,
+    pub prev_last_ns: u64,
+}
+
 /// big_r is the 33-byte compressed point (r = big_r[1..]), all hex without 0x.
 /// `action` is the HL action that was signed (post it with hyperliquidChain + signatureChainId 0x66eee).
 #[near(serializers = [json])]
@@ -113,6 +124,15 @@ pub struct SignOut {
     pub s: String,
     pub recovery_id: u8,
     pub action: Option<HlAction>,
+}
+
+/// A `spike` build must never run on mainnet: refuse to init there, and refuse the admin methods.
+#[cfg(feature = "spike")]
+fn assert_testnet(hl_mainnet: bool) {
+    require!(
+        !hl_mainnet && env::current_account_id().as_str().ends_with(".testnet"),
+        "spike build: testnet only"
+    );
 }
 
 #[cfg(feature = "spike")]
@@ -132,14 +152,6 @@ impl Leash {
     #[init]
     pub fn new(admin: AccountId, mpc_contract: AccountId, hl_mainnet: bool) -> Self {
         Self::from_parts(admin, mpc_contract, hl_mainnet)
-    }
-
-    /// One-off upgrade from the D1 spike layout; keeps the account id, so derived addresses stay.
-    #[private]
-    #[init(ignore_state)]
-    pub fn migrate() -> Self {
-        let old: LeashV0 = env::state_read().unwrap_or_else(|| env::panic_str("no state"));
-        Self::from_parts(old.admin, old.mpc_contract, old.hl_mainnet)
     }
 
     // ---- owner (anyone may relay; the EIP-712 signature is the authentication) ----
@@ -231,12 +243,12 @@ impl Leash {
         deposit: NearToken,
         #[callback_result] res: Result<String, PromiseError>,
     ) -> Option<String> {
-        let Some(pk) = res.ok().and_then(|s| s.parse::<PublicKey>().ok()) else {
-            log!("derived_public_key failed; refunding");
+        let pk = res.ok().and_then(|s| s.parse::<PublicKey>().ok()).filter(|pk| pk.curve_type() == CurveType::SECP256K1);
+        let Some(pk) = pk else {
+            log!("derived_public_key failed or not secp256k1; refunding");
             Promise::new(payer).transfer(deposit).detach();
             return None;
         };
-        require!(pk.curve_type() == CurveType::SECP256K1, "derived key is not secp256k1");
         let addr = format!("0x{}", hex::encode(&keccak256_array(&pk.as_bytes()[1..])[12..]));
         let storage_before = env::storage_usage();
         self.legs.insert(path, addr.clone());
@@ -271,7 +283,9 @@ impl Leash {
             self.leg_owner.get(&to_address) == Some(&owner),
             "destination is not a registered leg of this owner"
         );
-        require!(self.legs.get(&leg_path(&owner, from_leg)) != Some(&to_address), "source equals destination");
+        let from_path = leg_path(&owner, from_leg);
+        require!(self.legs.contains_key(&from_path), "source leg not registered");
+        require!(self.legs.get(&from_path) != Some(&to_address), "source equals destination");
         let amt = parse_usd(&amount);
         let now = env::block_timestamp();
         require!(
@@ -284,23 +298,42 @@ impl Leash {
             st.spent_today = 0;
         }
         require!(st.spent_today.saturating_add(amt) <= st.daily_cap, "daily cap exceeded");
+        // committed before the promise; on_signed gives both back if the MPC sign fails
+        let refund = CapRefund { owner: owner.clone(), amount: amt, at_ns: now, prev_last_ns: st.last_rebalance_ns };
         st.spent_today += amt;
         st.last_rebalance_ns = now;
-        self.owners.insert(owner.clone(), st);
-        self.sign_hl(leg_path(&owner, from_leg), HlAction::UsdSend { destination: to_address, amount, time: hl_time })
+        self.owners.insert(owner, st);
+        let action = HlAction::UsdSend { destination: to_address, amount, time: hl_time };
+        self.mpc_sign(from_path, action.digest(self.hl_chain()), Some(action), Some(refund))
     }
 
     // ---- callbacks and views ----
 
+    /// Returns the signature, or null if the MPC sign failed. It does not panic on failure, so that the
+    /// rebalance cap and cooldown given back here are committed. (An owner nonce stays burned.)
     #[private]
     pub fn on_signed(
-        &self,
+        &mut self,
         payload: String,
         action: Option<HlAction>,
+        refund: Option<CapRefund>,
         #[callback_result] res: Result<MpcSignature, PromiseError>,
-    ) -> SignOut {
-        let sig = res.unwrap_or_else(|_| env::panic_str("MPC sign failed"));
-        SignOut { payload, big_r: sig.big_r.affine_point, s: sig.s.scalar, recovery_id: sig.recovery_id, action }
+    ) -> Option<SignOut> {
+        let Ok(sig) = res else {
+            log!("MPC sign failed");
+            if let Some(r) = refund {
+                if let Some(st) = self.owners.get_mut(&r.owner) {
+                    if st.day == r.at_ns / DAY_NS {
+                        st.spent_today = st.spent_today.saturating_sub(r.amount);
+                    }
+                    if st.last_rebalance_ns == r.at_ns {
+                        st.last_rebalance_ns = r.prev_last_ns;
+                    }
+                }
+            }
+            return None;
+        };
+        Some(SignOut { payload, big_r: sig.big_r.affine_point, s: sig.s.scalar, recovery_id: sig.recovery_id, action })
     }
 
     /// EIP-712 digest (hex) of `action` for this contract's HL chain.
@@ -329,6 +362,8 @@ impl Leash {
 
 impl Leash {
     fn from_parts(admin: AccountId, mpc_contract: AccountId, hl_mainnet: bool) -> Self {
+        #[cfg(feature = "spike")]
+        assert_testnet(hl_mainnet);
         Self {
             admin,
             mpc_contract,
@@ -353,6 +388,7 @@ impl Leash {
 
     #[cfg(feature = "spike")]
     fn assert_admin(&self) {
+        assert_testnet(self.hl_mainnet);
         let caller = env::predecessor_account_id();
         require!(caller == self.admin || caller == env::current_account_id(), "admin only");
     }
@@ -366,10 +402,10 @@ impl Leash {
 
     fn sign_hl(&self, path: String, action: HlAction) -> Promise {
         let digest = action.digest(self.hl_chain());
-        self.mpc_sign(path, digest, Some(action))
+        self.mpc_sign(path, digest, Some(action), None)
     }
 
-    fn mpc_sign(&self, path: String, payload: [u8; 32], action: Option<HlAction>) -> Promise {
+    fn mpc_sign(&self, path: String, payload: [u8; 32], action: Option<HlAction>, refund: Option<CapRefund>) -> Promise {
         let payload_hex = hex::encode(payload);
         let args = json!({ "request": {
             "path": path,
@@ -381,7 +417,7 @@ impl Leash {
             .then(
                 Self::ext(env::current_account_id())
                     .with_static_gas(ON_SIGNED_GAS)
-                    .on_signed(payload_hex, action),
+                    .on_signed(payload_hex, action, refund),
             )
     }
 }
@@ -393,12 +429,20 @@ impl Leash {
 impl Leash {
     pub fn sign_raw(&mut self, path: String, payload: String) -> Promise {
         self.assert_admin();
-        self.mpc_sign(path, parse_hex::<32>(&payload, "payload"), None)
+        self.mpc_sign(path, parse_hex::<32>(&payload, "payload"), None, None)
     }
 
     pub fn admin_sign_hl(&mut self, path: String, action: HlAction) -> Promise {
         self.assert_admin();
         self.sign_hl(path, action)
+    }
+
+    /// One-off upgrade from the D1 spike layout (testnet); keeps the account id, so derived addresses stay.
+    #[private]
+    #[init(ignore_state)]
+    pub fn migrate() -> Self {
+        let old: LeashV0 = env::state_read().unwrap_or_else(|| env::panic_str("no state"));
+        Self::from_parts(old.admin, old.mpc_contract, old.hl_mainnet)
     }
 }
 

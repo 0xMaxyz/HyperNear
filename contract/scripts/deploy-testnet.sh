@@ -5,6 +5,8 @@
 set -euo pipefail
 . "$HOME/.cargo/env"
 ACC="$1"; MODE="${2:-}"
+# This script always builds with --features spike (admin signing for any path): testnet accounts only.
+case "$ACC" in *.testnet) ;; *) echo "refusing: $ACC is not a .testnet account and this build has --features spike" >&2; exit 1 ;; esac
 cd "$(dirname "$0")/.."
 redact() { sed -E 's/(ed25519|secp256k1):[1-9A-HJ-NP-Za-km-z]{60,}/\1:<redacted>/g'; }
 cargo near build non-reproducible-wasm --features spike 2>&1 | tail -3   # testnet build: spike admin methods on
