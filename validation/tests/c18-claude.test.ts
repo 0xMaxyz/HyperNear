@@ -77,8 +77,7 @@ describe.skipIf(!live)('C18: Claude escalation', () => {
       r.numbers.latencyP95Ms = Math.round(percentile(ms, 95));
       r.numbers.agreementWithJev = compared ? agree / compared : null;
       r.numbers.compared = compared;
-      writeFileSync(fileURLToPath(new URL('../results/C18-runs.json', import.meta.url)), JSON.stringify({ model: MODEL, decisions }, null, 2) + '
-');
+      writeFileSync(fileURLToPath(new URL('../results/C18-runs.json', import.meta.url)), JSON.stringify({ model: MODEL, decisions }, null, 2));
       r.refs.model = MODEL;
       r.refs.effort = 'low';
       r.refs.sample = sample;
