@@ -179,11 +179,12 @@ try {
   const capLeft = Math.max(0, st!.daily_cap - (st!.day === Math.floor(Date.now() / 86_400_000) ? st!.spent_today : 0)) / 1e6;
   const amount = String(Math.floor(capLeft) + 1);
   try {
-    const signer = await NearMasterSigner.create({ client: agentClient, owner: ow, leg: RESERVE, mode: 'agent', legAddress: leg2 });
-    await hlClient('testnet', { master: signer }).usdSend({ destination: leg3, amount });
+    // the contract call itself (no HL post): the contract, not the guard, must say no
+    await agentClient.rebalance({ owner: ow, fromLeg: RESERVE, toAddress: leg3.toLowerCase() as Hex, amount, hlTime: Date.now() });
     contractRefusal = { amount, capLeftUsd: capLeft, refused: false };
   } catch (e) {
-    contractRefusal = { amount, capLeftUsd: capLeft, refused: true, error: (e as Error).message.slice(0, 300) };
+    const cause = (e as { cause?: { message?: string } }).cause?.message;
+    contractRefusal = { amount, capLeftUsd: capLeft, refused: true, error: (cause ?? (e as Error).message).slice(0, 400) };
   }
   console.log(`direct rebalance of $${amount} (cap left $${capLeft}): ${JSON.stringify(contractRefusal)}`);
   ok = Boolean(sawEvent('guard.rebalance.posted')) && (contractRefusal as { refused: boolean }).refused;
