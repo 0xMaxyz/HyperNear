@@ -1,10 +1,10 @@
 {
   "name": "hedged",
   "description": "leg0 long BTC at 3x, leg1 short 0.5x of it at 3x (after openHedge)",
-  "recordedAt": "2026-11-07T13:25:33.237Z",
+  "recordedAt": "2026-11-07T13:28:32.880Z",
   "snapshot": {
     "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
-    "at": 1794057933236,
+    "at": 1794058112880,
     "legs": [
       {
         "leg": 0,
@@ -16,19 +16,19 @@
         },
         "clearinghouse": {
           "marginSummary": {
-            "accountValue": "14.791581",
-            "totalNtlPos": "30.2708",
-            "totalRawUsd": "-15.479219",
-            "totalMarginUsed": "10.090266"
+            "accountValue": "14.758736",
+            "totalNtlPos": "30.2808",
+            "totalRawUsd": "-15.522064",
+            "totalMarginUsed": "10.0936"
           },
           "crossMarginSummary": {
-            "accountValue": "14.791581",
-            "totalNtlPos": "30.2708",
-            "totalRawUsd": "-15.479219",
-            "totalMarginUsed": "10.090266"
+            "accountValue": "14.758736",
+            "totalNtlPos": "30.2808",
+            "totalRawUsd": "-15.522064",
+            "totalMarginUsed": "10.0936"
           },
-          "crossMaintenanceMarginUsed": "0.378385",
-          "withdrawable": "4.701315",
+          "crossMaintenanceMarginUsed": "0.37851",
+          "withdrawable": "4.665136",
           "assetPositions": [
             {
               "type": "oneWay",
@@ -39,12 +39,12 @@
                   "type": "cross",
                   "value": 3
                 },
-                "entryPx": "75664.0",
-                "positionValue": "30.2708",
-                "unrealizedPnl": "0.0052",
-                "returnOnEquity": "0.0005154367",
-                "liquidationPx": "39187.8962025316",
-                "marginUsed": "10.090266",
+                "entryPx": "75702.0",
+                "positionValue": "30.2808",
+                "unrealizedPnl": "0.0",
+                "returnOnEquity": "0.0",
+                "liquidationPx": "39296.364556962",
+                "marginUsed": "10.0936",
                 "maxLeverage": 40,
                 "cumFunding": {
                   "allTime": "0.0",
@@ -54,7 +54,7 @@
               }
             }
           ],
-          "time": 1794057932693
+          "time": 1794058112351
         },
         "spotUsdc": 0.2
       },
@@ -68,19 +68,19 @@
         },
         "clearinghouse": {
           "marginSummary": {
-            "accountValue": "8.990391",
-            "totalNtlPos": "15.1354",
-            "totalRawUsd": "24.125791",
-            "totalMarginUsed": "5.045133"
+            "accountValue": "10.97797",
+            "totalNtlPos": "15.1404",
+            "totalRawUsd": "26.11837",
+            "totalMarginUsed": "5.0468"
           },
           "crossMarginSummary": {
-            "accountValue": "8.990391",
-            "totalNtlPos": "15.1354",
-            "totalRawUsd": "24.125791",
-            "totalMarginUsed": "5.045133"
+            "accountValue": "10.97797",
+            "totalNtlPos": "15.1404",
+            "totalRawUsd": "26.11837",
+            "totalMarginUsed": "5.0468"
           },
-          "crossMaintenanceMarginUsed": "0.189192",
-          "withdrawable": "3.945258",
+          "crossMaintenanceMarginUsed": "0.189255",
+          "withdrawable": "5.93117",
           "assetPositions": [
             {
               "type": "oneWay",
@@ -91,12 +91,12 @@
                   "type": "cross",
                   "value": 3
                 },
-                "entryPx": "75663.0",
-                "positionValue": "15.1354",
-                "unrealizedPnl": "-0.0028",
-                "returnOnEquity": "-0.000555093",
-                "liquidationPx": "119139.7086419753",
-                "marginUsed": "5.045133",
+                "entryPx": "75695.0",
+                "positionValue": "15.1404",
+                "unrealizedPnl": "-0.0014",
+                "returnOnEquity": "-0.0002774292",
+                "liquidationPx": "128979.6049382716",
+                "marginUsed": "5.0468",
                 "maxLeverage": 40,
                 "cumFunding": {
                   "allTime": "0.0",
@@ -106,7 +106,35 @@
               }
             }
           ],
-          "time": 1794057932693
+          "time": 1794058112351
+        },
+        "spotUsdc": 0
+      },
+      {
+        "leg": 2,
+        "address": "0x2a32c77d9b5e3e0ed8780e9fc5def0aa629c62ab",
+        "agent": {
+          "address": "0xd758a14c669e8872f40b54b006965b267c1fa1ab",
+          "name": "leash-leg2",
+          "approvedAt": 1794057953194
+        },
+        "clearinghouse": {
+          "marginSummary": {
+            "accountValue": "0.96407",
+            "totalNtlPos": "0.0",
+            "totalRawUsd": "0.96407",
+            "totalMarginUsed": "0.0"
+          },
+          "crossMarginSummary": {
+            "accountValue": "0.96407",
+            "totalNtlPos": "0.0",
+            "totalRawUsd": "0.96407",
+            "totalMarginUsed": "0.0"
+          },
+          "crossMaintenanceMarginUsed": "0.0",
+          "withdrawable": "0.96407",
+          "assetPositions": [],
+          "time": 1794058112351
         },
         "spotUsdc": 0
       }
@@ -121,7 +149,7 @@
         }
       ],
       "mids": {
-        "BTC": "75663.5"
+        "BTC": "75698.5"
       }
     }
   }
