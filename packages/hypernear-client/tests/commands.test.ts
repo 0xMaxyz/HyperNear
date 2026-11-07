@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hashTypedData } from 'viem';
+import { hashTypedData, keccak256, toHex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { COMMAND_TYPES, commandTypedData, newCommand, ownerIntentTypedData, recoverCommandSigner, ZERO_SPEC_HASH } from '../src';
 
@@ -33,6 +33,28 @@ describe('Command typed data', () => {
     ['startStrategy', newCommand(o, 'startStrategy', '', '0', 30, 1_800_000_000_000, SPEC), '0xa1f3052df11466855a81dde5d0e712b42185031c5f466182100c871165b6b285'],
   ])('vector: %s', (_n, c, digest) => {
     expect(hashTypedData(commandTypedData('near-testnet', 'leash-spike-1107.testnet', c) as never)).toBe(digest);
+  });
+
+  it('independent vector: a hand-written typed-data literal (not commandTypedData) gives the pinned startStrategy digest', () => {
+    const literal = {
+      domain: { name: 'Leash', version: '1', salt: keccak256(toHex('near-testnet:leash-spike-1107.testnet')) },
+      types: {
+        Command: [
+          { name: 'owner', type: 'address' },
+          { name: 'action', type: 'string' },
+          { name: 'coin', type: 'string' },
+          { name: 'ratio', type: 'string' },
+          { name: 'expiry', type: 'uint64' },
+          { name: 'nonce', type: 'uint64' },
+          { name: 'specHash', type: 'bytes32' },
+        ],
+      },
+      primaryType: 'Command',
+      message: { owner: '0x2c7536e3605d9c16a7a3d7b1898e529396a65c23', action: 'startStrategy', coin: '', ratio: '0', expiry: 1_800_000_030n, nonce: 1_800_000_000_000n, specHash: `0x${'ab'.repeat(32)}` },
+    } as const;
+    const digest = hashTypedData(literal);
+    expect(digest).toBe('0xa1f3052df11466855a81dde5d0e712b42185031c5f466182100c871165b6b285');
+    expect(hashTypedData(commandTypedData('near-testnet', 'leash-spike-1107.testnet', newCommand(o, 'startStrategy', '', '0', 30, 1_800_000_000_000, SPEC)) as never)).toBe(digest);
   });
 
   it('never collides with an owner intent digest (separate primary type)', () => {
