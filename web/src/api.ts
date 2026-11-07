@@ -19,7 +19,7 @@ export interface Position {
 export interface LegSnap {
   leg: number;
   address: Hex;
-  agent: { address: Hex; name: string; approvedAt?: number } | null;
+  agent: { address: Hex; name: string; approvedAt?: number | null } | null;
   clearinghouse: { marginSummary: { accountValue: string }; withdrawable: string; assetPositions: { position: Position }[] };
   spotUsdc: number;
 }
@@ -38,16 +38,20 @@ export interface GuardRow {
   distance: number | null;
   plausibleMove: number;
 }
-/** Shape agreed with contract-dev for GET /owner/:addr `breakeven` (per coin); parsed tolerantly in Breakeven.tsx. */
 export interface OwnerView {
   dryRun?: boolean;
   owner: Hex;
+  /** `agent: null` with `needsPrepare`: no key yet, the owner signs a prepareAgents command first */
+  legs?: { leg: number; address: Hex; agent: { address: Hex; name: string; approvedAt: number | null } | null; needsPrepare?: boolean }[];
   snapshot: { at: number; legs: LegSnap[]; market: { mids: Record<string, string> } };
   policy: OwnerPolicy | null;
   orderPolicy: { maxLeverage: number; maxNotionalUsd: number; allowedCoins: string[]; slippage: number };
   guard: GuardRow[];
   breakeven?: unknown;
-  config?: { contractId?: string; chainTag?: ChainTag };
+  config?: { contractId: string; chainTag: ChainTag; agentAccount: string | null; hlNetwork: 'testnet' | 'mainnet' };
+  /** the exact approveAgent intents to sign, one per leg whose key Hyperliquid has not approved */
+  pendingApprovals?: PendingApproval[];
+  decision?: { mode: DecisionMode; latest: (Decision & { status: 'open' | 'accepted' | 'rejected' | 'expired'; at: number }) | null };
 }
 export interface AgentEvent {
   id: number;
@@ -119,36 +123,44 @@ export function streamEvents(onEvent: (e: AgentEvent) => void, onState: (s: 'liv
   return () => ctl.abort();
 }
 
-/** Agreed with contract-dev, parsed tolerantly: a `decision.*` event carries the decision directly or under `decision`. */
+/** decision.proposed payload (agent/src/decisions.ts proposalEvent), flat. */
 export interface Decision {
   id: string;
+  owner: Hex;
+  coin: string;
   action: string;
-  source: string;
-  flagged?: boolean;
-  coin?: string;
-  ratio?: string;
-  /** probability of "yes" per factor question (Jev factor layout) */
-  factors?: Record<string, number>;
-  /** probability per action (Jev single-choice layout) */
-  probabilities?: Record<string, number>;
-  rationale?: string;
-  latencyMs?: number;
-  jevMs?: number | null;
-  escalationMs?: number | null;
+  /** jev: Jev decided alone. claude: Claude decided. disagree: they differed, the less risky action was taken. */
+  source: 'jev' | 'claude' | 'disagree' | string;
+  flagged: boolean;
+  /** probability of "yes" per factor question, and who settled it */
+  factors: Record<string, { p: number | null; decidedBy: 'jev' | 'claude' }>;
+  rationale: string;
+  latencyMs: number;
+  model: string;
+  error?: string;
+  recorded?: boolean;
 }
 
-export function decisionOf(e: AgentEvent): Decision | undefined {
-  const d = ((e.data as { decision?: Decision }).decision ?? e.data) as Partial<Decision>;
-  return d.action && (d.id !== undefined) ? ({ ...d, id: String(d.id) } as Decision) : undefined;
+export interface PendingApproval {
+  type: 'approveAgent';
+  leg: number;
+  agent: Hex;
+  agentName: string;
+  hlNonce: number;
 }
 
-/** The newest proposal that no later accepted/rejected event (same id) has closed. */
-export function pendingDecision(events: AgentEvent[], dismissed: Set<string>): Decision | undefined {
-  const closed = new Set(events.filter((e) => e.type === 'decision.accepted' || e.type === 'decision.rejected').map((e) => decisionOf(e)?.id));
+export type DecisionMode = 'off' | 'propose' | 'auto';
+
+const asDecision = (e: AgentEvent) => (e.data as Partial<Decision>).id !== undefined ? (e.data as unknown as Decision) : undefined;
+export const decisionOf = asDecision;
+
+/** The newest proposal (events are newest first) that no accepted or rejected event has closed; else /owner's open latest. */
+export function pendingDecision(events: AgentEvent[], dismissed: Set<string>, fromView?: OwnerView['decision']): Decision | undefined {
+  const closed = new Set(events.filter((e) => e.type === 'decision.accepted' || e.type === 'decision.rejected').map((e) => String(e.data.id)));
   for (const e of events) {
-    if (e.type !== 'decision.proposed') continue;
-    const d = decisionOf(e);
+    const d = e.type === 'decision.proposed' ? asDecision(e) : undefined;
     if (d && !closed.has(d.id) && !dismissed.has(d.id)) return d;
   }
-  return undefined;
+  const l = fromView?.latest;
+  return l && l.status === 'open' && !closed.has(l.id) && !dismissed.has(l.id) ? l : undefined;
 }

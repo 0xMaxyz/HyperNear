@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Hex } from 'viem';
 import { commandTypedData, newCommand, ownerIntentTypedData, type OwnerIntent, type OwnerIntentTypedData } from '@hypernear/client';
-import { AGENT_ACCOUNT, AGENT_URL, CHAIN_TAG, CONTRACT_ID, DEMO_OWNER, getOwner, pendingDecision, post, streamEvents, type AgentEvent, type OwnerView } from './api';
+import { AGENT_ACCOUNT, AGENT_URL, CHAIN_TAG, CONTRACT_ID, DEMO_OWNER, getOwner, pendingDecision, post, streamEvents, type AgentEvent, type DecisionMode, type OwnerView } from './api';
 import { Activity, BreakevenCard, DecisionPanel, LegsTable, short } from './panels';
 
 export interface Auth {
@@ -34,7 +34,7 @@ export function App({ auth }: { auth: Auth }) {
   const [dry, setDry] = useState(false);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
-  const [agentId, setAgentId] = useState(AGENT_ACCOUNT);
+  const [agentId, setAgentId] = useState<string>(); // undefined until typed: then the agent's own account from /owner config
   const [cap, setCap] = useState('50');
   const [cooldown, setCooldown] = useState('60');
   const [coin, setCoin] = useState('BTC');
@@ -77,6 +77,8 @@ export function App({ auth }: { auth: Auth }) {
   const contractId = view?.config?.contractId ?? CONTRACT_ID;
   const coins = view?.orderPolicy.allowedCoins ?? ['BTC', 'ETH'];
   const legs = view?.snapshot.legs ?? [];
+  const topLegs = view?.legs ?? [];
+  const agentValue = agentId ?? view?.config?.agentAccount ?? AGENT_ACCOUNT;
   const registered = new Set(legs.map((l) => l.leg));
   const policy = view?.policy ?? null;
 
@@ -112,19 +114,36 @@ export function App({ auth }: { auth: Auth }) {
       return todo.length ? `Registered leg${todo.length > 1 ? 's' : ''} ${todo.join(' and ')}${dry ? ' (simulated, dry-run)' : ''}.` : 'Both legs were already registered.';
     });
 
-  const approvable = legs.filter((l) => l.agent && !l.agent.approvedAt);
-  const approveAgents = () =>
-    run('approve', async () => {
-      let last: Record<string, unknown> = {};
-      for (const l of approvable) {
-        last = await ownerIntent({ type: 'approveAgent', leg: l.leg, agent: l.agent!.address.toLowerCase() as Hex, agentName: l.agent!.name, hlNonce: Date.now() });
-      }
-      return done(last, `Approved the agent key on leg${approvable.length > 1 ? 's' : ''} ${approvable.map((l) => l.leg).join(' and ')}`);
+  /** Keys the service has not made yet: the owner signs a prepareAgents command. */
+  const needPrepare = topLegs.filter((l) => !l.agent || l.needsPrepare);
+  const prepareAgents = () =>
+    run('prepare', async () => {
+      const cmd = newCommand(owner!, 'prepareAgents' as never, '', '0');
+      const sig = await auth.sign(commandTypedData(chainTag, contractId, cmd));
+      return done(await post('/agents/prepare', { command: cmd, sig }), 'Agent keys prepared');
     });
 
-  const policyOk = agentId.trim() !== '' && DECIMAL.test(cap) && /^\d+$/.test(cooldown);
+  const pending = view?.pendingApprovals ?? [];
+  const approveAgents = () =>
+    run('approve', async () => {
+      // each intent is signed exactly as the agent listed it; every one burns the owner's next nonce, so re-read it
+      let ok = 0;
+      let failed = '';
+      for (const intent of (await getOwner(owner!)).pendingApprovals ?? []) {
+        const nonce = (await getOwner(owner!)).policy?.nonce ?? 0;
+        const sig = await auth.sign(ownerIntentTypedData({ chainTag, contractId, owner: owner!, nonce, intent }));
+        const out = await post('/relay', { owner, nonce, intent, sig });
+        if (out.dryRun) setDry(true);
+        if (out.ok === false) failed = `leg ${intent.leg}: ${JSON.stringify(out.hl ?? out.error ?? 'refused').slice(0, 120)}`;
+        else ok++;
+      }
+      if (failed) throw new Error(`Approved ${ok}, Hyperliquid refused ${failed}`);
+      return `Approved the agent key on ${ok} leg${ok === 1 ? '' : 's'}${dry ? ' (simulated, dry-run)' : ''}.`;
+    });
+
+  const policyOk = agentValue.trim() !== '' && DECIMAL.test(cap) && /^\d+$/.test(cooldown);
   const enableAgent = () =>
-    run('policy', async () => done(await ownerIntent({ type: 'setPolicy', agent: agentId.trim(), dailyCap: cap, cooldownSec: Number(cooldown) }), `Agent ${agentId.trim()} enabled, cap $${cap} a day`));
+    run('policy', async () => done(await ownerIntent({ type: 'setPolicy', agent: agentValue.trim(), dailyCap: cap, cooldownSec: Number(cooldown) }), `Agent ${agentValue.trim()} enabled, cap $${cap} a day`));
 
   const toggleFreeze = () =>
     run('freeze', async () => {
@@ -142,14 +161,32 @@ export function App({ auth }: { auth: Auth }) {
       return done(await post(open ? '/hedge/open' : '/hedge/close', { command: cmd, sig }), open ? `Hedge on ${coin} opened at ratio ${ratio}` : `Hedge on ${coin} closed`);
     });
 
-  const decision = pendingDecision(events, dismissed);
+  // /events carries every owner's events: keep this owner's and the global ones
+  const mine = events.filter((e) => !e.data.owner || String(e.data.owner).toLowerCase() === owner);
+  const decision = pendingDecision(mine, dismissed, view?.decision);
+  /** A signed Command whose action (and coin) the agent checks against the proposal or mode it names. */
+  const signed = async (action: string, coinField: string, path: string) => {
+    const cmd = newCommand(owner!, action as never, coinField, '0');
+    const sig = await auth.sign(commandTypedData(chainTag, contractId, cmd));
+    return post(path, { command: cmd, sig });
+  };
   const acceptDecision = () =>
     run('decision', async () => {
       const d = decision!;
-      // assumption: the agent verifies a Command whose action is the decision's action; contract-dev confirms the exact shape
-      const cmd = newCommand(owner!, d.action as never, d.coin ?? coins[0] ?? 'BTC', d.ratio ?? '0');
-      const sig = await auth.sign(commandTypedData(chainTag, contractId, cmd));
-      return done(await post(`/decision/${encodeURIComponent(d.id)}/accept`, { command: cmd, sig }), `Accepted: ${d.action.replaceAll('_', ' ')}`);
+      return done(await signed(d.action, d.coin, `/decision/${encodeURIComponent(d.id)}/accept`), `Accepted: ${d.action.replaceAll('_', ' ')} on ${d.coin}`);
+    });
+  const dismissDecision = () =>
+    run('decision', async () => {
+      const d = decision!;
+      const out = await signed('reject', d.coin, `/decision/${encodeURIComponent(d.id)}/reject`);
+      setDismissed((x) => new Set(x).add(d.id));
+      return done(out, 'Proposal dismissed');
+    });
+  const setMode = (m: DecisionMode) => run('mode', async () => done(await signed('setDecisionMode', m, '/decision/mode'), `Autonomy set to ${m}`));
+  const askProposal = () =>
+    run('ask', async () => {
+      const out = await post('/decision/propose', { owner });
+      return done(out, 'Asked the agent for a proposal. It arrives in the log and here in a few seconds');
     });
 
   const why = canSign ? undefined : 'Log in to sign';
@@ -164,6 +201,7 @@ export function App({ auth }: { auth: Auth }) {
           <span className="muted tagline">Smart accounts for Hyperliquid, keys held by NEAR</span>
         </div>
         <div className="who">
+          {view?.config && <span className="muted small" title={`${view.config.chainTag}, contract ${view.config.contractId}`}>Hyperliquid {view.config.hlNetwork}</span>}
           {dry && <span className="badge" title={`Served by the agent with ${AGENT_URL}; no keys, recorded testnet data`}>dry-run data</span>}
           {owner && <code className="addr" title={owner}>{short(owner)}</code>}
           {auth.authenticated ? (
@@ -220,20 +258,24 @@ export function App({ auth }: { auth: Auth }) {
                 </li>
                 <li>
                   <div>
-                    <strong>2. Approve agent</strong>
-                    <p className="muted small">
-                      {legs.length > 0 && legs.some((l) => !l.agent)
-                        ? 'The service has not made an agent key for every leg yet, so there is nothing to approve there.'
-                        : 'You sign one intent per leg; the contract signs the Hyperliquid approval.'}
-                    </p>
+                    <strong>2. Prepare agents</strong>
+                    <p className="muted small">The service makes one Hyperliquid trading key per leg. You sign the request, the keys never leave the service.</p>
+                  </div>
+                  <span className={topLegs.length > 0 && needPrepare.length === 0 ? 'ok' : 'todo'}>{topLegs.length > 0 && needPrepare.length === 0 ? 'done' : 'to do'}</span>
+                  <button disabled={locked || needPrepare.length === 0} title={why} onClick={prepareAgents}>{busy === 'prepare' ? 'Waiting for signature…' : 'Prepare agents'}</button>
+                </li>
+                <li>
+                  <div>
+                    <strong>3. Approve agent</strong>
+                    <p className="muted small">You sign one approval per leg exactly as listed; the contract signs it for Hyperliquid and the service posts it.</p>
                   </div>
                   <span className={legs.length > 0 && legs.every((l) => l.agent?.approvedAt) ? 'ok' : 'todo'}>{legs.length > 0 && legs.every((l) => l.agent?.approvedAt) ? 'done' : 'to do'}</span>
-                  <button disabled={locked || approvable.length === 0} title={why} onClick={approveAgents}>{busy === 'approve' ? 'Waiting for signature…' : 'Approve agent'}</button>
+                  <button disabled={locked || pending.length === 0} title={why} onClick={approveAgents}>{busy === 'approve' ? 'Waiting for signature…' : 'Approve agent'}</button>
                 </li>
                 <li className="stack">
                   <div className="row">
                     <div>
-                      <strong>3. Enable agent</strong>
+                      <strong>4. Enable agent</strong>
                       <p className="muted small">Name the NEAR account that may rebalance between your legs, with a daily cap and a cooldown.</p>
                     </div>
                     <span className={policy?.agent ? 'ok' : 'todo'}>{policy?.agent ? 'done' : 'to do'}</span>
@@ -241,7 +283,7 @@ export function App({ auth }: { auth: Auth }) {
                   <div className="fields">
                     <label>
                       Agent account
-                      <input value={agentId} onChange={(e) => setAgentId(e.target.value)} spellCheck={false} />
+                      <input value={agentValue} onChange={(e) => setAgentId(e.target.value)} spellCheck={false} />
                     </label>
                     <label>
                       Daily cap, USDC
@@ -272,7 +314,7 @@ export function App({ auth }: { auth: Auth }) {
             </section>
 
             <div className="col">
-              <DecisionPanel d={decision} canSign={canSign} busy={busy === 'decision'} onAccept={acceptDecision} onDismiss={() => setDismissed((s) => new Set(s).add(decision!.id))} />
+              <DecisionPanel d={decision} mode={view?.decision?.mode} canSign={canSign} busy={busy} onAccept={acceptDecision} onDismiss={dismissDecision} onMode={setMode} onAsk={askProposal} />
               <section className="card" aria-labelledby="hedge-h">
                 <h2 id="hedge-h">Hedge</h2>
                 <p className="muted small">
@@ -299,7 +341,7 @@ export function App({ auth }: { auth: Auth }) {
             </div>
           </div>
 
-          <Activity events={events} stream={stream} />
+          <Activity events={mine} stream={stream} />
         </main>
       )}
     </>
