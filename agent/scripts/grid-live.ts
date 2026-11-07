@@ -3,7 +3,7 @@
 // Steps: register leg 3 -> fund it from lab wallet #3 (usdSend) -> owner approves its HL API wallet -> validate + start the
 // grid just inside the BTC spread (so a post-only buy rests as best bid) -> lab wallet #3 acts as the counterparty: it sells
 // into the buy, the runner answers with a reduce-only sell one level up, the counterparty buys it back -> kill switch.
-// The counterparty step is ASSISTED: a $5-step grid on a quiet testnet book would otherwise wait for the market. The result
+// The counterparty step is ASSISTED: a 1-USD-step grid inside the spread would otherwise wait for the market. The result
 // file says so. Keys (never printed): ~/.near-credentials/testnet/<contract>.json, HYPERNEAR_DATA_DIR/agent-keys.json, the lab
 // wallet file (index 3 only). Owner = HYPERNEAR_TEST_OWNER_KEY or the public test key (testnet only).
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -95,19 +95,19 @@ const pol = await client.getOwner(ow);
 if (pol?.frozen) throw new Error('owner is frozen: unfreeze it first (this script does not)');
 if (pol?.agent !== nearAgentId) await ownerIntent({ type: 'setPolicy', agent: nearAgentId, dailyCap: '50', cooldownSec: 30 });
 
-// ---- the grid, just inside the spread: buy at bestBid+2, sell at bestBid+7 (spread is ~$9 on the testnet book)
+// ---- the grid, just inside the spread: buy at bestBid+1, sell at bestBid+2 (1 USD tick; needs a spread of at least 3)
 const book = await legs.hl.l2Book({ coin: 'BTC' });
 const bid = Number(book.levels[0]![0]!.px);
 const ask = Number(book.levels[1]![0]!.px);
 console.log(`BTC book: bid ${bid} ask ${ask}`);
-if (ask - bid < 9) throw new Error(`spread $${ask - bid} too tight for the $5-step demo grid; rerun later`);
+if (ask - bid < 3) throw new Error(`spread ${ask - bid} too tight for the 1-step demo grid; rerun later`);
 const meta = (await legs.hl.meta()).universe.findIndex((u) => u.name === 'BTC');
 const szDecimals = (await legs.hl.meta()).universe[meta]!.szDecimals;
-const lower = bid + 2;
+const lower = bid + 1;
 const sizePerLevel = (Math.ceil((10.5 / lower) * 10 ** szDecimals) / 10 ** szDecimals).toFixed(szDecimals);
 const spec = {
   id: 'grid-live-1', type: 'grid', leg: LEG, coin: 'BTC',
-  params: { lower, upper: lower + 20, levels: 5, sizePerLevel },
+  params: { lower, upper: lower + 4, levels: 5, sizePerLevel },
   limits: { maxNotional: 100, maxLeverage: 3, maxDailyLoss: 5, topUpCapPerDay: 20 },
 };
 
@@ -131,7 +131,7 @@ await manager.start(ow, v.spec);
 
 const state = () => manager.list(ow).find((s) => s.id === spec.id)!;
 const ev = (type: string) => events.filter((e) => e.type === type);
-const px = (name: string) => roundPx(name === 'buy' ? lower : lower + 5, szDecimals);
+const px = (name: string) => roundPx(name === 'buy' ? lower : lower + 1, szDecimals);
 const assisted: Record<string, unknown> = {};
 const btc = meta;
 let ok = false;
@@ -161,7 +161,7 @@ try {
   const result = {
     at: new Date(t0).toISOString(), owner: ow, leg: LEG, legAddress: legAddr, ok,
     spec, validatedBy: 'StrategyManager.validate (contract policy, order policy, reserved legs, approved agent key)', refusals,
-    assisted: { note: 'a $5-step grid on a quiet book would wait for the market; lab wallet #3 traded against the grid', ...assisted },
+    assisted: { note: 'a 1-USD-step grid inside the spread would otherwise wait for the market; lab wallet #3 traded against the grid', ...assisted },
     kill: { stateAfterPause: paused.state, openOrdersAfterPause: open.length, openOrdersTwoTicksLater: stillOpen, positionAfter: pos },
     deadman: state().deadman,
     equityUsd: { legBefore: funded.perp, legAfter: after.perp, labBefore: labBefore.perp + labBefore.spot, labAfter: labAfter.perp + labAfter.spot },
