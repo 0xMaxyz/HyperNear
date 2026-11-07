@@ -8,7 +8,11 @@ const acct = privateKeyToAccount(generatePrivateKey());
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 900, height: 900 } });
 const log = [];
-page.on('console', (m) => log.push(`console.${m.type()}: ${m.text().slice(0, 300)}`));
+const seen = new Set();
+page.on('console', (m) => {
+  const s = `console.${m.type()}: ${m.text().slice(0, 300)}`;
+  if (!seen.has(s)) { seen.add(s); log.push(s); }
+});
 page.on('pageerror', (e) => log.push(`pageerror: ${e.message.slice(0, 300)}`));
 page.on('response', (r) => { if (/privy\.io/.test(r.url()) && r.status() >= 400) log.push(`http ${r.status()} ${r.url().slice(0, 120)}`); });
 
@@ -43,6 +47,8 @@ if (mock) {
 }
 
 await page.goto(url);
+await page.waitForTimeout(8000); // first load triggers Vite dep optimisation and a reload
+await page.reload();
 await page.getByRole('button', { name: /Self-test/ }).click();
 console.log('self-test:', (await page.locator('#c13-out').innerText()).trim());
 await page.getByRole('button', { name: /Log in with Privy/ }).click({ timeout: 20000 }).catch((e) => log.push(`login button: ${e.message.slice(0, 120)}`));
