@@ -8,6 +8,9 @@ import type { Hex } from 'viem';
 import type { HyperNearClient } from '@hypernear/client';
 import type { OrderPolicy } from '../config.ts';
 import type { Legs } from '../legs.ts';
+import type { OwnerSnapshot } from '../legs.ts';
+import type { StrategyInput } from './decide.ts';
+import { strategyInput } from './facts.ts';
 import { hlPort, type TradingPort } from './port.ts';
 import { StrategyRunner, type Emit, type RunnerSaved } from './runner.ts';
 import { specHash, validateSpec, type SpecResult, type StrategySpec } from './spec.ts';
@@ -84,6 +87,18 @@ export class StrategyManager {
 
   recordTopUp(owner: Hex, leg: number, usd: number) {
     this.#onLeg(owner, leg)?.addTopUp(usd);
+  }
+
+  /** Decision-layer facts for the owner's running (or finished, still holding) strategies, from a fresh leg snapshot. */
+  inputs(owner: Hex, snap: OwnerSnapshot, annualVol: number, id?: string): StrategyInput[] {
+    return this.#mine(owner).flatMap(({ runner }) => {
+      const spec = runner.spec;
+      const leg = snap.legs.find((l) => l.leg === spec.leg);
+      const mid = Number(snap.market.mids[spec.coin]);
+      if ((id && spec.id !== id) || !leg || !(mid > 0) || (runner.state !== 'running' && runner.state !== 'done')) return [];
+      const progress = spec.type === 'twap' ? { done: runner.twap.done, of: spec.params.slices } : { held: runner.grid.held.length };
+      return [strategyInput({ owner, spec, dayStartEquity: runner.dayStartEquity(), leg, topUpLeft: runner.topUpLeft(), mid, annualVol, progress })];
+    });
   }
 
   /** The runner of an owner's strategy (for the decision layer's facts). */

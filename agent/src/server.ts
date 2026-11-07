@@ -3,7 +3,7 @@
 //   POST /relay         {owner, nonce, intent, sig} -> owner_execute (or {owner, intent:{type:'registerLeg', leg}})
 //   POST /hedge/open    {command, sig}: owner-signed EIP-712 Command (action openHedge, expiry <= 60 s, fresh nonce)
 //   POST /hedge/close   {command, sig}: same, action closeHedge. Both also need the owner's setPolicy opt-in.
-//   POST /decision/propose        {owner}: queue a proposal now (202; it arrives on /events as decision.proposed)
+//   POST /decision/propose        {owner, strategyId?}: queue a proposal now (with strategyId: pause/continue/adjust for that running strategy; accept = pause) (202; it arrives on /events as decision.proposed)
 //   POST /agents/prepare          {command, sig}: action prepareAgents; creates one HL agent key per registered leg and
 //                                 enrols the owner in the guard/decision loops (GET /owner never creates state)
 //   POST /decision/:id/accept     {command, sig}: command.action/coin must equal the proposal's; executed within the order policy
@@ -36,6 +36,8 @@ import { jevAsk } from './jev.ts';
 import { breakevens, openTime, readPnlData, type LegPnlData } from './pnl.ts';
 import { hlPoster, HttpError, RateLimiter, Relayer } from './relayer.ts';
 import { claudeAsk, drafter, MAX_DRAFT_TEXT, type Draft } from './strategy/builder.ts';
+import { proposeStrategyAction, type StrategyClients } from './strategy/decide.ts';
+import { claudeStrategyEscalator, jevAskStrategy } from './strategy/decideClients.ts';
 import { StrategyManager } from './strategy/manager.ts';
 import { specHash } from './strategy/spec.ts';
 
@@ -163,8 +165,15 @@ export function handler(d: Deps) {
       if (req.method === 'POST' && url.pathname === '/decision/propose') {
         if (!d.relayer.limiter.allow(req.socket.remoteAddress ?? 'unknown')) throw new HttpError(429, 'rate limited');
         if (!d.decider || (!d.dryRun && !d.config.decide.live)) throw new HttpError(503, 'decision layer off (TYPESAFE_API_KEY and ANTHROPIC_API_KEY not set)');
-        const body = (await readJson(req)) as { owner?: unknown; forceAction?: unknown };
+        const body = (await readJson(req)) as { owner?: unknown; forceAction?: unknown; strategyId?: unknown };
         const owner = ownerOf(body?.owner);
+        if (body?.strategyId !== undefined) {
+          if (typeof body.strategyId !== 'string') throw new HttpError(400, 'strategyId must be a string');
+          const sp = await d.decider.prepareStrategies(owner, body.strategyId);
+          if ('skipped' in sp) throw new HttpError(409, sp.skipped);
+          for (const input of sp.inputs) void d.decider.runStrategy(input).catch((e) => console.error('strategy proposal failed:', (e as Error).message));
+          return reply(202, { owner, strategyId: body.strategyId, queued: true });
+        }
         // test-only override for live checks of the execution path; refused unless the process runs with HYPERNEAR_TEST=1
         const force = body?.forceAction;
         if (force !== undefined && (process.env.HYPERNEAR_TEST !== '1' || !ACTION_IDS.includes(force as Action))) throw new HttpError(400, 'forceAction is test-only (HYPERNEAR_TEST=1) and must be a decision action');
@@ -306,7 +315,12 @@ export function buildDeps(config: AgentConfig): Deps {
     owners: () => [...new Set([...legs.keys.owners(), ...config.guard.watchOwners])] as Hex[],
     openedAt: async (s, coin) => openTime((await readPnlData(legs.hl, s)).find((x) => x.leg === 1)?.fills ?? [], coin),
     intervalMs: config.decide.intervalSec * 1000,
+    // strategy decisions (propose only): accept pauses the strategy
+    proposeStrategy: (i) => (clients ? proposeStrategyAction(i, strategyClients!) : Promise.reject(new Error('decision layer off'))),
+    strategyInputs: async (owner, id) => d.strategies!.inputs(owner, await legs.snapshot(owner), config.guard.annualVol, id),
+    executeStrategy: (owner, id) => d.strategies!.pause(owner, id, 'accepted strategy proposal'),
   });
+  const strategyClients: StrategyClients | undefined = clients && { ask: jevAskStrategy(), escalate: claudeStrategyEscalator() };
   const strategies = new StrategyManager({ legs, client, policy: config.policy, agentId: config.nearAgent?.accountId, dataDir: config.dataDir, emit: (t, data) => void bus.emit(t, data) });
   d.strategies = strategies;
   if (process.env.ANTHROPIC_API_KEY) {

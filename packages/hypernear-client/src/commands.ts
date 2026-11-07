@@ -10,7 +10,7 @@ export type DecisionAction = 'hold' | 'close_both' | 'reduce_hedge' | 'add_hedge
  * reject: dismisses a proposal, coin = the proposal's coin.
  * startStrategy: coin "", specHash = specHash(spec) of the spec sent beside the command;
  * pauseStrategy / stopStrategy: coin = the strategy id. ratio "0" for all three. */
-export type CommandAction = 'openHedge' | 'closeHedge' | DecisionAction | 'setDecisionMode' | 'prepareAgents' | 'reject' | 'startStrategy' | 'pauseStrategy' | 'stopStrategy';
+export type CommandAction = 'openHedge' | 'closeHedge' | DecisionAction | 'setDecisionMode' | 'prepareAgents' | 'reject' | 'startStrategy' | 'pauseStrategy' | 'stopStrategy' | 'continue_strategy' | 'pause_strategy' | 'adjust_strategy';
 
 export interface Command {
   owner: Hex;

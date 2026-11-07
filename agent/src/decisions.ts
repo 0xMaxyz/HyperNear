@@ -12,6 +12,7 @@ import { decisionInput, type DecisionInput } from './facts.ts';
 import { HedgeRefused, planDecision, type PlannedOrder } from './hedge.ts';
 import type { Legs, OwnerSnapshot } from './legs.ts';
 import { HttpError } from './relayer.ts';
+import type { StrategyAction, StrategyInput, StrategyProposal } from './strategy/decide.ts';
 
 export const DECISION_MODES = ['off', 'propose', 'auto'] as const;
 export type DecisionMode = (typeof DECISION_MODES)[number];
@@ -36,7 +37,8 @@ export class DecisionModes {
 }
 
 export interface ProposalRecord {
-  proposal: Proposal;
+  /** a hedge proposal (decide.ts) or a strategy proposal (strategy/decide.ts, `kind: 'strategy'`) */
+  proposal: Proposal | StrategyProposal;
   owner: Hex;
   coin: string;
   at: number;
@@ -46,8 +48,11 @@ export interface ProposalRecord {
   forced?: { modelAction: string };
 }
 
-/** The decision.proposed payload (flat; agreed with web-dev). */
+export const isStrategy = (r: ProposalRecord): r is ProposalRecord & { proposal: StrategyProposal } => 'kind' in r.proposal && r.proposal.kind === 'strategy';
+
+/** The decision.proposed payload (flat; agreed with web-dev). Strategy proposals add kind: 'strategy' and strategyId. */
 export const proposalEvent = (r: ProposalRecord) => ({
+  ...(isStrategy(r) ? { kind: 'strategy' as const, strategyId: r.proposal.strategyId } : {}),
   id: r.proposal.id,
   owner: r.owner,
   coin: r.coin,
@@ -72,6 +77,10 @@ export interface DeciderDeps {
   propose: (input: DecisionInput) => Promise<Proposal>;
   /** live: Hedger.runOrders; dry run: simulated */
   execute: (owner: Hex, action: string, coin: string, orders: PlannedOrder[]) => Promise<unknown>;
+  /** Strategy decisions (propose only): the facts of an owner's running strategies, the proposal, and what accept does. */
+  proposeStrategy?: (input: StrategyInput) => Promise<StrategyProposal>;
+  strategyInputs?: (owner: Hex, strategyId?: string) => Promise<StrategyInput[]>;
+  executeStrategy?: (owner: Hex, strategyId: string, action: StrategyAction) => Promise<unknown>;
   /** throws HttpError(403) unless the owner opted this agent in and is not frozen */
   checkOwner: (owner: Hex) => Promise<void>;
   owners: () => Hex[];
@@ -104,6 +113,9 @@ export class Decider {
         void this.prepare(o)
           .then((p) => ('input' in p ? this.run(p.input) : undefined))
           .catch((e) => console.error(`decision for ${o} failed:`, (e as Error).message));
+        void this.prepareStrategies(o)
+          .then((p) => ('inputs' in p ? Promise.all(p.inputs.map((i) => this.runStrategy(i, false))) : undefined))
+          .catch((e) => console.error(`strategy decision for ${o} failed:`, (e as Error).message));
       }
     }, this.d.intervalMs ?? PROPOSE_INTERVAL_MS);
   }
@@ -119,7 +131,9 @@ export class Decider {
 
   /** Stores a proposal; older open ones of the same owner expire unless `keepOthers`. */
   remember(r: ProposalRecord, keepOthers = false) {
-    if (!keepOthers) for (const x of this.proposals.values()) if (x.owner === r.owner && x.status === 'open') x.status = 'expired';
+    // a new proposal replaces the owner's open one of the same kind (hedge: any; strategy: the same strategy)
+    const same = (x: ProposalRecord) => (isStrategy(r) ? isStrategy(x) && x.proposal.strategyId === r.proposal.strategyId : !isStrategy(x));
+    if (!keepOthers) for (const x of this.proposals.values()) if (x.owner === r.owner && x.status === 'open' && same(x)) x.status = 'expired';
     this.proposals.set(r.proposal.id, r);
     while (this.proposals.size > KEEP) this.proposals.delete(this.proposals.keys().next().value!);
   }
@@ -138,6 +152,35 @@ export class Decider {
     if (!input) return { skipped: 'no open hedge (leg0 long, leg1 short)' };
     const openedAt = this.d.openedAt ? await this.d.openedAt(s, input.coin).catch(() => 0) : 0;
     return { input: openedAt ? decisionInput(s, this.d.policy.allowedCoins, { annualVol: this.d.annualVol, openedAt, now: this.#now() })! : input };
+  }
+
+  /** The fast checks for strategy proposals: mode, opt-in, and the facts of the owner's running strategies (one, if given). */
+  async prepareStrategies(owner: Hex, strategyId?: string): Promise<{ inputs: StrategyInput[] } | { skipped: string }> {
+    if (!this.d.strategyInputs || !this.d.proposeStrategy) return { skipped: 'strategy decisions are off' };
+    if (this.d.modes.get(owner) === 'off') return { skipped: 'decision mode is off' };
+    try {
+      await this.d.checkOwner(owner);
+    } catch (e) {
+      return { skipped: (e as Error).message };
+    }
+    const inputs = await this.d.strategyInputs(owner, strategyId);
+    return inputs.length ? { inputs } : { skipped: strategyId ? `no running strategy ${strategyId}` : 'no running strategy' };
+  }
+
+  /** Strategy proposal (propose only: never executed here). The periodic timer announces only what is not "continue" or is flagged. */
+  async runStrategy(input: StrategyInput, announceContinue = true): Promise<ProposalRecord | undefined> {
+    const key = `${input.owner}:${input.strategyId}`;
+    if (this.#busy.has(key)) return undefined;
+    this.#busy.add(key);
+    try {
+      const proposal = await this.d.proposeStrategy!(input);
+      const r: ProposalRecord = { proposal, owner: input.owner, coin: input.coin, at: this.#now(), status: 'open' };
+      this.remember(r);
+      if (announceContinue || proposal.action !== 'continue_strategy' || proposal.flagged) this.d.bus.emit(DECISION_EVENTS.proposed, proposalEvent(r));
+      return r;
+    } finally {
+      this.#busy.delete(key);
+    }
   }
 
   /** The slow part: proposeAction, decision.proposed, and in auto mode the execution. */
@@ -181,7 +224,24 @@ export class Decider {
 
   async accept(id: string, cmd: Command) {
     const r = this.#open(id, cmd, this.get(id).proposal.action);
-    return this.#execute(r, false);
+    return isStrategy(r) ? this.#executeStrategy(r) : this.#execute(r, false);
+  }
+
+  /** continue: acknowledged, nothing to do. pause / adjust: the strategy is paused (an adjusted one needs a new draft and a signed start). */
+  async #executeStrategy(r: ProposalRecord & { proposal: StrategyProposal }) {
+    r.status = 'accepted'; // claimed before any await: a second accept gets 409
+    const { action, strategyId } = r.proposal;
+    const base = { id: r.proposal.id, owner: r.owner, coin: r.coin, action, kind: 'strategy' as const, strategyId, auto: false };
+    try {
+      await this.d.checkOwner(r.owner);
+      const result = action === 'continue_strategy' ? null : await this.d.executeStrategy!(r.owner, strategyId, action);
+      this.d.bus.emit(DECISION_EVENTS.accepted, { ...base, result });
+      return { ...base, status: r.status, result, ...(action === 'adjust_strategy' ? { next: 'POST /strategy/draft with the new range or size, then sign a startStrategy' } : {}) };
+    } catch (e) {
+      r.status = 'rejected';
+      this.d.bus.emit(DECISION_EVENTS.rejected, { ...base, reason: (e as Error).message });
+      throw e;
+    }
   }
 
   /** The owner dismisses an open proposal (signed Command, action reject, coin = the proposal's). */
