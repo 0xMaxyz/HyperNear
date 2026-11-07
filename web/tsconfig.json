@@ -10,7 +10,7 @@
     "skipLibCheck": true,
     "isolatedModules": true,
     "types": ["vite/client"],
-    "paths": { "@hypernear/client": ["../packages/hypernear-client/src/intents.ts"] }
+    "paths": { "@hypernear/client": ["./src/hypernear.ts"] }
   },
   "include": ["src", "vite.config.ts"]
 }
