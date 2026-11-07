@@ -3,5 +3,8 @@ packages:
   - 'agent'
   - 'validation'
   - 'web'
+overrides:
+  # viem >= 2.57 rejects the "HyperliquidTransaction:*" EIP-712 struct names; PerpX pinned 2.54.3
+  viem: 2.54.3
 allowBuilds:
   esbuild: true
