@@ -335,7 +335,7 @@ await cap('The hash is recomputed in your browser. You sign exactly this spec.')
 await sleep(2600);
 await act(page.getByRole('button', { name: 'Start strategy' }));
 await cap('Started on its own leg, so its losses stay on that leg. The strategy log follows every order and fill.');
-await scrollTo('h3:has-text("Strategy log")', { offset: 60 });
+await scrollTo('#strat-log-h', { offset: 70 });
 const sFrames = strategyFrames();
 await Promise.all([play(sFrames, 4), sleep(8200)]);
 await sleep(800);
