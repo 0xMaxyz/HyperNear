@@ -1,0 +1,32 @@
+{
+  "claim": "C3",
+  "title": "HL accepts usdSend signed by MPC (caller-supplied nonce)",
+  "status": "✅",
+  "at": "2026-11-07T12:35:07.702Z",
+  "network": "testnet",
+  "numbers": {
+    "signGasTGas": 12.25,
+    "perpBefore": 19,
+    "spotBefore": 0,
+    "perpAfter": 18,
+    "spotAfter": 0
+  },
+  "refs": {
+    "nearSignTx": "6iRLXVgW9j6HHYCpF22fvrkyFWxwDT4D7TNDZ55uGqSU",
+    "action": {
+      "type": "usdSend",
+      "hyperliquidChain": "Testnet",
+      "signatureChainId": "0x66eee",
+      "destination": "0x75c450e9597b5ca41aa86b18f630f51278c350e3",
+      "amount": "1",
+      "time": 1794054889094
+    },
+    "exchange": {
+      "status": "ok",
+      "response": {
+        "type": "default"
+      }
+    }
+  },
+  "notes": []
+}

@@ -1,0 +1,32 @@
+{
+  "claim": "C3",
+  "title": "HL accepts withdraw3 signed by MPC (caller-supplied nonce)",
+  "status": "✅",
+  "at": "2026-11-07T12:35:44.675Z",
+  "network": "testnet",
+  "numbers": {
+    "signGasTGas": 12.15,
+    "perpBefore": 17,
+    "spotBefore": 1,
+    "perpAfter": 15,
+    "spotAfter": 1
+  },
+  "refs": {
+    "nearSignTx": "2mqQguZBwRycyxmbGxTkbpghVLY1c42PnZ9oPCHNM43z",
+    "action": {
+      "type": "withdraw3",
+      "hyperliquidChain": "Testnet",
+      "signatureChainId": "0x66eee",
+      "destination": "0x75c450e9597b5ca41aa86b18f630f51278c350e3",
+      "amount": "2",
+      "time": 1794054926698
+    },
+    "exchange": {
+      "status": "ok",
+      "response": {
+        "type": "default"
+      }
+    }
+  },
+  "notes": []
+}

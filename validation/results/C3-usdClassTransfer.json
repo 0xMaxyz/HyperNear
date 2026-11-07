@@ -1,0 +1,32 @@
+{
+  "claim": "C3",
+  "title": "HL accepts usdClassTransfer signed by MPC (caller-supplied nonce)",
+  "status": "✅",
+  "at": "2026-11-07T12:35:26.368Z",
+  "network": "testnet",
+  "numbers": {
+    "signGasTGas": 12.22,
+    "perpBefore": 18,
+    "spotBefore": 0,
+    "perpAfter": 17,
+    "spotAfter": 1
+  },
+  "refs": {
+    "nearSignTx": "FAaf7wkqcfugZGZhZ31Abz8miQwVSeNUV5ujs3AJeHfE",
+    "action": {
+      "type": "usdClassTransfer",
+      "hyperliquidChain": "Testnet",
+      "signatureChainId": "0x66eee",
+      "amount": "1",
+      "toPerp": false,
+      "nonce": 1794054908031
+    },
+    "exchange": {
+      "status": "ok",
+      "response": {
+        "type": "default"
+      }
+    }
+  },
+  "notes": []
+}
