@@ -93,9 +93,22 @@ export class Relayer {
     this.bus = bus;
   }
 
+  /** How long a freeze waits for onBeforeRevoke (it calls HL) before posting the revocations anyway. */
+  revokeHookTimeoutMs = 8000;
+
   /** Posts every revocation of a freeze to HL; emits 'agents.revoked' with one entry per leg/name. */
   async postRevocations(owner: Hex, revoked: Revoked[]) {
-    await this.onBeforeRevoke?.(owner).catch((e) => this.bus?.emit('agents.revoke.hook_failed', { owner, error: String(e) }));
+    const hook = this.onBeforeRevoke?.(owner).catch((e) => void this.bus?.emit('agents.revoke.hook_failed', { owner, error: String(e) }));
+    if (hook) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timedOut = await Promise.race([
+        hook.then(() => false),
+        new Promise<boolean>((r) => (timer = setTimeout(() => r(true), this.revokeHookTimeoutMs))),
+      ]);
+      clearTimeout(timer);
+      // the freeze never waits on a hanging HL call: revoke regardless
+      if (timedOut) this.bus?.emit('agents.revoke.hook_timeout', { owner, ms: this.revokeHookTimeoutMs });
+    }
     const chain = (await this.client.getConfig()).hl_mainnet ? 'Mainnet' : 'Testnet';
     const legs = await Promise.all(
       revoked.map(async (r) => {
