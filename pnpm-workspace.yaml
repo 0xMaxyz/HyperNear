@@ -8,3 +8,8 @@ overrides:
   viem: 2.54.3
 allowBuilds:
   esbuild: true
+  # Privy's optional native add-ons; the pure-JS fallbacks are fine in the browser build
+  '@reown/appkit': false
+  bufferutil: false
+  keccak: false
+  utf-8-validate: false
