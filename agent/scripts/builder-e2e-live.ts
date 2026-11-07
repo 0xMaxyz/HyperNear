@@ -38,7 +38,8 @@ const post = async (path: string, body: unknown) => {
 let chainTag: any;
 let nonce = Date.now();
 const sign = async (action: Command['action'], coin: string, hash?: string) => {
-  const command = newCommand(OW, action, coin, '0', 30, nonce++, hash as Hex | undefined);
+  nonce = Math.max(Date.now(), nonce + 1); // the Command's nonce and expiry both come from this
+  const command = newCommand(OW, action, coin, '0', 30, nonce, hash as Hex | undefined);
   return { command, sig: await owner.signTypedData(commandTypedData(chainTag, 'leash-spike-1107.testnet', command) as never) };
 };
 
@@ -82,7 +83,7 @@ try {
   // 2. the owner signs the start over the draft's specHash; a different spec must not start
   const hash = draft.body.specHash as string;
   if (hash !== specHash(draft.body.spec)) throw new Error('specHash from the server differs from the local hash');
-  const tampered = { ...draft.body.spec, params: { ...draft.body.spec.params, slices: draft.body.spec.params.slices + 1 } };
+  const tampered = { ...draft.body.spec, params: { ...draft.body.spec.params, limitPx: draft.body.spec.params.limitPx + 1 } };
   const bad = await post('/strategy/start', { ...(await sign('startStrategy', '', hash)), spec: tampered });
   steps.startWithTamperedSpec = { status: bad.status, error: bad.body.error };
   const start = await post('/strategy/start', { ...(await sign('startStrategy', '', hash)), spec: draft.body.spec });
