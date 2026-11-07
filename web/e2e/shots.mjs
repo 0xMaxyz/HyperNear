@@ -70,7 +70,8 @@ await withAgent('hedged', async () => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(500);
   await shot(page, '04-hedged-mobile');
-  check('no horizontal overflow at 390px', await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+  const wide = await page.evaluate(() => [...document.querySelectorAll('body *')].filter((el) => el.getBoundingClientRect().right > window.innerWidth + 1).slice(0, 4).map((el) => el.tagName + '.' + el.className));
+  check('no horizontal overflow at 390px', (await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)), wide.join(' ; '));
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.waitForTimeout(500);

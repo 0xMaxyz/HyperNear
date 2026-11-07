@@ -171,3 +171,7 @@ fieldset.mode input { position: absolute; opacity: 0; width: 1px; height: 1px; }
 fieldset.mode:disabled label { cursor: not-allowed; opacity: 0.45; border-style: dashed; }
 .who-decided { text-align: right; }
 @media (max-width: 820px) { .probs li { grid-template-columns: 1fr 80px 40px 44px; } }
+
+/* grid and flex children may shrink below their content, so nothing forces the page wider than the screen */
+main > *, .grid > *, .col > *, fieldset.mode { min-width: 0; }
+@media (max-width: 820px) { .grid { grid-template-columns: minmax(0, 1fr); } }
