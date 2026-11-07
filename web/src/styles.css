@@ -118,8 +118,8 @@ th.num { font-family: inherit; }
 .steps > li { display: grid; grid-template-columns: 1fr auto auto; gap: 8px 12px; align-items: center; padding: 14px 0; border-top: 1px solid var(--line); }
 .steps > li.stack { grid-template-columns: 1fr; }
 .steps .row { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
-.ok { color: var(--ok); font-weight: 650; white-space: nowrap; }
-.todo { color: var(--muted); white-space: nowrap; }
+span.ok { color: var(--ok); font-weight: 650; white-space: nowrap; }
+span.todo { color: var(--muted); white-space: nowrap; }
 .fields { display: grid; gap: 8px; }
 .fields.inline { grid-template-columns: 1fr 1fr; margin: 12px 0; }
 label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
