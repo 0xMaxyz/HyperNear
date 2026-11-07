@@ -4,13 +4,20 @@
 import { chromium } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { build } from 'esbuild';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { installMockWallet } from './mock-wallet.mjs';
 
 const PAGE = 'http://localhost:5173/';
 const OUT = fileURLToPath(new URL('../screenshots/', import.meta.url));
 const REPO = fileURLToPath(new URL('../../', import.meta.url));
+// Request bodies are checked with the page's own builders (bundled here), so a wrong domain or field shows up as a wrong signer.
+const verifyFile = join(tmpdir(), `hypernear-verify-${process.pid}.mjs`);
+await build({ entryPoints: [fileURLToPath(new URL('./verify-entry.ts', import.meta.url))], bundle: true, platform: 'node', format: 'esm', outfile: verifyFile, logLevel: 'error' });
+const verify = await import(verifyFile);
 const browser = await chromium.launch();
 const results = [];
 const check = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? `: ${detail}` : ''}`); };
@@ -147,6 +154,87 @@ await withAgent('hedged', async () => {
   check('no page errors (signed flow)', errors.length === 0, errors.join(' | '));
   await ctx.close();
 });
+
+// 4. the demo owner. 0x2c75…5c23, the fixtures' owner, is the address of a widely published web3 example key; it is a
+//    public test key, used here only against --dry-run (and our testnet scripts). Signing as it lets every signed
+//    action run through the UI against the real dry-run agent. The dry-run fixtures have approved agents on every
+//    leg, so GET /owner is staged: unprepared, then prepared (with the agent's own /agents/prepare answer), then as
+//    recorded. The signed requests are real; only that view is staged.
+const DEMO_KEY = '0x4c0883a69102937d6231471b5dbb6204fe5129617082792ae468d01a3f362318';
+await withAgent('hedged', async () => {
+  const wallet = privateKeyToAccount(DEMO_KEY);
+  const owner = wallet.address.toLowerCase();
+  const { page, ctx, errors } = await open({ wallet });
+  let stage = 'unprepared';
+  let prepared;
+  const posts = [];
+  await page.route('**/owner/*', async (route) => {
+    const res = await route.fetch();
+    const j = await res.json();
+    if (stage !== 'approved') {
+      const keyOf = (leg) => prepared?.legs.find((l) => l.leg === leg)?.agent;
+      const agentFor = (l) => (stage === 'unprepared' ? null : { address: keyOf(l.leg).address, name: keyOf(l.leg).name, approvedAt: null });
+      j.legs = j.legs.map((l) => ({ ...l, agent: agentFor(l), ...(stage === 'unprepared' ? { needsPrepare: true } : {}) }));
+      j.snapshot.legs = j.snapshot.legs.map((l) => ({ ...l, agent: agentFor(l) }));
+      j.pendingApprovals = stage === 'prepared' ? prepared.pendingApprovals : [];
+    }
+    await route.fulfill({ response: res, json: j });
+  });
+  page.on('response', async (r) => {
+    if (r.request().method() !== 'POST') return;
+    const path = new URL(r.url()).pathname;
+    const body = JSON.parse(r.request().postData() ?? '{}');
+    const out = await r.json().catch(() => ({}));
+    posts.push({ path, body, status: r.status(), out });
+    if (path === '/agents/prepare' && r.status() === 200) { prepared = out; stage = 'prepared'; }
+    if (path === '/relay' && body.intent?.type === 'approveAgent' && posts.filter((p) => p.body.intent?.type === 'approveAgent').length >= (prepared?.pendingApprovals.length ?? 99)) stage = 'approved';
+  });
+  await page.getByRole('button', { name: /Log in with/ }).click();
+  await page.getByText('Continue with a wallet').click({ timeout: 15000 });
+  await page.locator('#headlessui-portal-root').getByText('MetaMask').first().click({ timeout: 15000 });
+  await page.getByText(/Create legs/).first().waitFor({ timeout: 40000 });
+  await page.waitForTimeout(2500);
+  check('logged in as the demo owner and its legs load', (await page.locator('tbody tr').count()) === 3 && (await page.locator('.who .addr').innerText()).toLowerCase().startsWith(owner.slice(0, 6)));
+  check('staged view: Prepare agents is open, Approve agent is not yet', (await page.getByRole('button', { name: 'Prepare agents' }).isEnabled()) && (await page.getByRole('button', { name: 'Approve agent' }).isDisabled()));
+  await shot(page, '10-demo-owner-unprepared');
+  const note = async () => { await page.locator('.notice').first().waitFor({ timeout: 25000 }); await page.waitForTimeout(900); return page.locator('.notice').first().innerText(); };
+  const click = async (name, expect) => { await page.getByRole('button', { name }).click(); const t = await note(); check(`${name}: ${t.slice(0, 100)}`, expect.test(t)); };
+  await click('Prepare agents', /Agent keys prepared/);
+  check('prepared: Approve agent is now open', await page.getByRole('button', { name: 'Approve agent' }).isEnabled());
+  await click('Approve agent', /Approved the agent key on 3 legs/);
+  await shot(page, '11-demo-owner-approved');
+  await click('Update policy', /Agent agent\.dry-run enabled/);
+  await page.locator('fieldset.mode label', { hasText: 'Auto' }).click();
+  check('autonomy Auto is accepted for the opted-in owner', /Autonomy set to auto/.test(await note()));
+  await page.locator('fieldset.mode label', { hasText: 'Propose' }).click();
+  check('autonomy back to Propose', /Autonomy set to propose/.test(await note()));
+  await click('Freeze', /Account frozen/);
+  await click('Close hedge', /Hedge on BTC closed/);
+  // Accept: whatever proposal the panel shows; the agent checks the command against that proposal's action
+  const acceptedFor = await page.locator('section[aria-labelledby=dec-h] .big-action').innerText();
+  await click('Accept and sign', /Accepted:/);
+  check(`decision.accepted reached the log for "${acceptedFor}"`, (await page.locator('.log li .tag', { hasText: 'decision.accepted' }).count()) >= 1);
+  // Reject: ask for a fresh proposal, then dismiss it
+  await page.getByRole('button', { name: 'Ask for a proposal' }).click();
+  await page.locator('section[aria-labelledby=dec-h] .big-action').waitFor({ timeout: 15000 });
+  await page.waitForTimeout(1500);
+  await click('Dismiss', /Proposal dismissed/);
+  check('decision.rejected (reason owner) reached the log', (await page.locator('.log li', { hasText: /rejected: .*owner/ }).count()) >= 1);
+  await shot(page, '12-demo-owner-decided');
+  // every signed request recovers to the demo owner with the page's own builders; approvals were signed exactly as listed
+  const signed = posts.filter((p) => p.body.sig);
+  let allOwner = signed.length > 0;
+  for (const p of signed) {
+    const who = p.body.intent ? await verify.intentSigner(p.body, 'near-testnet', 'leash-spike-1107.testnet') : await verify.commandSigner(p.body, 'near-testnet', 'leash-spike-1107.testnet');
+    if (who !== owner) { allOwner = false; console.log('  wrong signer on', p.path, who); }
+  }
+  check(`all ${signed.length} signed requests recover to the demo owner (${[...new Set(signed.map((p) => p.path))].join(', ')})`, allOwner);
+  const approvals = posts.filter((p) => p.body.intent?.type === 'approveAgent').map((p) => p.body.intent);
+  check('each approveAgent intent equals the agent-listed pendingApprovals entry', approvals.length === 3 && approvals.every((i) => prepared.pendingApprovals.some((x) => JSON.stringify(x) === JSON.stringify(i))));
+  check('no page errors (demo owner)', errors.length === 0, errors.join(' | '));
+  await ctx.close();
+});
+
 
 await browser.close();
 console.log(results.every(Boolean) ? 'ALL PASS' : 'SOME FAILED');
