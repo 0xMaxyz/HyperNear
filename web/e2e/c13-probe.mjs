@@ -69,8 +69,7 @@ if (email) {
     await b.click();
     await page.waitForTimeout(6000);
   }
-  console.log('email result:
-' + (await page.locator('#c13-out').innerText()));
+  console.log('email result:\n' + (await page.locator('#c13-out').innerText()));
 }
 if (mock) {
   await page.getByText('Continue with a wallet').click({ timeout: 10000 }).catch((e) => log.push(`click wallet: ${e.message.slice(0, 120)}`));
