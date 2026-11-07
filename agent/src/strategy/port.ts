@@ -40,7 +40,7 @@ export async function hlPort(legs: Legs, owner: Hex, leg: number, slippage = 0.0
   const user = await legs.client.getLeg(owner, leg);
   if (!user) throw new Error(`leg ${leg} of ${owner} is not registered`);
   const hl = legs.tradingClient(owner, leg);
-  return {
+  const port: TradingPort = {
     async info(coin) {
       const [meta, mids] = await Promise.all([hl.meta(), hl.allMids()]);
       const asset = meta.universe.findIndex((u) => u.name === coin);
@@ -72,9 +72,9 @@ export async function hlPort(legs: Legs, owner: Hex, leg: number, slippage = 0.0
       if (oids.length) await hl.batchCancel({ cancels: oids.map((o) => ({ a: asset, o: Number(o) })) });
     },
     async flatten(coin) {
-      const szi = await this.position(coin);
+      const szi = await port.position(coin);
       if (szi === 0) return;
-      const { asset, szDecimals, mid } = await this.info(coin);
+      const { asset, szDecimals, mid } = await port.info(coin);
       const isBuy = szi < 0;
       await hl.limitOrderOpen({
         asset,
@@ -89,4 +89,5 @@ export async function hlPort(legs: Legs, owner: Hex, leg: number, slippage = 0.0
       await hl.scheduleCancel(timeMs === undefined ? {} : { time: timeMs });
     },
   };
+  return port;
 }
