@@ -40,7 +40,7 @@ Status: ✅ confirmed, ❌ refuted, ⚠️ partly confirmed or no public evidenc
 
 ## Design consequences
 
-- Each master action takes about 16 s end to end (C2 run; NEAR side about 6 s p50 through FastNEAR), so the margin guard keeps a conservative margin.
+- Each master action takes about 8 s end to end (C6: p50 7.75 s, p95 8.78 s; NEAR side about 6 s p50 through FastNEAR); the guard budgets 9 s.
 - Each leg gets its own agent key. A second master cannot reuse an approved agent.
 - Funding a fresh leg costs 1 USDC activation fee.
 - C11 shows subaccounts already allow agent transfers, so the README leads with policy (destination lock, caps, freeze), not with access.
