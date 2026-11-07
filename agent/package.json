@@ -4,10 +4,13 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "start": "node src/server.ts",
+    "dry-run": "node src/server.ts --dry-run",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@hypernear/client": "workspace:*",
     "@perps-platform/core": "workspace:*",
     "viem": "2.54.3"
   }

@@ -3,7 +3,11 @@
   "compilerOptions": {
     "noEmit": true,
     "resolveJsonModule": true,
-    "paths": { "@perps-platform/core": ["../packages/core/src/index.ts"] },
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "@perps-platform/core": ["../packages/core/src/index.ts"],
+      "@hypernear/client": ["../packages/hypernear-client/src/index.ts"]
+    },
     "types": ["node"]
   },
   "include": ["src/**/*", "tests/**/*", "vitest.config.ts"]
