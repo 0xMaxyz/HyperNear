@@ -73,6 +73,11 @@ export class StrategyManager {
     return e && e.runner.state !== 'stopped' ? e.runner.spec : undefined;
   }
 
+  /** The owner's live specs (not stopped). */
+  specs(owner: Hex): StrategySpec[] {
+    return this.#mine(owner).filter((r) => r.runner.state !== 'stopped').map((r) => r.runner.spec);
+  }
+
   /** Everything validateSpec needs; `selfId` is excluded from the busy legs and the budget (it is being replaced or resumed). */
   async context(owner: Hex, selfId?: string) {
     const live = this.#mine(owner).filter((r) => (r.runner.state === 'running' || r.runner.state === 'paused') && r.runner.spec.id !== selfId);

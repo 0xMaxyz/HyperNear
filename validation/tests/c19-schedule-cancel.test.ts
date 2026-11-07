@@ -36,7 +36,7 @@ describe.skipIf(!live)('C19: scheduleCancel dead-man switch', () => {
         await c.cancelOrder({ asset: m.asset, oid: oid! });
         return;
       }
-      expect(armed.status).toBe('ok');
+      expect((armed as { status: string }).status).toBe('ok');
       const openNow = (await c.openOrders({ user: leg.address })).length;
       r.numbers.openBeforeFire = openNow;
       expect(openNow).toBe(1);

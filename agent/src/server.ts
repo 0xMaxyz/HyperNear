@@ -12,6 +12,7 @@
 //   POST /strategy/start  {command, sig, spec}: action startStrategy, command.specHash = specHash(validated spec)
 //   POST /strategy/pause|stop {command, sig}: action pauseStrategy|stopStrategy, command.coin = strategy id (kill switch)
 //   GET  /strategies/:owner  the owner's strategies (state, held levels, resting orders, dead-man status)
+//   POST /strategy/draft  {owner, text}: plain language -> {spec, specHash, diff, warnings} (Claude drafts, spec.ts validates; starts nothing)
 //   GET  /events        SSE: hedge, guard and decision log
 // The guard loop (guardLoop.ts) runs in the same process when the NEAR agent key is set.
 // Run: node agent/src/server.ts            (keys from env, see config.ts)
@@ -33,6 +34,7 @@ import { Decider, DECISION_MODES, DecisionModes, proposalEvent, type DecisionMod
 import { jevAsk } from './jev.ts';
 import { breakevens, openTime, readPnlData, type LegPnlData } from './pnl.ts';
 import { hlPoster, HttpError, RateLimiter, Relayer } from './relayer.ts';
+import { claudeAsk, drafter, MAX_DRAFT_TEXT, type Draft } from './strategy/builder.ts';
 import { StrategyManager } from './strategy/manager.ts';
 import { specHash } from './strategy/spec.ts';
 
@@ -50,6 +52,8 @@ export interface Deps {
   decider?: Decider;
   /** Phase 2 strategy runners (absent in the dry run) */
   strategies?: StrategyManager;
+  /** plain language -> validated spec draft (needs ANTHROPIC_API_KEY) */
+  drafter?: (owner: Hex, text: string) => Promise<Draft>;
   annualVol?: number;
   /** fills, fee rate, funding per leg for the break-even (default: read from HL) */
   pnlData?: (s: OwnerSnapshot) => Promise<LegPnlData[]>;
@@ -202,6 +206,14 @@ export function handler(d: Deps) {
         const owner = ownerOf(strategies[1]);
         return reply(200, { owner, strategies: d.strategies.list(owner) });
       }
+      if (req.method === 'POST' && url.pathname === '/strategy/draft') {
+        if (!d.relayer.limiter.allow(req.socket.remoteAddress ?? 'unknown')) throw new HttpError(429, 'rate limited');
+        if (!d.drafter) throw new HttpError(503, 'strategy builder off (ANTHROPIC_API_KEY not set)');
+        const b = (await readJson(req)) as { owner?: unknown; text?: unknown };
+        if (typeof b.text !== 'string' || !b.text.trim() || b.text.length > MAX_DRAFT_TEXT) throw new HttpError(400, `text must be 1-${MAX_DRAFT_TEXT} characters`);
+        const draft = await d.drafter(ownerOf(b.owner), b.text);
+        return reply(draft.ok ? 200 : 422, draft);
+      }
       if (req.method === 'POST' && url.pathname === '/strategy/start') {
         if (!d.strategies) throw new HttpError(503, 'strategies off');
         const body = (await readJson(req)) as { spec?: unknown };
@@ -279,7 +291,18 @@ export function buildDeps(config: AgentConfig): Deps {
     openedAt: async (s, coin) => openTime((await readPnlData(legs.hl, s)).find((x) => x.leg === 1)?.fills ?? [], coin),
     intervalMs: config.decide.intervalSec * 1000,
   });
-  d.strategies = new StrategyManager({ legs, client, policy: config.policy, agentId: config.nearAgent?.accountId, emit: (t, data) => void bus.emit(t, data) });
+  const strategies = new StrategyManager({ legs, client, policy: config.policy, agentId: config.nearAgent?.accountId, dataDir: config.dataDir, emit: (t, data) => void bus.emit(t, data) });
+  d.strategies = strategies;
+  if (process.env.ANTHROPIC_API_KEY) {
+    d.drafter = drafter({
+      ask: claudeAsk(),
+      context: (owner, selfId) => strategies.context(owner, selfId),
+      current: (owner, id) => strategies.get(owner, id),
+      strategies: (owner) => strategies.specs(owner),
+      mids: async () => (await legs.hl.allMids()) as Record<string, string>,
+      keyReady: (owner, leg) => Boolean(legs.keys.get(owner, leg)?.approvedAt),
+    });
+  }
   // freeze: cancel resting strategy orders before the revocations kill the agent keys
   d.relayer.onBeforeRevoke = (owner) => d.strategies!.cancelAll(owner);
   return d;
@@ -298,6 +321,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const config = loadConfig();
     const deps = buildDeps(config);
     const server = createServer(handler(deps));
+    // saved strategies come back paused and their orphaned orders are cancelled; the owner resumes them with a signed start
+    void deps.strategies?.restore().then((r) => r.length && console.log(`strategies restored (paused): ${JSON.stringify(r)}`), (e) => console.error('strategy restore failed:', (e as Error).message));
     if (config.nearAgent) deps.guardLoop?.start();
     if (config.decide.live) deps.decider?.start(); // its own timer: the guard never waits on it
     server.listen(config.port, () => {

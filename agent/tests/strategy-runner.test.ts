@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { gridPrices, missingOrders, reconcile, wantedOrders } from '../src/strategy/grid';
 import type { PlaceRequest, TradingPort } from '../src/strategy/port';
 import { StrategyRunner } from '../src/strategy/runner';
-import { validateSpec, type SpecContext } from '../src/strategy/spec';
+import { validateSpec, type SpecContext, type StrategySpec } from '../src/strategy/spec';
 import fx from './fixtures/strategy-spec.json';
 
 const ctx = fx.context as unknown as SpecContext;
@@ -17,6 +17,7 @@ class FakePort implements TradingPort {
   pos = 0;
   frozen = false;
   deadmanRefuses = false;
+  iocRefuses = false;
   open = new Map<string, PlaceRequest>();
   fills = new Set<string>();
   placed: PlaceRequest[] = [];
@@ -41,8 +42,9 @@ class FakePort implements TradingPort {
   }
   async setLeverage() {}
   async place(o: PlaceRequest) {
-    const oid = String(this.#oid++);
     this.placed.push(o);
+    if (o.tif === 'Ioc') return this.iocRefuses ? { error: 'Order could not immediately match' } : { oid: String(this.#oid++), fill: { sz: Number(o.sz), px: Number(o.px) } };
+    const oid = String(this.#oid++);
     this.open.set(oid, o);
     return { oid };
   }
@@ -65,16 +67,17 @@ class FakePort implements TradingPort {
   }
 }
 
-function setup(over: Partial<FakePort> = {}) {
+function setup(over: Partial<FakePort> = {}, useSpec: StrategySpec = spec) {
   const port = Object.assign(new FakePort(), over);
   const events: { type: string; data: Record<string, any> }[] = [];
+  const clock = { t: 1_700_000_000_000 };
   const runner = new StrategyRunner({
-    spec, port, policy: ctx.orderPolicy,
+    spec: useSpec, port, policy: ctx.orderPolicy,
     emit: (type, data) => events.push({ type, data }),
     isFrozen: async () => port.frozen,
-    now: () => 1_700_000_000_000,
+    now: () => clock.t,
   });
-  return { port, runner, events, types: () => events.map((e) => e.type) };
+  return { port, runner, events, clock, types: () => events.map((e) => e.type) };
 }
 
 describe('grid planner', () => {
@@ -215,5 +218,68 @@ describe('StrategyRunner', () => {
     };
     for (let i = 0; i < 5; i++) await runner.tick();
     expect(runner.state).toBe('paused');
+  });
+});
+
+describe('StrategyRunner twap', () => {
+  const t = validateSpec(fx.twap, ctx);
+  if (!t.ok) throw new Error(`twap fixture invalid: ${t.errors.join('; ')}`);
+  const twap = t.spec;
+
+  it('sends one IOC slice per interval, capped by limitPx, and finishes after the last slice', async () => {
+    const { port, runner, clock, types } = setup({}, twap);
+    await runner.tick();
+    expect(port.placed).toHaveLength(1);
+    expect(port.placed[0]).toMatchObject({ isBuy: true, tif: 'Ioc', sz: '0.00015', reduceOnly: false });
+    await runner.tick(); // same interval: nothing
+    expect(port.placed).toHaveLength(1);
+    for (let i = 0; i < 2; i++) {
+      clock.t += 10_000;
+      await runner.tick();
+    }
+    expect(port.placed).toHaveLength(3);
+    expect(runner.state).toBe('done');
+    expect(runner.twap).toMatchObject({ done: 3, skipped: 0 });
+    expect(types().filter((x) => x === 'strategy.slice')).toHaveLength(3);
+    expect(types()).toContain('strategy.done');
+  });
+
+  it('a buy never pays above limitPx: the slice is skipped when the mid is beyond it', async () => {
+    const { port, runner, events } = setup({ mid: 90_000 }, twap);
+    await runner.tick();
+    expect(port.placed).toHaveLength(0);
+    expect(runner.twap.skipped).toBe(1);
+    expect(events.find((e) => e.type === 'strategy.slice.skipped')?.data.reason).toContain('beyond limitPx');
+  });
+
+  it('a slice with no fill is skipped, and the run still ends', async () => {
+    const { port, runner, clock } = setup({ iocRefuses: true }, twap);
+    for (let i = 0; i < 3; i++) {
+      await runner.tick();
+      clock.t += 10_000;
+    }
+    expect(port.placed).toHaveLength(3);
+    expect(runner.twap).toMatchObject({ done: 0, skipped: 3 });
+    expect(runner.state).toBe('done');
+  });
+
+  it('the exposure gate stops a slice that would pass maxNotional', async () => {
+    const { port, runner } = setup({ pos: 0.0013 }, twap); // $96 already, limit $100
+    await runner.tick();
+    expect(port.placed).toHaveLength(0);
+    expect(runner.twap.skipped).toBe(1);
+  });
+
+  it('snapshot restores progress: a paused runner keeps its counts and resumes', async () => {
+    const { runner, clock, port } = setup({}, twap);
+    await runner.tick();
+    await runner.pause('test');
+    const saved = runner.snapshot();
+    expect(saved).toMatchObject({ state: 'paused', twap: { done: 1 } });
+    const again = new StrategyRunner({ spec: twap, port, policy: ctx.orderPolicy, emit: () => {}, isFrozen: async () => false, now: () => clock.t, initial: saved });
+    expect(again.resume()).toBe(true);
+    clock.t += 10_000;
+    await again.tick();
+    expect(again.twap.done).toBe(2);
   });
 });

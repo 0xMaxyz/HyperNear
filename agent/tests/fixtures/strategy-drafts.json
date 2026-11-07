@@ -1,0 +1,32 @@
+{
+  "mids": { "BTC": "74000", "ETH": "3000" },
+  "grid": {
+    "id": "grid-btc-1", "type": "grid", "leg": 3, "coin": "BTC",
+    "params": { "lower": 70000, "upper": 80000, "levels": 5, "sizePerLevel": "0.00015" },
+    "limits": { "maxNotional": 100, "maxLeverage": 2, "maxDailyLoss": 10, "topUpCapPerDay": 20 },
+    "onStop": "cancel"
+  },
+  "dca": {
+    "id": "dca-btc-1", "type": "twap", "leg": 3, "coin": "BTC",
+    "params": { "side": "buy", "sizePerSlice": "0.00015", "slices": 5, "intervalSec": 86400, "limitPx": 80000 },
+    "limits": { "maxNotional": 100, "maxLeverage": 2, "maxDailyLoss": 10, "topUpCapPerDay": 0 },
+    "onStop": "cancel"
+  },
+  "cases": [
+    { "name": "a plain grid request", "text": "grid BTC between 70000 and 80000, 5 levels, 0.00015 each", "model": { "cannot": "", "spec": "grid" }, "ok": true, "warnings": [] },
+    { "name": "DCA: warns about the duration and the kept position", "text": "buy BTC every day for 5 days", "model": { "cannot": "", "spec": "dca" }, "ok": true, "warnings": ["runs for about 120 hours", "stopping keeps the position"] },
+    { "name": "high leverage is allowed but flagged", "text": "same grid at 4x", "model": { "cannot": "", "spec": "grid", "patch": { "limits.maxLeverage": 4 } }, "ok": true, "warnings": ["leverage up to 4x"] },
+    { "name": "price outside the grid range is flagged", "text": "grid BTC 60000-65000", "model": { "cannot": "", "spec": "grid", "patch": { "params.lower": 60000, "params.upper": 65000, "params.sizePerLevel": "0.00018" } }, "ok": true, "warnings": ["outside the grid range"] },
+    { "name": "REJECTED: top-up budget above the contract cap", "text": "grid, let it top up $80 a day", "model": { "cannot": "", "spec": "grid", "patch": { "limits.topUpCapPerDay": 80 } }, "ok": false, "errors": ["exceed the contract's daily cap $50"] },
+    { "name": "REJECTED: coin not allowed", "text": "grid DOGE", "model": { "cannot": "", "spec": "grid", "patch": { "coin": "DOGE" } }, "ok": false, "errors": ["coin must be one of BTC, ETH"] },
+    { "name": "REJECTED: leverage above the order policy", "text": "grid at 20x", "model": { "cannot": "", "spec": "grid", "patch": { "limits.maxLeverage": 20 } }, "ok": false, "errors": ["can only tighten the policy"] },
+    { "name": "REJECTED: order and exposure above the caps", "text": "grid with $500", "model": { "cannot": "", "spec": "grid", "patch": { "params.sizePerLevel": "0.001", "limits.maxNotional": 500 } }, "ok": false, "errors": ["above the order policy max"] },
+    { "name": "REJECTED: reserved leg", "text": "grid on leg 1", "model": { "cannot": "", "spec": "grid", "patch": { "leg": 1 } }, "ok": false, "errors": ["leg 1 is reserved"] },
+    { "name": "REJECTED: field the model invented", "text": "grid with a stop loss", "model": { "cannot": "", "spec": "grid", "patch": { "stopLoss": 5 } }, "ok": false, "errors": ["unknown field \"stopLoss\""] },
+    { "name": "the model declines", "text": "what is the weather", "model": { "cannot": "That is not a strategy request.", "spec": null }, "ok": false, "errors": ["That is not a strategy request."] },
+    { "name": "the model answers with junk", "text": "grid", "model": "banana", "ok": false, "errors": ["not a JSON object"] },
+    { "name": "the model call fails", "text": "grid", "modelThrows": "429 rate limited", "ok": false, "errors": ["the model call failed: 429 rate limited"] },
+    { "name": "empty text never reaches the model", "text": "  ", "model": { "cannot": "", "spec": "grid" }, "ok": false, "errors": ["text is empty"], "asked": false },
+    { "name": "overlong text never reaches the model", "textLength": 601, "model": { "cannot": "", "spec": "grid" }, "ok": false, "errors": ["longer than 600"], "asked": false }
+  ]
+}

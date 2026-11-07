@@ -27,6 +27,17 @@ describe('validateSpec (fixture driven)', () => {
     });
   }
 
+  for (const c of fx.twapCases as Array<{ name: string; patch: Record<string, unknown>; errors: string[] }>) {
+    it(c.name, () => {
+      const r = validateSpec(patched(fx.twap, c.patch), fx.context as unknown as SpecContext);
+      if (c.errors.length === 0) expect(r).toMatchObject({ ok: true, spec: { type: 'twap', onStop: 'cancel' } });
+      else {
+        expect(r.ok).toBe(false);
+        if (!r.ok) for (const e of c.errors) expect(r.errors.join('\n')).toContain(e);
+      }
+    });
+  }
+
   it('fills in the default onStop and drops nothing else', () => {
     const r = validateSpec(fx.base, fx.context as unknown as SpecContext);
     expect(r).toMatchObject({ ok: true, spec: { ...fx.base, onStop: 'cancel' } });
