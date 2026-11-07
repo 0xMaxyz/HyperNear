@@ -55,6 +55,9 @@ await page.getByRole('button', { name: /Log in with Privy/ }).click({ timeout: 2
 await page.waitForTimeout(4000);
 await page.screenshot({ path: 'test-results/c13-login.png' });
 if (mock) {
+  await page.getByText('Continue with a wallet').click({ timeout: 10000 }).catch((e) => log.push(`click wallet: ${e.message.slice(0, 120)}`));
+  await page.waitForTimeout(2000);
+  await page.screenshot({ path: 'test-results/c13-wallets.png' });
   await page.getByText('MetaMask', { exact: false }).first().click({ timeout: 10000 }).catch((e) => log.push(`click MetaMask: ${e.message.slice(0, 120)}`));
   await page.waitForTimeout(6000);
   await page.screenshot({ path: 'test-results/c13-after-wallet.png' });
