@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { runGuardDemo } from '../scripts/guard-demo.ts';
 
-describe.skipIf(process.env.LIVE !== '1')('live: guard demo (stress leg1 -> guard rebalances from leg0)', () => {
+describe.skipIf(process.env.LIVE !== '1')('live: guard demo (stress leg1 -> guard rebalances from the healthiest leg)', () => {
   it('detects, rebalances through the contract, and the leg recovers', async () => {
     const r = await runGuardDemo();
     expect(r.summary.detectMs).not.toBeNull();
