@@ -5,9 +5,9 @@ import { runClaim } from '../src/results';
 
 const live = LIVE && HAS_FUNDER;
 
-// C19: Hyperliquid's scheduleCancel (dead-man switch) works for an API wallet on testnet: a resting order is cancelled
-// by the exchange at the scheduled time, and the schedule can be moved or removed. Phase 2 arms it for grid ladders so
-// that after a freeze (which revokes the API wallet) the resting orders still clear by themselves.
+// C19: Hyperliquid's scheduleCancel (dead-man switch). If the account is allowed to use it, a resting order is cancelled
+// by the exchange at the scheduled time and the schedule can be moved or removed. Measured: a fresh account is refused
+// ("Required: $1000000 traded"), so the result is a warning for fresh legs and the freeze path cancels ladders itself.
 describe.skipIf(!live)('C19: scheduleCancel dead-man switch', () => {
   it('cancels a resting order at the scheduled time, with an API wallet signing', async () => {
     await runClaim('C19', 'C19', 'scheduleCancel by an API wallet clears resting orders at the scheduled time', async (r) => {
@@ -27,8 +27,15 @@ describe.skipIf(!live)('C19: scheduleCancel dead-man switch', () => {
       r.refs.order = order;
 
       const fireAt = Date.now() + 8_000;
-      const armed = await c.scheduleCancel({ time: fireAt });
-      r.refs.armed = armed;
+      const armed = await c.scheduleCancel({ time: fireAt }).catch((e: unknown) => e);
+      r.refs.armed = armed instanceof Error ? armed.message : armed;
+      if (armed instanceof Error) {
+        // measured 2026-11-07: Hyperliquid gates scheduleCancel on $1,000,000 of traded volume, also on testnet
+        r.warn(`scheduleCancel refused: ${armed.message}`);
+        r.numbers.volumeRequiredUsd = 1_000_000;
+        await c.cancelOrder({ asset: m.asset, oid: oid! });
+        return;
+      }
       expect(armed.status).toBe('ok');
       const openNow = (await c.openOrders({ user: leg.address })).length;
       r.numbers.openBeforeFire = openNow;

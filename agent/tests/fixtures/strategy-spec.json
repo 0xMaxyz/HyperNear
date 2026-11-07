@@ -1,0 +1,51 @@
+{
+  "base": {
+    "id": "grid-btc-1", "type": "grid", "leg": 3, "coin": "BTC",
+    "params": { "lower": 70000, "upper": 80000, "levels": 5, "sizePerLevel": "0.00015" },
+    "limits": { "maxNotional": 100, "maxLeverage": 3, "maxDailyLoss": 10, "topUpCapPerDay": 20 }
+  },
+  "context": {
+    "orderPolicy": { "maxLeverage": 5, "maxNotionalUsd": 100, "allowedCoins": ["BTC", "ETH"], "slippage": 0.03 },
+    "registeredLegs": [0, 1, 2, 3],
+    "reservedLegs": [0, 1, 2],
+    "busyLegs": [],
+    "owner": { "nonce": 0, "frozen": false, "agent": "fcagent.leash-spike-1107.testnet", "daily_cap": 50000000, "cooldown_sec": 60, "day": 0, "spent_today": 0, "last_rebalance_ns": 0 },
+    "agentId": "fcagent.leash-spike-1107.testnet",
+    "otherTopUpBudget": 0
+  },
+  "cases": [
+    { "name": "valid base spec", "patch": {}, "errors": [] },
+    { "name": "bad id", "patch": { "id": "Grid One!" }, "errors": ["id must match"] },
+    { "name": "unknown type", "patch": { "type": "martingale" }, "errors": ["type must be one of grid"] },
+    { "name": "unknown top-level field", "patch": { "leverage": 50 }, "errors": ["unknown field \"leverage\""] },
+    { "name": "leg not registered", "patch": { "leg": 7 }, "errors": ["leg 7 is not registered"] },
+    { "name": "reserved leg", "patch": { "leg": 1 }, "errors": ["leg 1 is reserved"] },
+    { "name": "coin not allowed", "patch": { "coin": "DOGE" }, "errors": ["coin must be one of BTC, ETH"] },
+    { "name": "range inverted", "patch": { "params.upper": 60000 }, "errors": ["params.upper must be above params.lower"] },
+    { "name": "too many levels", "patch": { "params.levels": 50 }, "errors": ["params.levels must be an integer from 2 to 20"] },
+    { "name": "size is not a decimal string", "patch": { "params.sizePerLevel": 0.00015 }, "errors": ["params.sizePerLevel must be a positive decimal string"] },
+    { "name": "lowest-level order under the HL minimum", "patch": { "params.sizePerLevel": "0.00005" }, "errors": ["below the Hyperliquid minimum"] },
+    { "name": "highest-level order over the order policy max", "patch": { "params.sizePerLevel": "0.0015", "limits.maxNotional": 100000 }, "errors": ["above the order policy max"] },
+    { "name": "worst-case exposure over maxNotional", "patch": { "limits.maxNotional": 50 }, "errors": ["worst-case exposure"] },
+    { "name": "leverage above the order policy", "patch": { "limits.maxLeverage": 10 }, "errors": ["can only tighten the policy"] },
+    { "name": "daily loss must be positive", "patch": { "limits.maxDailyLoss": 0 }, "errors": ["limits.maxDailyLoss must be a positive number"] },
+    { "name": "top-up budget above the contract cap", "patch": { "limits.topUpCapPerDay": 60 }, "errors": ["exceed the contract's daily cap $50"] },
+    { "name": "onStop must be known", "patch": { "onStop": "explode" }, "errors": ["onStop must be"] },
+    { "name": "owner frozen", "ctx": { "owner.frozen": true }, "errors": ["owner is frozen"] },
+    { "name": "owner named no agent", "ctx": { "owner.agent": null }, "errors": ["has not named an agent"] },
+    { "name": "owner named another agent", "ctx": { "owner.agent": "someone.near" }, "errors": ["not this service"] },
+    { "name": "leg already busy", "ctx": { "busyLegs": [3] }, "errors": ["already runs a strategy"] },
+    { "name": "other strategies already use the cap", "ctx": { "otherTopUpBudget": 40 }, "errors": ["exceed the contract's daily cap"] },
+    { "name": "owner unknown to the contract", "ctx": { "owner": null }, "errors": ["owner is unknown to the contract"] }
+  ],
+  "orderCases": [
+    { "name": "buy inside the range", "order": { "coin": "BTC", "isBuy": true, "px": 72000, "sz": 0.00015, "reduceOnly": false }, "view": { "position": 0, "restingOpeningNotional": 0 }, "ok": true },
+    { "name": "other coin", "order": { "coin": "ETH", "isBuy": true, "px": 72000, "sz": 0.00015, "reduceOnly": false }, "view": { "position": 0, "restingOpeningNotional": 0 }, "reason": "not the strategy's coin" },
+    { "name": "over the order policy per-order max", "order": { "coin": "BTC", "isBuy": true, "px": 72000, "sz": 0.002, "reduceOnly": false }, "view": { "position": 0, "restingOpeningNotional": 0 }, "reason": "above the order policy max" },
+    { "name": "below the HL minimum", "order": { "coin": "BTC", "isBuy": true, "px": 72000, "sz": 0.00005, "reduceOnly": false }, "view": { "position": 0, "restingOpeningNotional": 0 }, "reason": "below the Hyperliquid minimum" },
+    { "name": "exposure would exceed maxNotional (position plus resting plus this order)", "order": { "coin": "BTC", "isBuy": true, "px": 72000, "sz": 0.00015, "reduceOnly": false }, "view": { "position": 0.0006, "restingOpeningNotional": 50 }, "reason": "would exceed maxNotional" },
+    { "name": "reduce-only sell is not held to the minimum or the exposure cap", "order": { "coin": "BTC", "isBuy": false, "px": 75000, "sz": 0.00005, "reduceOnly": true }, "view": { "position": 0.0006, "restingOpeningNotional": 90 }, "ok": true },
+    { "name": "price below the range", "order": { "coin": "BTC", "isBuy": true, "px": 60000, "sz": 0.00018, "reduceOnly": false }, "view": { "position": 0, "restingOpeningNotional": 0 }, "reason": "outside the strategy range" },
+    { "name": "top sell one step above upper is allowed", "order": { "coin": "BTC", "isBuy": false, "px": 82500, "sz": 0.00015, "reduceOnly": true }, "view": { "position": 0.0003, "restingOpeningNotional": 0 }, "ok": true }
+  ]
+}
