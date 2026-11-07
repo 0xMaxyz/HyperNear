@@ -118,3 +118,37 @@ export function streamEvents(onEvent: (e: AgentEvent) => void, onState: (s: 'liv
   })();
   return () => ctl.abort();
 }
+
+/** Agreed with contract-dev, parsed tolerantly: a `decision.*` event carries the decision directly or under `decision`. */
+export interface Decision {
+  id: string;
+  action: string;
+  source: string;
+  flagged?: boolean;
+  coin?: string;
+  ratio?: string;
+  /** probability of "yes" per factor question (Jev factor layout) */
+  factors?: Record<string, number>;
+  /** probability per action (Jev single-choice layout) */
+  probabilities?: Record<string, number>;
+  rationale?: string;
+  latencyMs?: number;
+  jevMs?: number | null;
+  escalationMs?: number | null;
+}
+
+export function decisionOf(e: AgentEvent): Decision | undefined {
+  const d = ((e.data as { decision?: Decision }).decision ?? e.data) as Partial<Decision>;
+  return d.action && (d.id !== undefined) ? ({ ...d, id: String(d.id) } as Decision) : undefined;
+}
+
+/** The newest proposal that no later accepted/rejected event (same id) has closed. */
+export function pendingDecision(events: AgentEvent[], dismissed: Set<string>): Decision | undefined {
+  const closed = new Set(events.filter((e) => e.type === 'decision.accepted' || e.type === 'decision.rejected').map((e) => decisionOf(e)?.id));
+  for (const e of events) {
+    if (e.type !== 'decision.proposed') continue;
+    const d = decisionOf(e);
+    if (d && !closed.has(d.id) && !dismissed.has(d.id)) return d;
+  }
+  return undefined;
+}

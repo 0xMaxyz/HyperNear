@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Hex } from 'viem';
 import { commandTypedData, newCommand, ownerIntentTypedData, type OwnerIntent, type OwnerIntentTypedData } from '@hypernear/client';
-import { AGENT_ACCOUNT, AGENT_URL, CHAIN_TAG, CONTRACT_ID, DEMO_OWNER, getOwner, post, streamEvents, type AgentEvent, type OwnerView } from './api';
-import { Activity, BreakevenCard, LegsTable, short } from './panels';
+import { AGENT_ACCOUNT, AGENT_URL, CHAIN_TAG, CONTRACT_ID, DEMO_OWNER, getOwner, pendingDecision, post, streamEvents, type AgentEvent, type OwnerView } from './api';
+import { Activity, BreakevenCard, DecisionPanel, LegsTable, short } from './panels';
 
 export interface Auth {
   ready: boolean;
@@ -32,6 +32,7 @@ export function App({ auth }: { auth: Auth }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice>();
   const [dry, setDry] = useState(false);
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
   const [agentId, setAgentId] = useState(AGENT_ACCOUNT);
   const [cap, setCap] = useState('50');
@@ -108,7 +109,7 @@ export function App({ auth }: { auth: Auth }) {
     run('legs', async () => {
       const todo = [0, 1].filter((l) => !registered.has(l));
       for (const leg of todo) done(await post('/relay', { owner, intent: { type: 'registerLeg', leg } }), '');
-      return todo.length ? `Registered leg${todo.length > 1 ? 's' : ''} ${todo.join(' and ')}.` : 'Both legs were already registered.';
+      return todo.length ? `Registered leg${todo.length > 1 ? 's' : ''} ${todo.join(' and ')}${dry ? ' (simulated, dry-run)' : ''}.` : 'Both legs were already registered.';
     });
 
   const approvable = legs.filter((l) => l.agent && !l.agent.approvedAt);
@@ -128,7 +129,9 @@ export function App({ auth }: { auth: Auth }) {
   const toggleFreeze = () =>
     run('freeze', async () => {
       const frozen = !policy?.frozen;
-      return done(await ownerIntent({ type: 'freeze', frozen }), frozen ? 'Account frozen. Only your own withdrawals still work' : 'Account unfrozen');
+      const out = await ownerIntent({ type: 'freeze', frozen });
+      const revoked = Array.isArray(out.revoked) ? (out.revoked as { ok: boolean }[]) : [];
+      return done(out, frozen ? `Account frozen${revoked.length ? `, trading keys revoked on ${revoked.filter((r) => r.ok).length} of ${revoked.length} legs` : ''}` : 'Account unfrozen. Approve the agent again to trade');
     });
 
   const ratioOk = /^\d+(\.\d+)?$/.test(ratio) && Number(ratio) > 0 && Number(ratio) <= 1;
@@ -137,6 +140,16 @@ export function App({ auth }: { auth: Auth }) {
       const cmd = newCommand(owner!, open ? 'openHedge' : 'closeHedge', coin, open ? ratio : '0');
       const sig = await auth.sign(commandTypedData(chainTag, contractId, cmd));
       return done(await post(open ? '/hedge/open' : '/hedge/close', { command: cmd, sig }), open ? `Hedge on ${coin} opened at ratio ${ratio}` : `Hedge on ${coin} closed`);
+    });
+
+  const decision = pendingDecision(events, dismissed);
+  const acceptDecision = () =>
+    run('decision', async () => {
+      const d = decision!;
+      // assumption: the agent verifies a Command whose action is the decision's action; contract-dev confirms the exact shape
+      const cmd = newCommand(owner!, d.action as never, d.coin ?? coins[0] ?? 'BTC', d.ratio ?? '0');
+      const sig = await auth.sign(commandTypedData(chainTag, contractId, cmd));
+      return done(await post(`/decision/${encodeURIComponent(d.id)}/accept`, { command: cmd, sig }), `Accepted: ${d.action.replaceAll('_', ' ')}`);
     });
 
   const why = canSign ? undefined : 'Log in to sign';
@@ -250,7 +263,7 @@ export function App({ auth }: { auth: Auth }) {
               <div className="freeze">
                 <div>
                   <strong>{policy?.frozen ? 'Account is frozen' : 'Emergency stop'}</strong>
-                  <p className="muted small">While frozen the contract refuses everything except your own withdrawals.</p>
+                  <p className="muted small">Halts everything the contract signs and revokes the agents' Hyperliquid trading keys. Resting orders stay until cancelled. Withdrawals to you still work.</p>
                 </div>
                 <button className={policy?.frozen ? '' : 'danger'} disabled={locked || legs.length === 0} title={why} onClick={toggleFreeze}>
                   {busy === 'freeze' ? 'Waiting for signature…' : policy?.frozen ? 'Unfreeze' : 'Freeze'}
@@ -259,6 +272,7 @@ export function App({ auth }: { auth: Auth }) {
             </section>
 
             <div className="col">
+              <DecisionPanel d={decision} canSign={canSign} busy={busy === 'decision'} onAccept={acceptDecision} onDismiss={() => setDismissed((s) => new Set(s).add(decision!.id))} />
               <section className="card" aria-labelledby="hedge-h">
                 <h2 id="hedge-h">Hedge</h2>
                 <p className="muted small">
