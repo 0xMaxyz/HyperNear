@@ -15,14 +15,14 @@ const spec = {
   limits: { maxNotional: 100, maxLeverage: 20, maxDailyLoss: 10, topUpCapPerDay: 5 },
   onStop: 'cancel',
 } as const;
-const leg = { clearinghouse: { assetPositions: [{ position: { coin: 'BTC', szi: '0.0009', liquidationPx: '69800' } }] } } as never;
+const legAt = (liquidationPx: string) => ({ clearinghouse: { assetPositions: [{ position: { coin: 'BTC', szi: '0.0009', liquidationPx } }] } }) as never;
 const cases = {
-  losing_budget_used_up: { pnl: { realized: -3, fees: 0.1, unrealized: -2.9, funding: 0, total: -6, fills: 6 }, topUpLeft: 0, attempts: 6, fills: 2, slicesLeft: 4 },
-  healthy_control: { pnl: { realized: 0.2, fees: 0.1, unrealized: 0.3, funding: 0, total: 0.4, fills: 6 }, topUpLeft: 5, attempts: 6, fills: 6, slicesLeft: 4 },
+  losing_budget_used_up: { liq: '69800', pnl: { realized: -3, fees: 0.1, unrealized: -2.9, funding: 0, total: -6, fills: 6 }, topUpLeft: 0, attempts: 6, fills: 2, slicesLeft: 4 },
+  healthy_control: { liq: '50000', pnl: { realized: 0.2, fees: 0.1, unrealized: 0.3, funding: 0, total: 0.4, fills: 6 }, topUpLeft: 5, attempts: 6, fills: 6, slicesLeft: 4 },
 };
 const out: Record<string, unknown> = {};
-for (const [name, c] of Object.entries(cases)) {
-  const input = strategyInput({ owner: '0x2c7536e3605d9c16a7a3d7b1898e529396a65c23' as Hex, spec: spec as never, leg, mid: 75000, annualVol: 0.6, ...c });
+for (const [name, { liq, ...c }] of Object.entries(cases)) {
+  const input = strategyInput({ owner: '0x2c7536e3605d9c16a7a3d7b1898e529396a65c23' as Hex, spec: spec as never, leg: legAt(liq), mid: 75000, annualVol: 0.6, ...c });
   const p = await proposeStrategyAction(input, { ask: jevAskStrategy(), escalate: claudeStrategyEscalator() });
   out[name] = { facts: input.facts, proposal: p };
   console.log(`${name}: ${p.action} (${p.source}, ${p.model}, ${p.latencyMs} ms) factors ${JSON.stringify(Object.fromEntries(Object.entries(p.factors).map(([k, v]) => [k, v.p])))}`);
