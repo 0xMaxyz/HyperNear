@@ -1,0 +1,39 @@
+{
+  "claim": "C4",
+  "title": "MPC-approved agent trades leg0 (order + cancel)",
+  "status": "✅",
+  "at": "2026-11-07T12:32:10.827Z",
+  "network": "testnet",
+  "numbers": {
+    "agentTradedLeg0": true
+  },
+  "refs": {
+    "order": {
+      "status": "ok",
+      "response": {
+        "type": "order",
+        "data": {
+          "statuses": [
+            {
+              "resting": {
+                "oid": 64755250533
+              }
+            }
+          ]
+        }
+      }
+    },
+    "cancel": {
+      "status": "ok",
+      "response": {
+        "type": "cancel",
+        "data": {
+          "statuses": [
+            "success"
+          ]
+        }
+      }
+    }
+  },
+  "notes": []
+}

@@ -1,0 +1,29 @@
+{
+  "claim": "C2",
+  "title": "HL accepts approveAgent signed by MPC from a derived address",
+  "status": "✅",
+  "at": "2026-11-07T12:32:07.622Z",
+  "network": "testnet",
+  "numbers": {
+    "signAndPollMs": 15842,
+    "signGasTGas": 12.13,
+    "agentListed": true
+  },
+  "refs": {
+    "nearSignTx": "6hEDswnziqMfxYxR85TN9vuXb66xY3KkMMSoXEsJQErT",
+    "derivedAddress": "0xff689f4bf14686c751df87304178eacb3c2194e3",
+    "signatureChainId": "0x66eee",
+    "exchange": {
+      "status": "ok",
+      "response": {
+        "type": "default"
+      }
+    },
+    "listedAgent": {
+      "name": "leash-leg0",
+      "address": "0x7bfcce9237bb278b0e166f11955a90595fa9c2c6",
+      "validUntil": 1801830726625
+    }
+  },
+  "notes": []
+}

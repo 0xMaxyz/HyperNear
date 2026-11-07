@@ -1,0 +1,42 @@
+{
+  "claim": "C4",
+  "title": "approved API wallet trades the leg; same agent on a second master",
+  "status": "✅",
+  "at": "2026-11-07T12:28:47.224Z",
+  "network": "testnet",
+  "numbers": {
+    "agentTradedLeg1": true,
+    "sameAgentOnLeg2": "rejected"
+  },
+  "refs": {
+    "order": {
+      "status": "ok",
+      "response": {
+        "type": "order",
+        "data": {
+          "statuses": [
+            {
+              "resting": {
+                "oid": 64755082460
+              }
+            }
+          ]
+        }
+      }
+    },
+    "cancel": {
+      "status": "ok",
+      "response": {
+        "type": "cancel",
+        "data": {
+          "statuses": [
+            "success"
+          ]
+        }
+      }
+    }
+  },
+  "notes": [
+    "second approval rejected: Extra agent already used."
+  ]
+}

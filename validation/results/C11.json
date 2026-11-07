@@ -1,0 +1,39 @@
+{
+  "claim": "C11",
+  "title": "an API wallet can do subAccountTransfer",
+  "status": "✅",
+  "at": "2026-11-07T12:29:49.750Z",
+  "network": "testnet",
+  "numbers": {
+    "startValue": 999,
+    "startVolume": 0,
+    "roundTrips": 3,
+    "volumeUsd": 108024.61,
+    "testUsdcSpentOnFees": 28.571747999999957,
+    "agentCanSubAccountTransfer": true
+  },
+  "refs": {
+    "labWallet": "0x306d1dBe4A4f93f06c8070B047edE9F59e37a2DC",
+    "createSubAccount": {
+      "status": "ok",
+      "response": {
+        "type": "createSubAccount",
+        "data": "0x4c163613b406241f43a5492a917f4c0759670ac5"
+      }
+    },
+    "subAccount": "0x4c163613b406241f43a5492a917f4c0759670ac5",
+    "deposit": {
+      "status": "ok",
+      "response": {
+        "type": "default"
+      }
+    },
+    "withdraw": {
+      "status": "ok",
+      "response": {
+        "type": "default"
+      }
+    }
+  },
+  "notes": []
+}

@@ -1,0 +1,59 @@
+{
+  "claim": "C5",
+  "title": "leg with an open cross position can usdSend up to withdrawable",
+  "status": "✅",
+  "at": "2026-11-07T12:28:56.545Z",
+  "network": "testnet",
+  "numbers": {
+    "withdrawableWithPosition": 22.476295,
+    "accountValue": 23.993175,
+    "positionSzi": "0.0002",
+    "sent": 22.47,
+    "withdrawableAfter": 0.006295,
+    "positionStillOpen": true,
+    "closedPosition": true
+  },
+  "refs": {
+    "open": {
+      "status": "ok",
+      "response": {
+        "type": "order",
+        "data": {
+          "statuses": [
+            {
+              "filled": {
+                "totalSz": "0.0002",
+                "avgPx": "75844.0",
+                "oid": 64755088309
+              }
+            }
+          ]
+        }
+      }
+    },
+    "usdSend": {
+      "status": "ok",
+      "response": {
+        "type": "default"
+      }
+    },
+    "close": {
+      "status": "ok",
+      "response": {
+        "type": "order",
+        "data": {
+          "statuses": [
+            {
+              "filled": {
+                "totalSz": "0.0002",
+                "avgPx": "75836.0",
+                "oid": 64755091322
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "notes": []
+}

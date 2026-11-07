@@ -326,3 +326,19 @@ export function readHexKeyFile(path: string): Hex {
   if (!m) throw new Error(`no 32-byte hex key found in ${path}`);
   return `0x${m[1]}` as Hex;
 }
+
+/** Fresh MPC signature for any user-signed action via contract-dev's sign-action.mjs (about 12-16 s, does not submit). */
+export function signFreshAction(contractDir: string, type: string, path: string, args: Record<string, unknown>) {
+  const out = execFileSync('node', ['contract/scripts/sign-action.mjs', type, path, JSON.stringify(args)], {
+    cwd: contractDir,
+    encoding: 'utf8',
+    timeout: 120_000,
+    maxBuffer: 1 << 20,
+  });
+  return JSON.parse(out.slice(out.indexOf('{'))) as {
+    master: HexAddress;
+    signTx: string;
+    gasTGas: string;
+    exchangeRequest: { action: UserSignedAction; nonce: number; signature: RsvSignature };
+  };
+}

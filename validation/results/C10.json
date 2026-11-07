@@ -1,0 +1,31 @@
+{
+  "claim": "C10",
+  "title": "fresh address receives usdSend and then acts (1 USDC activation fee)",
+  "status": "✅",
+  "at": "2026-11-07T12:29:01.837Z",
+  "network": "testnet",
+  "numbers": {
+    "sent": 5,
+    "receivedTotal": 4,
+    "funderDebit": 5,
+    "activationFee": 1,
+    "totalAfterFirstAction": 4,
+    "feeOnFirstAction": 0
+  },
+  "refs": {
+    "usdSend": {
+      "status": "ok",
+      "response": {
+        "type": "default"
+      }
+    },
+    "firstAction": {
+      "status": "ok",
+      "response": {
+        "type": "default"
+      }
+    },
+    "freshAddress": "0xcaAe712dAd9c944a42DAdc096DbF8178f5838fd6"
+  },
+  "notes": []
+}

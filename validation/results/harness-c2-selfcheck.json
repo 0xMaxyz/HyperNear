@@ -1,0 +1,27 @@
+{
+  "claim": "harness-C2",
+  "title": "harness self-check: local-key approveAgent via submitSignedAction",
+  "status": "✅",
+  "at": "2026-11-07T12:31:46.462Z",
+  "network": "testnet",
+  "numbers": {
+    "agentListed": true
+  },
+  "refs": {
+    "fund": {
+      "status": "ok",
+      "response": {
+        "type": "default"
+      }
+    },
+    "exchange": {
+      "status": "ok",
+      "response": {
+        "type": "default"
+      }
+    },
+    "master": "0xda5E56012c69CB84aFd4E9E9Ea9119974fB615A4",
+    "agent": "0x8AB4806A5A0B26A724326fB7b475c324DEdf0e0c"
+  },
+  "notes": []
+}

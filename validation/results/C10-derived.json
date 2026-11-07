@@ -1,0 +1,30 @@
+{
+  "claim": "C10",
+  "title": "derived (MPC) addresses receive usdSend; activation fee",
+  "status": "✅",
+  "at": "2026-11-07T12:31:50.093Z",
+  "network": "testnet",
+  "numbers": {
+    "test/leg0.sent": 20,
+    "test/leg0.received": 19,
+    "test/leg0.activationFee": 1,
+    "test/leg1.sent": 20,
+    "test/leg1.received": 19,
+    "test/leg1.activationFee": 1
+  },
+  "refs": {
+    "test/leg0.usdSend": {
+      "status": "ok",
+      "response": {
+        "type": "default"
+      }
+    },
+    "test/leg1.usdSend": {
+      "status": "ok",
+      "response": {
+        "type": "default"
+      }
+    }
+  },
+  "notes": []
+}
