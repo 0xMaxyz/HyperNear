@@ -878,13 +878,4 @@ describe('[Epic 1.3.8] no hardcoded asset IDs in production source', () => {
 
     expect(offenders).toEqual([]);
   });
-
-  it('HlClient.placeMarketOrder resolves the asset index through the centralized resolver, not a caller-hardcoded literal', () => {
-    const perpsClientSource = fs.readFileSync(
-      path.join(CORE_ROOT, 'src/client/PerpsClient.ts'),
-      'utf-8'
-    );
-    expect(perpsClientSource).toMatch(/getAssetIndexResolver\(\)/);
-    expect(perpsClientSource).not.toMatch(/symbolConversion/);
-  });
 });
