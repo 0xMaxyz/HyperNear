@@ -163,14 +163,28 @@ export class Decider {
     return r;
   }
 
-  /** `cmd` is already verified (signature, expiry, replay) against the proposal's action. */
-  async accept(id: string, cmd: Command) {
+  /** The open proposal `cmd` (already verified: signature, expiry, replay) is about; `action` is what cmd.action must be. */
+  #open(id: string, cmd: Command, action: string) {
     const r = this.get(id);
     if (cmd.owner !== r.owner) throw new HttpError(403, 'command.owner is not the proposal owner');
-    if (cmd.action !== r.proposal.action || cmd.coin !== r.coin) throw new HttpError(400, `command must be ${r.proposal.action} on ${r.coin}`);
+    if (cmd.action !== action || cmd.coin !== r.coin) throw new HttpError(400, `command must be ${action} on ${r.coin}`);
     if (r.status === 'open' && this.#now() - r.at > (this.d.ttlMs ?? this.d.intervalMs ?? PROPOSE_INTERVAL_MS)) r.status = 'expired';
     if (r.status !== 'open') throw new HttpError(409, `proposal is ${r.status}`);
+    return r;
+  }
+
+  async accept(id: string, cmd: Command) {
+    const r = this.#open(id, cmd, this.get(id).proposal.action);
     return this.#execute(r, false);
+  }
+
+  /** The owner dismisses an open proposal (signed Command, action reject, coin = the proposal's). */
+  reject(id: string, cmd: Command) {
+    const r = this.#open(id, cmd, 'reject');
+    r.status = 'rejected';
+    const out = { id, owner: r.owner, coin: r.coin, action: r.proposal.action, auto: false, reason: 'owner' };
+    this.d.bus.emit(DECISION_EVENTS.rejected, out);
+    return { ...out, status: r.status };
   }
 
   async #execute(r: ProposalRecord, auto: boolean) {

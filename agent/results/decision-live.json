@@ -1,0 +1,159 @@
+{
+  "at": "2026-11-07T15:43:22.031Z",
+  "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+  "contractId": "leash-spike-1107.testnet",
+  "policy": {
+    "maxLeverage": 5,
+    "maxNotionalUsd": 100,
+    "allowedCoins": [
+      "BTC",
+      "ETH"
+    ],
+    "slippage": 0.03
+  },
+  "opened": [
+    {
+      "leg": 0,
+      "szi": "0.00019",
+      "lev": 3
+    },
+    {
+      "leg": 1,
+      "szi": "-0.00019",
+      "lev": 3
+    }
+  ],
+  "openFills": {
+    "leg0": {
+      "totalSz": "0.00019",
+      "avgPx": "75575.0",
+      "oid": 64764827312
+    },
+    "leg1": {
+      "totalSz": "0.00019",
+      "avgPx": "75574.0",
+      "oid": 64764830903
+    }
+  },
+  "proposeMs": 7570,
+  "proposed": {
+    "id": "89bf22c3-7c7f-448b-947f-b1482878b36e",
+    "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+    "coin": "BTC",
+    "action": "hold",
+    "source": "disagree",
+    "flagged": true,
+    "factors": {
+      "hedgeNeeded": {
+        "p": 0.49,
+        "decidedBy": "claude"
+      },
+      "fundingMaterial": {
+        "p": 0.14,
+        "decidedBy": "claude"
+      },
+      "nearLiquidation": {
+        "p": 0.07,
+        "decidedBy": "jev"
+      },
+      "inProfit": {
+        "p": 0.19,
+        "decidedBy": "claude"
+      },
+      "volatile": {
+        "p": 0.24,
+        "decidedBy": "claude"
+      }
+    },
+    "rationale": "Both legs are far from liquidation, coverage is full, funding is neutral, volatility is normal and the market is ranging, so the hedge is cheap to keep and still useful for protection; combined PnL is roughly flat, so there is no profit beyond fees to take. Reserve margin is thin, which argues against adding to the hedge or unwinding it into a directional exposure, so keeping both legs as they are best preserves capital. (Claude: hold; factor table: close_both; took the less risky.)",
+    "latencyMs": 5899,
+    "model": "claude-opus-5-5"
+  },
+  "accept": {
+    "status": 200,
+    "body": {
+      "id": "89bf22c3-7c7f-448b-947f-b1482878b36e",
+      "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+      "coin": "BTC",
+      "action": "hold",
+      "auto": false,
+      "status": "accepted",
+      "orders": [],
+      "result": null
+    }
+  },
+  "after": [
+    {
+      "leg": 0,
+      "szi": "0.00019",
+      "lev": 3
+    },
+    {
+      "leg": 1,
+      "szi": "-0.00019",
+      "lev": 3
+    }
+  ],
+  "closed": [
+    {
+      "leg": 0,
+      "szi": "0",
+      "lev": null
+    },
+    {
+      "leg": 1,
+      "szi": "0",
+      "lev": null
+    }
+  ],
+  "events": [
+    {
+      "type": "decision.proposed",
+      "data": {
+        "id": "89bf22c3-7c7f-448b-947f-b1482878b36e",
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "coin": "BTC",
+        "action": "hold",
+        "source": "disagree",
+        "flagged": true,
+        "factors": {
+          "hedgeNeeded": {
+            "p": 0.49,
+            "decidedBy": "claude"
+          },
+          "fundingMaterial": {
+            "p": 0.14,
+            "decidedBy": "claude"
+          },
+          "nearLiquidation": {
+            "p": 0.07,
+            "decidedBy": "jev"
+          },
+          "inProfit": {
+            "p": 0.19,
+            "decidedBy": "claude"
+          },
+          "volatile": {
+            "p": 0.24,
+            "decidedBy": "claude"
+          }
+        },
+        "rationale": "Both legs are far from liquidation, coverage is full, funding is neutral, volatility is normal and the market is ranging, so the hedge is cheap to keep and still useful for protection; combined PnL is roughly flat, so there is no profit beyond fees to take. Reserve margin is thin, which argues against adding to the hedge or unwinding it into a directional exposure, so keeping both legs as they are best preserves capital. (Claude: hold; factor table: close_both; took the less risky.)",
+        "latencyMs": 5899,
+        "model": "claude-opus-5-5"
+      }
+    },
+    {
+      "type": "decision.accepted",
+      "data": {
+        "id": "89bf22c3-7c7f-448b-947f-b1482878b36e",
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "coin": "BTC",
+        "action": "hold",
+        "auto": false,
+        "orders": [],
+        "result": null
+      }
+    }
+  ]
+}

@@ -6,8 +6,9 @@ import { hypernearDomain, type ChainTag, type OwnerIntentTypedData } from './int
 /** The decision layer's actions (agent/src/decide.ts ACTIONS); accepting a proposal signs one of these. */
 export type DecisionAction = 'hold' | 'close_both' | 'reduce_hedge' | 'add_hedge' | 'take_profit';
 
-/** setDecisionMode: the mode ('off' | 'propose' | 'auto') goes in `coin`, ratio "0". */
-export type CommandAction = 'openHedge' | 'closeHedge' | DecisionAction | 'setDecisionMode';
+/** setDecisionMode: the mode ('off' | 'propose' | 'auto') goes in `coin`, ratio "0". prepareAgents: coin "", ratio "0".
+ * reject: dismisses a proposal, coin = the proposal's coin. */
+export type CommandAction = 'openHedge' | 'closeHedge' | DecisionAction | 'setDecisionMode' | 'prepareAgents' | 'reject';
 
 export interface Command {
   owner: Hex;
