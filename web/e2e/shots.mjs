@@ -74,7 +74,7 @@ await withAgent('hedged', async () => {
   const wide = await page.evaluate(() => {
     const vw = window.innerWidth;
     const rows = [...document.querySelectorAll('html, body, body *')].map((el) => ({ el, r: el.getBoundingClientRect(), sw: el.scrollWidth, cw: el.clientWidth }));
-    const out = rows.filter((x) => x.r.right > vw + 1 || x.sw > x.cw + 1).slice(0, 6).map((x) => `${x.el.tagName}.${x.el.className} right=${Math.round(x.r.right)} sw=${x.sw} cw=${x.cw}`);
+    const out = rows.filter((x) => x.r.right > vw + 1 || x.sw > x.cw + 1).slice(5, 18).map((x) => `${x.el.tagName}.${x.el.className} right=${Math.round(x.r.right)} sw=${x.sw} cw=${x.cw}`);
     return `innerWidth=${vw} docScroll=${document.documentElement.scrollWidth}; ${out.join(' ; ')}`;
   });
   check('no horizontal overflow at 390px', (await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)), wide);
