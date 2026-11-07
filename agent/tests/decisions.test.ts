@@ -165,6 +165,16 @@ describe('Decider', () => {
     await expect(late.dec.accept('p1', cmd())).rejects.toMatchObject({ status: 409, message: 'proposal is expired' });
   });
 
+  it('reject: the owner dismisses an open proposal -> decision.rejected {reason: owner}; then it cannot be accepted', async () => {
+    const { dec, bus, executed } = decider();
+    await dec.run((await dec.prepare(OWNER) as { input: any }).input);
+    expect(() => dec.reject('p1', cmd({ action: 'reduce_hedge' }))).toThrow('command must be reject on BTC');
+    expect(dec.reject('p1', cmd({ action: 'reject' }))).toMatchObject({ id: 'p1', owner: OWNER, reason: 'owner', status: 'rejected' });
+    expect(bus.since().find((x) => x.type === 'decision.rejected')!.data).toMatchObject({ id: 'p1', owner: OWNER, reason: 'owner' });
+    await expect(dec.accept('p1', cmd())).rejects.toMatchObject({ status: 409 });
+    expect(executed).toHaveLength(0);
+  });
+
   it('auto mode: executes unflagged proposals without a signature; flagged and hold wait for the owner', async () => {
     const a = decider({ mode: 'auto' });
     await a.dec.run((await a.dec.prepare(OWNER) as { input: any }).input);

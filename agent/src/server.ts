@@ -4,7 +4,10 @@
 //   POST /hedge/open    {command, sig}: owner-signed EIP-712 Command (action openHedge, expiry <= 60 s, fresh nonce)
 //   POST /hedge/close   {command, sig}: same, action closeHedge. Both also need the owner's setPolicy opt-in.
 //   POST /decision/propose        {owner}: queue a proposal now (202; it arrives on /events as decision.proposed)
+//   POST /agents/prepare          {command, sig}: action prepareAgents; creates one HL agent key per registered leg and
+//                                 enrols the owner in the guard/decision loops (GET /owner never creates state)
 //   POST /decision/:id/accept     {command, sig}: command.action/coin must equal the proposal's; executed within the order policy
+//   POST /decision/:id/reject     {command, sig}: action reject, coin = the proposal's; emits decision.rejected {reason:'owner'}
 //   POST /decision/mode           {command, sig}: action setDecisionMode, mode ('off'|'propose'|'auto') in command.coin
 //   GET  /events        SSE: hedge, guard and decision log
 // The guard loop (guardLoop.ts) runs in the same process when the NEAR agent key is set.
@@ -113,6 +116,8 @@ export function handler(d: Deps) {
           owner,
           config: { contractId: d.client.contractId, chainTag: cfg.chain_tag, agentAccount: d.config.nearAgent?.accountId ?? null, hlNetwork: cfg.hl_mainnet ? 'mainnet' : 'testnet' },
           legs: snapshot.legs.map((l) => ({ leg: l.leg, address: l.address, agent: l.agent && { address: l.agent.address, name: l.agent.name, approvedAt: l.agent.approvedAt ?? null } })),
+          // GET never creates state: keys appear after the owner's signed prepareAgents
+          needsPrepare: snapshot.legs.some((l) => !l.agent),
           pendingApprovals: pendingApprovals(snapshot),
           snapshot,
           policy,
@@ -132,8 +137,16 @@ export function handler(d: Deps) {
         d.bus.emit('relay', out);
         if (out.kind === 'approveAgent' && out.ok && d.legs.keys.get(out.owner, out.leg)?.address === out.agent) d.legs.keys.markApproved(out.owner, out.leg);
         // a revoked key is never approved again: the next /owner shows a fresh key to approve
-        if (out.kind === 'freeze') for (const r of out.revoked) if (r.ok) d.legs.keys.ensure(out.owner, r.leg, true);
+        if (out.kind === 'freeze') for (const r of out.revoked) if (r.ok && d.legs.keys.get(out.owner, r.leg)) d.legs.keys.ensure(out.owner, r.leg, true);
         return reply(200, out);
+      }
+      if (req.method === 'POST' && url.pathname === '/agents/prepare') {
+        const cmd = await verifyCommand(verifier(d), await readJson(req), 'prepareAgents');
+        const legs = await d.legs.prepare(cmd.owner).catch((e) => {
+          throw new HttpError(403, (e as Error).message);
+        });
+        d.bus.emit('agents.prepared', { owner: cmd.owner, legs: legs.map((l) => ({ leg: l.leg, agent: l.agent.address })) });
+        return reply(200, { owner: cmd.owner, legs, pendingApprovals: pendingApprovals({ legs } as unknown as OwnerSnapshot) });
       }
       if (req.method === 'POST' && url.pathname === '/decision/propose') {
         if (!d.relayer.limiter.allow(req.socket.remoteAddress ?? 'unknown')) throw new HttpError(429, 'rate limited');
@@ -154,11 +167,12 @@ export function handler(d: Deps) {
         d.bus.emit('decision.mode', { owner: cmd.owner, mode });
         return reply(200, { owner: cmd.owner, mode });
       }
-      const accept = /^\/decision\/([\w-]{1,64})\/accept$/.exec(url.pathname);
-      if (req.method === 'POST' && accept) {
+      const decision = /^\/decision\/([\w-]{1,64})\/(accept|reject)$/.exec(url.pathname);
+      if (req.method === 'POST' && decision) {
         if (!d.decider) throw new HttpError(503, 'decision layer off');
-        const id = accept[1]!;
-        const cmd = await verifyCommand(verifier(d), await readJson(req), d.decider.get(id).proposal.action);
+        const [, id, verb] = decision as unknown as [string, string, 'accept' | 'reject'];
+        const cmd = await verifyCommand(verifier(d), await readJson(req), verb === 'reject' ? 'reject' : d.decider.get(id).proposal.action);
+        if (verb === 'reject') return reply(200, d.decider.reject(id, cmd));
         await assertOptedIn(d, cmd.owner);
         return reply(200, await d.decider.accept(id, cmd));
       }

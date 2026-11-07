@@ -217,19 +217,41 @@ describe('approveAgent end to end', () => {
 
   async function setup(hlReply: unknown) {
     const keysDir = mkdtempSync(join(tmpdir(), 'hypernear-'));
-    const agent = new AgentKeyStore(keysDir).ensure(OWNER, 0).address;
+    const store = new AgentKeyStore(keysDir); // as after the owner's prepareAgents
+    const agent = store.ensure(OWNER, 0).address;
+    store.ensure(OWNER, 1);
     const { d } = deps({ value: signOut(agent) });
     const legs = new Legs({ client: d.client, dataDir: keysDir, network: 'testnet', coins: ['BTC'] });
-    // the live snapshot creates each registered leg's key (Legs.snapshot -> keys.ensure); HL is not reachable here
+    // as Legs.snapshot: the stored key per leg (HL is not reachable here)
     legs.snapshot = async () => {
       const s = snap(ch(), ch());
-      return { ...s, legs: s.legs.map((l) => ({ ...l, agent: legs.keys.ensure(OWNER, l.leg) })) };
+      return { ...s, legs: s.legs.map((l) => ({ ...l, agent: legs.keys.get(OWNER, l.leg) ?? null })) };
     };
     const posted: any[] = [];
     const deps2: Deps = { ...d, legs, relayer: new Relayer(d.client, new RateLimiter(5), async (b) => (posted.push(b), hlReply), d.bus) };
     return { d: deps2, agent, posted, base: await serve(deps2) };
   }
   const intent = (agent: string) => ({ type: 'approveAgent', leg: 0, agent, agentName: AGENT_NAME, hlNonce: 123 });
+
+  it('GET /owner creates no state; the signed prepareAgents creates the keys and enrols the owner', async () => {
+    const { d } = deps();
+    const legs = new Legs({ client: d.client, dataDir: mkdtempSync(join(tmpdir(), 'hypernear-')), network: 'testnet', coins: ['BTC'] });
+    legs.snapshot = async () => {
+      const s = snap(ch());
+      return { ...s, legs: [{ ...s.legs[0]!, agent: legs.keys.get(OWNER, 0) ?? null }] };
+    };
+    const base = await serve({ ...d, legs });
+    const before = await (await fetch(`${base}/owner/${OWNER}`)).json();
+    expect(before).toMatchObject({ needsPrepare: true, pendingApprovals: [] });
+    expect(before.legs[0].agent).toBeNull();
+    expect(legs.keys.owners()).toEqual([]);
+    expect((await post(`${base}/agents/prepare`, { owner: OWNER })).status).toBe(401);
+    const r = await (await post(`${base}/agents/prepare`, await signed(newCommand(OWNER, 'prepareAgents', '')))).json();
+    expect(r.legs.map((l: any) => l.leg)).toEqual([0]); // the registered legs
+    expect(r.pendingApprovals[0]).toMatchObject({ type: 'approveAgent', leg: 0, agent: legs.keys.get(OWNER, 0)!.address, agentName: 'leash-leg0' });
+    expect(legs.keys.owners()).toEqual([OWNER]);
+    expect((await (await fetch(`${base}/owner/${OWNER}`)).json()).needsPrepare).toBe(false);
+  });
 
   it('/owner lists every leg key still to approve with the exact intent fields, plus config', async () => {
     const { base, agent } = await setup({ status: 'ok' });
@@ -294,6 +316,8 @@ describe('decision routes', () => {
     expect(executed).toHaveLength(1);
     // a fresh nonce: the replay cache would answer 401 first
     expect((await post(`${base}/decision/p-1/accept`, await signed(newCommand(OWNER, 'reduce_hedge', 'BTC', '0', 30, Date.now() + 7)))).status).toBe(409);
+    const rej = await post(`${base}/decision/p-1/reject`, await signed(newCommand(OWNER, 'reject', 'BTC', '0', 30, Date.now() + 9)));
+    expect(rej.status).toBe(409); // already accepted; the route verified the signed reject first
     const o = await (await fetch(`${base}/owner/${OWNER}`)).json();
     expect(o.decision).toMatchObject({ mode: 'propose', latest: { id: 'p-1', status: 'accepted' } });
   });

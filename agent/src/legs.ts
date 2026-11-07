@@ -35,7 +35,7 @@ export class AgentKeyStore {
     chmodSync(tmp, 0o600);
     renameSync(tmp, this.#file);
   }
-  /** Owners this service holds agent keys for (the guard watches them). */
+  /** Owners this service holds agent keys for: only owners who signed prepareAgents (the guard and decision loops watch them). */
   owners(): Hex[] {
     return Object.keys(this.#read()) as Hex[];
   }
@@ -74,7 +74,7 @@ export class AgentKeyStore {
 export interface LegState {
   leg: number;
   address: Hex;
-  /** null only in old fixtures: the live snapshot creates the key */
+  /** null until the owner's signed prepareAgents (POST /agents/prepare) creates the key */
   agent: { address: Hex; name: string; approvedAt?: number } | null;
   clearinghouse: HlClearinghouseState;
   spotUsdc: number;
@@ -119,8 +119,7 @@ export class Legs {
           this.hl.spotClearinghouseState({ user: address }),
         ]);
         const spotUsdc = Number(spot.balances.find((b) => b.coin === 'USDC')?.total ?? 0);
-        // ensure: the owner signs an approveAgent naming this key, so it must exist before the UI asks for that signature
-        return { leg, address, agent: this.keys.ensure(o, leg), clearinghouse, spotUsdc };
+        return { leg, address, agent: this.keys.get(o, leg) ?? null, clearinghouse, spotUsdc };
       })
     );
     return { owner: o, at: Date.now(), legs, market };
@@ -151,6 +150,14 @@ export class Legs {
       out.push({ leg, agent: agent.address, approved: 'now' });
     }
     return out;
+  }
+
+  /** Owner-signed prepareAgents: one key per registered leg (existing keys kept). Returns the registered legs' agents. */
+  async prepare(owner: Hex) {
+    const o = owner.toLowerCase() as Hex;
+    const regs = await this.registered(o);
+    if (!regs.length) throw new Error(`owner ${o} has no registered leg; register_leg first`);
+    return regs.map(({ leg, address }) => ({ leg, address, agent: this.keys.ensure(o, leg) }));
   }
 
   /** HlClient that trades the leg with its agent key (L1 actions: orders, leverage). */
