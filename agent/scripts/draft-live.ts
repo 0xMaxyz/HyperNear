@@ -21,7 +21,7 @@ const client = new HyperNearClient({ contractId, sender: nearAccount(contractId,
 const ow = privateKeyToAccount(PUBLIC_TEST_OWNER_KEY as Hex).address.toLowerCase() as Hex;
 const legs = new Legs({ client, dataDir: `${homedir()}/.hypernear-agent-data`, network: 'testnet', coins: ['BTC', 'ETH'] });
 const policy = { maxLeverage: 5, maxNotionalUsd: 100, allowedCoins: ['BTC', 'ETH'], slippage: 0.03 };
-const strategies = new StrategyManager({ legs, client, policy, emit: () => {}, agentId: `fcagent.${contractId}` });
+const strategies = new StrategyManager({ legs, client, policy, emit: () => {}, agentId: `fcagent.${contractId}`, hedgeReserveUsd: 20 });
 const draft = drafter({
   ask: claudeAsk(),
   context: (o, id) => strategies.context(o, id),
