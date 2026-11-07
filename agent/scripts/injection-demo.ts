@@ -67,7 +67,7 @@ const errorShapes: unknown[] = [];
 
 /** Best effort: where near-api-js puts the transaction hash on an execution error. */
 function txHashOf(x: any): string {
-  return String(x?.transaction_outcome?.id ?? x?.context?.transactionHash ?? x?.transactionHash ?? x?.data?.transaction_outcome?.id ?? x?.cause?.transaction_outcome?.id ?? x?.cause?.transactionHash ?? 'unknown');
+  return String(x?.transactionResult?.transaction_outcome?.id ?? x?.transactionResult?.transaction?.hash ?? x?.transaction_outcome?.id ?? x?.context?.transactionHash ?? x?.transactionHash ?? x?.data?.transaction_outcome?.id ?? x?.cause?.transaction_outcome?.id ?? x?.cause?.transactionHash ?? 'unknown');
 }
 
 function panicOf(status: any): string {
@@ -88,7 +88,7 @@ async function rebalanceTool(args: Record<string, unknown>) {
     const txHash = txHashOf(x);
     const msg = String(x?.message ?? e);
     const panic = msg.match(/Smart contract panicked: [^\n"]*/)?.[0] ?? msg.slice(0, 300);
-    errorShapes.push({ name: x?.name, keys: Object.keys(x ?? {}), txHash });
+    errorShapes.push({ name: x?.name, keys: Object.keys(x ?? {}), resultKeys: Object.keys(x?.transactionResult ?? {}), txHash });
     chainRejections.push({ method: 'rebalance', txHash, panic });
     throw new Error(`contract rejected rebalance (NEAR tx ${txHash}): ${panic}`);
   }
