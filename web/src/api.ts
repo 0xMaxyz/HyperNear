@@ -212,6 +212,8 @@ export interface StrategyStatus {
   held?: unknown;
   resting?: number;
   twap?: { done: number; skipped: number; filledSize?: string };
+  /** the stored spec: what a resume signs the hash of */
+  spec?: StrategySpec;
 }
 
 /** Canonical JSON (keys sorted), the same as agent/src/strategy/spec.ts canonicalJson, so the hash can be recomputed here. */
