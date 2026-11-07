@@ -153,3 +153,11 @@ label input, label select { color: var(--ink); }
   td.num { text-align: left; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+td[data-label='Leg'] { min-width: 96px; }
+.big-action { font-size: 22px; font-weight: 650; text-transform: capitalize; margin: 4px 0 8px; }
+.probs { list-style: none; display: grid; gap: 6px; margin: 10px 0; }
+.probs li { display: grid; grid-template-columns: 1fr 120px 44px; gap: 10px; align-items: center; font-size: 14px; }
+.probs .num { text-align: right; }
+meter { width: 100%; height: 10px; }
+.rationale { margin: 8px 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 4px; overflow-wrap: anywhere; }

@@ -1,4 +1,21 @@
-import type { AgentEvent, GuardRow, LegSnap, OwnerView, Position } from './api';
+import { decisionOf, type AgentEvent, type Decision, type GuardRow, type LegSnap, type OwnerView, type Position } from './api';
+
+const SOURCES: Record<string, string> = {
+  jev: 'Jev',
+  jev_factors: 'Jev',
+  claude_agrees: 'Claude agreed with Jev',
+  claude_for_undecided: 'Claude, for the factors Jev could not decide',
+  less_risky_of_two: 'Jev and Claude disagreed, the less risky action was taken',
+  claude_only: 'Claude only, Jev was unavailable',
+  fallback_hold: 'fallback to hold, both models failed',
+};
+const FACTORS: Record<string, string> = {
+  hedgeNeeded: 'Hedge still needed',
+  fundingMaterial: 'Funding cost material',
+  nearLiquidation: 'A leg near liquidation',
+  inProfit: 'In profit beyond fees',
+  volatile: 'Market volatile',
+};
 
 const missing = (s: unknown) => s === null || s === undefined || s === '' || Number.isNaN(Number(s));
 const n = (s: string | number | null | undefined, dp = 2, min = 0) =>
@@ -57,7 +74,10 @@ export function LegsTable({ view, loading, error }: { view?: OwnerView; loading:
             const ps = l.clearinghouse.assetPositions.map((a) => a.position).filter((p) => Number(p.szi) !== 0);
             return (
               <tr key={l.leg}>
-                <td data-label="Leg"><strong>{l.leg}</strong></td>
+                <td data-label="Leg">
+                  <strong>{l.leg}</strong>
+                  {ROLES[l.leg] && <div className="muted small">{ROLES[l.leg]}</div>}
+                </td>
                 <td data-label="Address">
                   <Addr a={l.address} />
                   <br />
@@ -100,18 +120,13 @@ export function LegsTable({ view, loading, error }: { view?: OwnerView; loading:
   );
 }
 
-interface BeRow { coin: string; kind: string; price?: number; lockedPnl?: number; feesPaid?: number; netFunding?: number }
+/** agent/src/pnl.ts CoinBreakeven, one entry per coin held. */
+interface BeRow { coin: string; kind: string; breakEvenPx: number | null; lockedPnl: number | null; feesPaid: number; netFunding: number; estCloseFees: number; netSize: number }
 
-/** Tolerant on purpose: contract-dev's shape is "per coin: break-even price or locked PnL, fees paid, net funding". */
-function parseBreakeven(b: unknown): BeRow[] {
-  if (!b || typeof b !== 'object') return [];
-  const entries: [string, Record<string, any>][] = Array.isArray(b) ? b.map((v) => [String(v.coin), v]) : Object.entries(b as object);
-  return entries.map(([coin, v]) => {
-    const be = v.breakeven ?? v;
-    const kind = String(be.kind ?? (be.price !== undefined ? 'price' : be.lockedPnl !== undefined ? 'locked' : 'unknown'));
-    return { coin, kind, price: be.price, lockedPnl: be.lockedPnl, feesPaid: v.feesPaid ?? be.feesPaid, netFunding: v.netFunding ?? be.netFunding };
-  });
-}
+const parseBreakeven = (b: unknown): BeRow[] => (Array.isArray(b) ? (b as BeRow[]) : []);
+
+/** Leg roles of the demo layout (agent fixtures and the README flow). */
+const ROLES: Record<number, string> = { 0: 'long', 1: 'hedge', 2: 'reserve, source for the guard' };
 
 export function BreakevenCard({ view }: { view?: OwnerView }) {
   const rows = parseBreakeven(view?.breakeven);
@@ -126,12 +141,16 @@ export function BreakevenCard({ view }: { view?: OwnerView }) {
           <dl key={r.coin} className="kv">
             <dt>{r.coin}</dt>
             <dd className="big">
-              {r.kind === 'price' ? usd(r.price) : r.kind === 'locked' ? `Locked at ${usd(r.lockedPnl)}` : r.kind === 'always_profitable' ? 'In profit at every price' : r.kind === 'never_profitable' ? 'At a loss at every price' : 'n/a'}
+              {r.kind === 'price' ? usd(r.breakEvenPx) : r.kind === 'locked' ? `Locked at ${usd(r.lockedPnl)}` : r.kind === 'always_profitable' ? 'In profit at every price' : r.kind === 'never_profitable' ? 'At a loss at every price' : 'n/a'}
             </dd>
+            <dt>Net size</dt>
+            <dd>{n(r.netSize, 5)} {r.coin}</dd>
             <dt>Fees paid</dt>
             <dd>{usd(r.feesPaid, 4)}</dd>
             <dt>Net funding</dt>
             <dd>{usd(r.netFunding, 4)}</dd>
+            <dt>Est. close fees</dt>
+            <dd>{usd(r.estCloseFees, 4)}</dd>
           </dl>
         ))
       )}
@@ -156,14 +175,66 @@ function summarize(e: AgentEvent): string {
     case 'guard.error':
       return `${who}guard error: ${d.error}`;
     case 'guard.rebalance.start':
-      return `${who}rebalance ${d.amount ?? ''} from leg ${d.fromLeg ?? '?'} to leg ${d.toLeg ?? '?'}`;
+      return `${who}rebalance $${d.amount ?? '?'} from leg ${d.from?.leg ?? '?'} to leg ${d.to?.leg ?? '?'}`;
     case 'guard.rebalance.signed':
       return `${who}rebalance signed by NEAR, tx ${short(String(d.txHash ?? ''))}${d.ms ? `, ${(d.ms / 1000).toFixed(1)} s` : ''}`;
+    case 'stress.marginMoved':
+      return `stress test: $${d.movedToSpot} moved out of margin`;
+    case 'stress.posted':
+      return `stress test: short ${d.addedShort} added at ${d.leverage}x`;
+    case 'agents.revoked': {
+      const ls = (d.legs as { leg: number; ok: boolean }[] | undefined) ?? [];
+      return `${who}trading keys revoked on Hyperliquid: ${ls.filter((l) => l.ok).length} of ${ls.length} legs${ls.some((l) => !l.ok) ? `, failed on ${ls.filter((l) => !l.ok).map((l) => l.leg).join(', ')}` : ''}`;
+    }
+    case 'decision.proposed':
+    case 'decision.accepted':
+    case 'decision.rejected': {
+      const x = decisionOf(e);
+      return `${e.type.slice(9)}: ${x ? `${x.action.replaceAll('_', ' ')} (${SOURCES[x.source] ?? x.source})` : JSON.stringify(d).slice(0, 100)}`;
+    }
     case 'guard.rebalance.posted':
       return `${who}rebalance posted to Hyperliquid${d.ms ? ` after ${(d.ms / 1000).toFixed(1)} s` : ''}`;
     default:
       return `${who}${JSON.stringify(d).slice(0, 140)}`;
   }
+}
+
+export function DecisionPanel({ d, canSign, busy, onAccept, onDismiss }: { d?: Decision; canSign: boolean; busy: boolean; onAccept: () => void; onDismiss: () => void }) {
+  const latency = d?.latencyMs ?? ((d?.jevMs ?? 0) + (d?.escalationMs ?? 0) || undefined);
+  const probs = d?.factors ?? d?.probabilities;
+  return (
+    <section className="card" aria-labelledby="dec-h">
+      <h2 id="dec-h">Decision</h2>
+      {!d ? (
+        <p className="state">No proposal waiting. When the agent suggests an action, the reasoning and the Accept button appear here. Nothing runs until you accept.</p>
+      ) : (
+        <>
+          <p className="big-action">{d.action.replaceAll('_', ' ')}{d.coin ? ` on ${d.coin}` : ''}</p>
+          <dl className="kv">
+            <dt>Source</dt>
+            <dd className={d.flagged ? 'flag' : ''}>{SOURCES[d.source] ?? d.source}{d.flagged ? ', needs your attention' : ''}</dd>
+            {latency !== undefined && (<><dt>Latency</dt><dd>{(latency / 1000).toFixed(1)} s</dd></>)}
+          </dl>
+          {probs && (
+            <ul className="probs" aria-label={d.factors ? 'Probability of yes per factor' : 'Probability per action'}>
+              {Object.entries(probs).map(([k, v]) => (
+                <li key={k}>
+                  <span>{FACTORS[k] ?? k.replaceAll('_', ' ')}</span>
+                  <meter min={0} max={1} value={v} aria-label={`${k} ${(v * 100).toFixed(0)} percent`} />
+                  <span className="num">{(v * 100).toFixed(0)}%</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {d.rationale && <p className="rationale">{d.rationale}</p>}
+          <div className="actions">
+            <button className="primary" disabled={!canSign || busy} title={canSign ? undefined : 'Log in to sign'} onClick={onAccept}>{busy ? 'Waiting for signature…' : 'Accept and sign'}</button>
+            <button disabled={busy} onClick={onDismiss}>Dismiss</button>
+          </div>
+        </>
+      )}
+    </section>
+  );
 }
 
 export function Activity({ events, stream }: { events: AgentEvent[]; stream: 'live' | 'down' | 'connecting' }) {
