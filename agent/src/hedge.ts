@@ -34,6 +34,7 @@ function marketOf(s: OwnerSnapshot, coin: string) {
   return a && mid > 0 ? { ...a, mid } : undefined;
 }
 
+const cents = (x: number) => Math.round(x * 100) / 100;
 const legOf = (s: OwnerSnapshot, i: number) => s.legs.find((l) => l.leg === i);
 const ioc = (mid: number, isBuy: boolean, slippage: number, szDecimals: number) =>
   roundPx(mid * (isBuy ? 1 + slippage : 1 - slippage), szDecimals);
@@ -55,7 +56,7 @@ export function planOpenHedge(s: OwnerSnapshot, coin: string, ratio: number, pol
   if (leverage > policy.maxLeverage) return { ok: false, reason: `leverage ${leverage}x above policy max ${policy.maxLeverage}x` };
   if (leverage > m.maxLeverage) return { ok: false, reason: `leverage ${leverage}x above ${coin} max ${m.maxLeverage}x` };
   const size = floorSize(Math.abs(szi) * ratio, m.szDecimals);
-  const notionalUsd = Number(size) * m.mid;
+  const notionalUsd = cents(Number(size) * m.mid);
   if (Number(size) <= 0 || notionalUsd < HL_MIN_NOTIONAL_USD) {
     return { ok: false, reason: `hedge notional $${notionalUsd.toFixed(2)} below HL minimum $${HL_MIN_NOTIONAL_USD}` };
   }
@@ -78,7 +79,7 @@ export function planCloseHedge(s: OwnerSnapshot, coin: string, policy: OrderPoli
     if (szi === 0) continue;
     const isBuy = szi < 0;
     const size = Math.abs(szi).toFixed(m.szDecimals);
-    orders.push({ leg: l.leg, coin, asset: m.asset, isBuy, size, price: ioc(m.mid, isBuy, policy.slippage, m.szDecimals), reduceOnly: true, notionalUsd: Number(size) * m.mid });
+    orders.push({ leg: l.leg, coin, asset: m.asset, isBuy, size, price: ioc(m.mid, isBuy, policy.slippage, m.szDecimals), reduceOnly: true, notionalUsd: cents(Number(size) * m.mid) });
   }
   return orders.length ? { ok: true, orders } : { ok: false, reason: `no ${coin} position on legs 0/1` };
 }

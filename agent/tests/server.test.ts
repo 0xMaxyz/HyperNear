@@ -83,7 +83,9 @@ function deps(o: { owner?: Record<string, unknown> | null; legs?: Record<number,
 }
 
 let server: Server | undefined;
-afterEach(() => server?.close());
+afterEach(() => {
+  server?.close();
+});
 
 async function serve(d: Deps) {
   server = createServer(handler(d));
