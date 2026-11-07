@@ -12,7 +12,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { HyperNearClient, NearMasterSigner, nearAccount, ownerIntentTypedData, type OwnerIntent } from '@hypernear/client';
 import { EventBus } from '../src/events.ts';
 import { Legs } from '../src/legs.ts';
-import { agentKeySigner, hlClient, position, roundPx } from '../src/market.ts';
+import { agentKeySigner, hlClient, position } from '../src/market.ts';
 import { StrategyManager } from '../src/strategy/manager.ts';
 import { hlPort } from '../src/strategy/port.ts';
 
@@ -114,7 +114,6 @@ const gridAround = (mid: number) => {
     onStop: 'flatten',
   };
 };
-const sizePerLevel = gridAround(await midNow()).params.sizePerLevel;
 
 const events: { t: number; type: string; data: unknown }[] = [];
 const t0 = Date.now();
