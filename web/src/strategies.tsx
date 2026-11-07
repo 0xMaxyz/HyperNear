@@ -19,6 +19,12 @@ export function describe(spec: StrategySpec): string {
 }
 
 function eventLine(e: AgentEvent): string {
+  const base = eventText(e);
+  const d = e.data as Record<string, any>;
+  return base + (d.recorded ? ' (recorded)' : d.simulated ? ' (simulated)' : '');
+}
+
+function eventText(e: AgentEvent): string {
   const d = e.data as Record<string, any>;
   const id = d.id ? `${d.id}: ` : '';
   switch (e.type) {
@@ -41,7 +47,7 @@ function eventLine(e: AgentEvent): string {
     default: return `${id}${JSON.stringify(d).slice(0, 120)}`;
   }
 }
-const bad = (t: string) => /refused|rejected|error|lost|skipped/.test(t);
+const bad = (t: string) => /refused|rejected|error|lost|skipped:/.test(t);
 
 type Draft = { kind: 'ok'; text: string; res: DraftOk; hashOk: boolean | null } | { kind: 'refused'; text: string; errors: string[]; draft?: unknown };
 
@@ -88,7 +94,14 @@ export function StrategiesPanel(p: {
 
   const doDraft = () =>
     act('draft', async () => {
-      const out = (await post('/strategy/draft', { owner: p.owner, text })) as Partial<DraftOk> & Partial<DraftRefused> & { error?: string };
+      // 200 {ok:true, spec, ...}; 422 {ok:false, errors, draft?} when the agent refuses the draft; 400 bad text; 503 builder off
+      let out: Partial<DraftOk> & Partial<DraftRefused> & { error?: string };
+      try {
+        out = (await post('/strategy/draft', { owner: p.owner, text })) as typeof out;
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 422 && Array.isArray(e.body.errors)) out = e.body as typeof out;
+        else throw e;
+      }
       if (out.ok === false || !out.spec) {
         setDraft({ kind: 'refused', text, errors: out.errors ?? [out.error ?? 'The agent returned no strategy.'], draft: out.draft });
         return 'The draft was refused. Nothing was started.';
@@ -112,6 +125,16 @@ export function StrategiesPanel(p: {
       setDraft(undefined);
       setText('');
       return `Strategy ${spec.id} started on leg ${spec.leg}.`;
+    });
+
+  /** Resume = a signed startStrategy whose coin is the strategy id and whose specHash is the stored spec's hash. */
+  const resume = (r: StrategyStatus) =>
+    act(`resume:${r.id}`, async () => {
+      if (!r.spec) throw new Error('The agent did not send the stored spec, so there is nothing to hash.');
+      const command = newCommand(p.owner!, 'startStrategy', r.id, '0', 30, Date.now(), await specHashOf(r.spec));
+      const sig = await p.sign(command);
+      await post('/strategy/resume', { command, sig });
+      return `Strategy ${r.id} resumed.`;
     });
 
   const op = (verb: 'pause' | 'stop', id: string) =>
@@ -234,7 +257,11 @@ export function StrategiesPanel(p: {
                       <td data-label="Resting" className="num">{r.resting ?? 0}</td>
                       <td data-label="Controls">
                         <div className="actions tight">
-                          <button disabled={!p.canSign || busy !== null || r.state !== 'running'} title={why} onClick={() => op('pause', r.id)}>{busy === `pause:${r.id}` ? 'Signing…' : 'Pause'}</button>
+                          {r.state === 'paused' ? (
+                            <button disabled={!p.canSign || busy !== null || !r.spec} title={why} onClick={() => resume(r)}>{busy === `resume:${r.id}` ? 'Signing…' : 'Resume'}</button>
+                          ) : (
+                            <button disabled={!p.canSign || busy !== null || r.state !== 'running'} title={why} onClick={() => op('pause', r.id)}>{busy === `pause:${r.id}` ? 'Signing…' : 'Pause'}</button>
+                          )}
                           <button className="danger" disabled={!p.canSign || busy !== null || r.state === 'stopped' || r.state === 'done'} title={why} onClick={() => op('stop', r.id)}>{busy === `stop:${r.id}` ? 'Signing…' : 'Stop'}</button>
                         </div>
                       </td>
