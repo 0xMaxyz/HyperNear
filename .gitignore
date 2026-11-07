@@ -18,3 +18,7 @@ out/**/*.key
 
 # contract-dev spike outputs (derived addresses, signatures); never commit
 contract/out/
+
+# demo video renders (made by web/e2e/demo-video.mjs on ci32)
+demo/*.webm
+demo/*.mp4
