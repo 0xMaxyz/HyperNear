@@ -16,6 +16,8 @@ export interface PlaceRequest {
   px: string;
   sz: string;
   reduceOnly: boolean;
+  /** Alo: post-only (grid); Ioc: take what the book gives within the price (twap) */
+  tif?: 'Alo' | 'Ioc';
 }
 
 export interface TradingPort {
@@ -28,7 +30,7 @@ export interface TradingPort {
   equity(): Promise<number>;
   setLeverage(asset: number, leverage: number): Promise<void>;
   /** Post-only limit order; `error` carries the exchange's refusal (e.g. it would have crossed). */
-  place(o: PlaceRequest): Promise<{ oid?: string; error?: string }>;
+  place(o: PlaceRequest): Promise<{ oid?: string; error?: string; fill?: { sz: number; px: number } }>;
   cancel(asset: number, oids: string[]): Promise<void>;
   /** Reduce-only IOC that closes the coin's position. */
   flatten(coin: string): Promise<void>;
@@ -65,10 +67,11 @@ export async function hlPort(legs: Legs, owner: Hex, leg: number, slippage = 0.0
     },
     async place(o) {
       try {
-        const res = await hl.limitOrderOpen({ asset: o.asset, isBuy: o.isBuy, price: o.px, size: o.sz, tif: 'Alo', reduceOnly: o.reduceOnly });
+        const res = await hl.limitOrderOpen({ asset: o.asset, isBuy: o.isBuy, price: o.px, size: o.sz, tif: o.tif ?? 'Alo', reduceOnly: o.reduceOnly });
         const st = res.response.data.statuses[0] as Record<string, any> | undefined;
         if (!st || 'error' in st) return { error: st ? String(st.error) : 'no status' };
-        return { oid: String((st.resting ?? st.filled).oid) };
+        const f = st.filled as { totalSz: string; avgPx: string } | undefined;
+        return { oid: String((st.resting ?? st.filled).oid), ...(f && { fill: { sz: Number(f.totalSz), px: Number(f.avgPx) } }) };
       } catch (e) {
         // core throws the exchange's verdict (e.g. a post-only order that would have crossed): an order outcome, not a fault
         if (e instanceof RelayRejectionError) return { error: e.reason };

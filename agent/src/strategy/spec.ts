@@ -8,10 +8,12 @@ import type { OrderPolicy } from '../config.ts';
 /** Hyperliquid's minimum order value (USD). */
 export const HL_MIN_NOTIONAL_USD = 10;
 const MAX_LEVELS = 20;
+const MAX_SLICES = 50;
+const MIN_INTERVAL_SEC = 10;
 const ID = /^[a-z0-9][a-z0-9_-]{0,31}$/;
 const DECIMAL = /^\d+(\.\d+)?$/;
 
-export const STRATEGY_TYPES = ['grid'] as const;
+export const STRATEGY_TYPES = ['grid', 'twap'] as const;
 export type StrategyType = (typeof STRATEGY_TYPES)[number];
 
 export interface GridParams {
@@ -21,6 +23,17 @@ export interface GridParams {
   levels: number;
   /** base-coin size of one level, decimal string */
   sizePerLevel: string;
+}
+
+export interface TwapParams {
+  side: 'buy' | 'sell';
+  /** base-coin size of one slice, decimal string */
+  sizePerSlice: string;
+  slices: number;
+  /** seconds between slices (DCA: hours or days) */
+  intervalSec: number;
+  /** a buy never pays more than this, a sell never receives less; a slice outside it is skipped */
+  limitPx: number;
 }
 
 export interface StrategyLimits {
@@ -33,16 +46,23 @@ export interface StrategyLimits {
   topUpCapPerDay: number;
 }
 
-export interface StrategySpec {
+interface SpecBase {
   id: string;
-  type: StrategyType;
   leg: number;
   coin: string;
-  params: GridParams;
   limits: StrategyLimits;
   /** What a stop does with resting orders / the position. Default cancel. */
   onStop: 'cancel' | 'flatten';
 }
+export interface GridSpec extends SpecBase {
+  type: 'grid';
+  params: GridParams;
+}
+export interface TwapSpec extends SpecBase {
+  type: 'twap';
+  params: TwapParams;
+}
+export type StrategySpec = GridSpec | TwapSpec;
 
 /** What validation needs to know about the owner's policy and legs. */
 export interface SpecContext {
@@ -93,24 +113,16 @@ export function validateSpec(input: unknown, ctx: SpecContext): SpecResult {
   if (onStop !== 'cancel' && onStop !== 'flatten') errors.push('onStop must be "cancel" or "flatten"');
 
   const p = input.params;
-  let gridOk = false;
+  /** worst-case exposure in USD (null: params unusable), per type */
+  let worst: number | null = null;
+  let worstText = '';
   if (!isObj(p)) errors.push('params must be an object');
-  else {
-    unknownKeys(p, ['lower', 'upper', 'levels', 'sizePerLevel'], 'params', errors);
-    const { lower, upper, levels, sizePerLevel } = p;
-    if (!isNum(lower) || lower <= 0) errors.push('params.lower must be a positive number');
-    if (!isNum(upper) || upper <= 0) errors.push('params.upper must be a positive number');
-    if (isNum(lower) && isNum(upper) && upper <= lower) errors.push('params.upper must be above params.lower');
-    if (!Number.isInteger(levels) || (levels as number) < 2 || (levels as number) > MAX_LEVELS) errors.push(`params.levels must be an integer from 2 to ${MAX_LEVELS}`);
-    if (typeof sizePerLevel !== 'string' || !DECIMAL.test(sizePerLevel) || Number(sizePerLevel) <= 0) errors.push('params.sizePerLevel must be a positive decimal string');
-    gridOk = isNum(lower) && isNum(upper) && upper > lower && lower > 0 && Number.isInteger(levels) && typeof sizePerLevel === 'string' && DECIMAL.test(sizePerLevel) && Number(sizePerLevel) > 0;
-    if (gridOk) {
-      const sz = Number(sizePerLevel);
-      const lowNotional = sz * (lower as number);
-      const highNotional = sz * (upper as number);
-      if (lowNotional < HL_MIN_NOTIONAL_USD) errors.push(`order at the lowest level is $${lowNotional.toFixed(2)}, below the Hyperliquid minimum $${HL_MIN_NOTIONAL_USD}`);
-      if (highNotional > ctx.orderPolicy.maxNotionalUsd) errors.push(`order at the highest level is $${highNotional.toFixed(2)}, above the order policy max $${ctx.orderPolicy.maxNotionalUsd}`);
-    }
+  else if (input.type === 'grid') {
+    worst = validateGrid(p, ctx, errors);
+    worstText = 'levels x size x upper';
+  } else if (input.type === 'twap') {
+    worst = validateTwap(p, ctx, errors);
+    worstText = 'slices x size x limitPx';
   }
 
   const l = input.limits;
@@ -122,10 +134,7 @@ export function validateSpec(input: unknown, ctx: SpecContext): SpecResult {
     else if (l.maxLeverage > ctx.orderPolicy.maxLeverage) errors.push(`limits.maxLeverage ${l.maxLeverage} is above the order policy max ${ctx.orderPolicy.maxLeverage} (a spec can only tighten the policy)`);
     if (!isNum(l.maxDailyLoss) || l.maxDailyLoss <= 0) errors.push('limits.maxDailyLoss must be a positive number');
     if (!isNum(l.topUpCapPerDay) || l.topUpCapPerDay < 0) errors.push('limits.topUpCapPerDay must be zero or more');
-    if (gridOk && isNum(l.maxNotional) && isObj(p)) {
-      const worst = (p.levels as number) * Number(p.sizePerLevel) * (p.upper as number);
-      if (worst > l.maxNotional) errors.push(`worst-case exposure $${worst.toFixed(2)} (levels x size x upper) is above limits.maxNotional $${l.maxNotional}`);
-    }
+    if (worst !== null && isNum(l.maxNotional) && worst > l.maxNotional) errors.push(`worst-case exposure $${worst.toFixed(2)} (${worstText}) is above limits.maxNotional $${l.maxNotional}`);
   }
 
   // contract policy
@@ -145,18 +154,54 @@ export function validateSpec(input: unknown, ctx: SpecContext): SpecResult {
   if (errors.length) return { ok: false, errors };
   const g = p as Record<string, unknown>;
   const lim = l as Record<string, number>;
-  return {
-    ok: true,
-    spec: {
-      id: id as string,
-      type: input.type as StrategyType,
-      leg: leg as number,
-      coin: coin as string,
-      params: { lower: g.lower as number, upper: g.upper as number, levels: g.levels as number, sizePerLevel: g.sizePerLevel as string },
-      limits: { maxNotional: lim.maxNotional!, maxLeverage: lim.maxLeverage!, maxDailyLoss: lim.maxDailyLoss!, topUpCapPerDay: lim.topUpCapPerDay! },
-      onStop: onStop as 'cancel' | 'flatten',
-    },
+  const base = {
+    id: id as string,
+    leg: leg as number,
+    coin: coin as string,
+    limits: { maxNotional: lim.maxNotional!, maxLeverage: lim.maxLeverage!, maxDailyLoss: lim.maxDailyLoss!, topUpCapPerDay: lim.topUpCapPerDay! },
+    onStop: onStop as 'cancel' | 'flatten',
   };
+  if (input.type === 'twap') {
+    const params = { side: g.side as 'buy' | 'sell', sizePerSlice: g.sizePerSlice as string, slices: g.slices as number, intervalSec: g.intervalSec as number, limitPx: g.limitPx as number };
+    return { ok: true, spec: { ...base, type: 'twap', params } };
+  }
+  return { ok: true, spec: { ...base, type: 'grid', params: { lower: g.lower as number, upper: g.upper as number, levels: g.levels as number, sizePerLevel: g.sizePerLevel as string } } };
+}
+
+function validateGrid(p: Record<string, unknown>, ctx: SpecContext, errors: string[]): number | null {
+  unknownKeys(p, ['lower', 'upper', 'levels', 'sizePerLevel'], 'params', errors);
+  const { lower, upper, levels, sizePerLevel } = p;
+  if (!isNum(lower) || lower <= 0) errors.push('params.lower must be a positive number');
+  if (!isNum(upper) || upper <= 0) errors.push('params.upper must be a positive number');
+  if (isNum(lower) && isNum(upper) && upper <= lower) errors.push('params.upper must be above params.lower');
+  if (!Number.isInteger(levels) || (levels as number) < 2 || (levels as number) > MAX_LEVELS) errors.push(`params.levels must be an integer from 2 to ${MAX_LEVELS}`);
+  if (typeof sizePerLevel !== 'string' || !DECIMAL.test(sizePerLevel) || Number(sizePerLevel) <= 0) errors.push('params.sizePerLevel must be a positive decimal string');
+  const ok = isNum(lower) && isNum(upper) && upper > lower && lower > 0 && Number.isInteger(levels) && typeof sizePerLevel === 'string' && DECIMAL.test(sizePerLevel) && Number(sizePerLevel) > 0;
+  if (!ok) return null;
+  const sz = Number(sizePerLevel);
+  const lowNotional = sz * lower;
+  const highNotional = sz * upper;
+  if (lowNotional < HL_MIN_NOTIONAL_USD) errors.push(`order at the lowest level is $${lowNotional.toFixed(2)}, below the Hyperliquid minimum $${HL_MIN_NOTIONAL_USD}`);
+  if (highNotional > ctx.orderPolicy.maxNotionalUsd) errors.push(`order at the highest level is $${highNotional.toFixed(2)}, above the order policy max $${ctx.orderPolicy.maxNotionalUsd}`);
+  return (levels as number) * sz * upper;
+}
+
+/** TWAP / DCA: `slices` IOC orders of one size, one per `intervalSec`. DCA is the same with a long interval. */
+function validateTwap(p: Record<string, unknown>, ctx: SpecContext, errors: string[]): number | null {
+  unknownKeys(p, ['side', 'sizePerSlice', 'slices', 'intervalSec', 'limitPx'], 'params', errors);
+  const { side, sizePerSlice, slices, intervalSec, limitPx } = p;
+  if (side !== 'buy' && side !== 'sell') errors.push('params.side must be "buy" or "sell"');
+  if (typeof sizePerSlice !== 'string' || !DECIMAL.test(sizePerSlice) || Number(sizePerSlice) <= 0) errors.push('params.sizePerSlice must be a positive decimal string');
+  if (!Number.isInteger(slices) || (slices as number) < 2 || (slices as number) > MAX_SLICES) errors.push(`params.slices must be an integer from 2 to ${MAX_SLICES}`);
+  if (!Number.isInteger(intervalSec) || (intervalSec as number) < MIN_INTERVAL_SEC || (intervalSec as number) > 86_400) errors.push(`params.intervalSec must be an integer from ${MIN_INTERVAL_SEC} to 86400`);
+  if (!isNum(limitPx) || limitPx <= 0) errors.push('params.limitPx must be a positive number (a buy never pays more, a sell never receives less)');
+  const ok = typeof sizePerSlice === 'string' && DECIMAL.test(sizePerSlice) && Number(sizePerSlice) > 0 && Number.isInteger(slices) && isNum(limitPx) && limitPx > 0;
+  if (!ok) return null;
+  const notional = Number(sizePerSlice) * limitPx;
+  if (notional < HL_MIN_NOTIONAL_USD) errors.push(`slice at limitPx is $${notional.toFixed(2)}, below the Hyperliquid minimum $${HL_MIN_NOTIONAL_USD}`);
+  if (notional > ctx.orderPolicy.maxNotionalUsd) errors.push(`slice at limitPx is $${notional.toFixed(2)}, above the order policy max $${ctx.orderPolicy.maxNotionalUsd}`);
+  // shortcut: a sell's exposure grows if the price rises above limitPx; checkOrder enforces maxNotional on the real price at run time
+  return (slices as number) * notional;
 }
 
 /** Canonical JSON (keys sorted) so a hash does not depend on key order. */
@@ -201,6 +246,10 @@ export function checkOrder(spec: StrategySpec, policy: OrderPolicy, view: OrderV
     if (notional < HL_MIN_NOTIONAL_USD) return { ok: false, reason: `order $${notional.toFixed(2)} below the Hyperliquid minimum $${HL_MIN_NOTIONAL_USD}` };
     const after = Math.abs(view.position) * o.px + view.restingOpeningNotional + notional;
     if (after > spec.limits.maxNotional) return { ok: false, reason: `exposure after this order $${after.toFixed(2)} would exceed maxNotional $${spec.limits.maxNotional}` };
+  }
+  if (spec.type === 'twap') {
+    if (o.isBuy !== (spec.params.side === 'buy')) return { ok: false, reason: `order side is not the strategy's side (${spec.params.side})` };
+    return { ok: true };
   }
   const step = (spec.params.upper - spec.params.lower) / (spec.params.levels - 1);
   if (o.px < spec.params.lower * 0.999 || o.px > spec.params.upper + step) return { ok: false, reason: `price ${o.px} outside the strategy range` };
