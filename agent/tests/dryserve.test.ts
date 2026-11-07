@@ -100,3 +100,43 @@ describe('--dry-run --serve', () => {
     expect(p.status).toBe(202);
   });
 });
+
+describe('--dry-run --serve: strategies', () => {
+  it('lists the recorded grid, answers /strategy/draft from the recorded drafts (422 for a refused one), replays strategy events with an owner', async () => {
+    const base = await serve('hedged');
+    const list = await (await fetch(`${base}/strategies/${OWNER}`)).json();
+    expect(list.strategies).toMatchObject([{ id: 'grid-live-1', type: 'grid', leg: 3, state: 'running', simulated: true }]);
+    const ok = await post(`${base}/strategy/draft`, { owner: OWNER, text: 'Run a grid on BTC about 2% either side of the current price with 5 levels, about 11 dollars per level.' });
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toMatchObject({ ok: true, dryRun: true, spec: { type: 'grid' }, specHash: expect.stringMatching(/^0x[0-9a-f]{64}$/) });
+    const refused = await post(`${base}/strategy/draft`, { owner: OWNER, text: 'Grid on BTC with 20x leverage and 500 dollars.' });
+    expect(refused.status).toBe(422);
+    expect(await refused.json()).toMatchObject({ ok: false, errors: [expect.stringContaining('order policy')] });
+
+    const ctl = new AbortController();
+    const res = await fetch(`${base}/events`, { signal: ctl.signal });
+    const reader = res.body!.getReader();
+    let text = '';
+    const end = Date.now() + 5000;
+    while (Date.now() < end && !/event: strategy\.done/.test(text)) text += new TextDecoder().decode((await reader.read()).value);
+    ctl.abort();
+    const events = [...text.matchAll(/^data: (.*)$/gm)].map((m) => JSON.parse(m[1]!)).filter((e) => e.type.startsWith('strategy.'));
+    expect(events.map((e) => e.type)).toContain('strategy.slice');
+    expect(events.every((e) => e.data.owner === OWNER)).toBe(true);
+  });
+
+  it('a signed start of a new spec and pause/resume work on the simulated list', async () => {
+    const base = await serve('hedged');
+    const draft = await (await post(`${base}/strategy/draft`, { owner: OWNER, text: 'Buy about 11 dollars of ETH every 6 hours, 8 times, never paying more than 3% above the current price. Close it all when I stop it.' })).json();
+    const { specHash } = await import('../src/strategy/spec.ts');
+    const hash = specHash(draft.spec);
+    const startCmd = newCommand(OWNER, 'startStrategy', '', '0', 30, Date.now(), hash as `0x${string}`);
+    const sign = async (c: typeof startCmd) => ({ command: c, sig: await owner.signTypedData(commandTypedData('near-testnet', DRY_CONTRACT_ID, c) as never) });
+    const started = await post(`${base}/strategy/start`, { ...(await sign(startCmd)), spec: draft.spec });
+    expect(await started.json()).toMatchObject({ id: draft.spec.id, state: 'running' });
+    const pause = await post(`${base}/strategy/pause`, await sign(newCommand(OWNER, 'pauseStrategy', draft.spec.id, '0', 30, Date.now() + 1)));
+    expect(await pause.json()).toMatchObject({ state: 'paused' });
+    const resume = await post(`${base}/strategy/resume`, await sign(newCommand(OWNER, 'startStrategy', draft.spec.id, '0', 30, Date.now() + 2, hash as `0x${string}`)));
+    expect(await resume.json()).toMatchObject({ state: 'running' });
+  });
+});

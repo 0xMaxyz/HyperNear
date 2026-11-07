@@ -17,6 +17,9 @@ import { guardInputs, Legs, type OwnerSnapshot } from './legs.ts';
 import { HttpError, parseRelayBody, RateLimiter, Relayer } from './relayer.ts';
 import type { Deps } from './server.ts';
 import { position } from './market.ts';
+import type { Draft } from './strategy/builder.ts';
+import type { StrategyManager } from './strategy/manager.ts';
+import { specHash, validateSpec, type SpecContext, type StrategySpec } from './strategy/spec.ts';
 
 export interface Fixture {
   name: string;
@@ -84,6 +87,78 @@ const DRY_AGENT = 'agent.dry-run';
 /** The recorded freeze (agents.revoked) and the recorded live proposals (C18b: Jev factors -> Claude). */
 export const FREEZE_LIVE = new URL('../results/freeze-live.json', import.meta.url);
 export const C18B = new URL('../../validation/results/C18b.json', import.meta.url);
+/** Recorded Phase 2 runs: the grid and the TWAP on leg 3, and the strategy builder's drafts (live Claude). */
+export const GRID_LIVE = new URL('../results/grid-live.json', import.meta.url);
+export const TWAP_LIVE = new URL('../results/twap-live.json', import.meta.url);
+export const DRAFT_LIVE = new URL('../results/draft-live.json', import.meta.url);
+
+type RecordedEvent = { t: number; type: string; data: Record<string, unknown> };
+const readJson = <T>(u: URL) => JSON.parse(readFileSync(u, 'utf8')) as T;
+
+/**
+ * Strategies without a network: /strategies/:owner starts with the recorded grid, /strategy/start|pause|stop|resume change
+ * a simulated list (nothing trades), and validation is the real validateSpec against the fixture's policy.
+ */
+export function dryStrategies(owner: Hex, bus: EventBus, ctx: () => SpecContext) {
+  const grid = readJson<{ spec: StrategySpec; events: RecordedEvent[] }>(GRID_LIVE);
+  const specs = new Map<string, StrategySpec>([[grid.spec.id, grid.spec]]);
+  const states = new Map<string, string>([[grid.spec.id, 'running']]);
+  const status = (id: string) => {
+    const spec = specs.get(id)!;
+    return { id, type: spec.type, leg: spec.leg, coin: spec.coin, state: states.get(id)!, deadman: 'unavailable', held: [], resting: states.get(id) === 'running' ? 3 : 0, spec, simulated: true };
+  };
+  const emit = (type: string, id: string, extra: Record<string, unknown> = {}) => bus.emit(`strategy.${type}`, { owner, id, leg: specs.get(id)?.leg, simulated: true, ...extra });
+  const live = (id: string) => specs.has(id) && states.get(id) !== 'stopped';
+  return {
+    list: (o: Hex) => (o === owner ? [...specs.keys()].map(status) : []),
+    get: (o: Hex, id: string) => (o === owner && live(id) ? specs.get(id) : undefined),
+    specs: (o: Hex) => (o === owner ? [...specs.keys()].filter(live).map((id) => specs.get(id)!) : []),
+    context: async () => ctx(),
+    async validate(o: Hex, input: unknown) {
+      const id = (input as { id?: string } | null)?.id;
+      const c = ctx();
+      const busy = [...specs.values()].filter((x) => x.id !== id && live(x.id)).map((x) => x.leg);
+      const r = validateSpec(input, { ...c, busyLegs: busy });
+      if (r.ok && id && live(id) && !(states.get(id) === 'paused' && specHash(specs.get(id)!) === specHash(r.spec))) {
+        return { ok: false as const, errors: [`strategy ${id} already exists (${states.get(id)}); stop it first, or send the identical spec to resume a paused one`] };
+      }
+      return r;
+    },
+    async start(_o: Hex, spec: StrategySpec) {
+      if (!specs.has(spec.id)) emit('started', spec.id, { type: spec.type, coin: spec.coin });
+      else emit('resumed', spec.id);
+      specs.set(spec.id, spec);
+      states.set(spec.id, 'running');
+      return status(spec.id);
+    },
+    async pause(_o: Hex, id: string) {
+      if (!live(id)) throw new Error(`no strategy ${id}`);
+      states.set(id, 'paused');
+      emit('paused', id, { reason: 'owner', cancelled: 0 });
+      return status(id);
+    },
+    async stop(_o: Hex, id: string) {
+      if (!specs.has(id)) throw new Error(`no strategy ${id}`);
+      states.set(id, 'stopped');
+      emit('stopped', id, { reason: 'owner', cancelled: 0, flattened: false });
+      return status(id);
+    },
+    cancelAll: async () => {},
+    shutdown: () => {},
+  } as unknown as StrategyManager;
+}
+
+/** The recorded strategy events (grid run, then TWAP run with its restart), compressed 4x, for the /events replay. */
+export function recordedStrategyEvents(owner: Hex, gapMs = 3000): RecordedEvent[] {
+  const out: RecordedEvent[] = [];
+  let base = 0;
+  for (const f of [GRID_LIVE, TWAP_LIVE]) {
+    const evs = readJson<{ events: RecordedEvent[] }>(f).events.filter((e) => e.type.startsWith('strategy.'));
+    for (const e of evs) out.push({ t: base + e.t / 4, type: e.type, data: { ...e.data, owner, recorded: true } });
+    base += (evs.at(-1)?.t ?? 0) / 4 + gapMs;
+  }
+  return out;
+}
 
 /** C18b's recorded proposals as proposeAction output (ids dry-s01..). */
 export function recordedProposals(): Proposal[] {
@@ -156,12 +231,32 @@ export function buildDryRunDeps(fixtureName = 'hedged', opts: { replayStartMs?: 
   const replayedProposals = proposals.map((proposal) => ({ proposal, owner: snap.owner, coin: 'BTC', at: Date.now(), status: 'open' as const, recorded: true }));
   for (const r of replayedProposals) decider.remember(r, true);
 
+  const recordedDrafts = readJson<{ results: Record<string, unknown>[] }>(DRAFT_LIVE).results;
+  let nextDraft = 0;
+  // POST /strategy/draft answers with the recorded live drafts (same text first, else in turn); no model call
+  const drafter = async (_owner: Hex, text: string): Promise<Draft> => {
+    const row = recordedDrafts.find((r) => r.text === text) ?? recordedDrafts[nextDraft++ % recordedDrafts.length]!;
+    const { text: _t, ms: _ms, ...draft } = row;
+    return draft as unknown as Draft;
+  };
+  const strategies = dryStrategies(snap.owner, bus, () => ({
+    orderPolicy: config.policy,
+    registeredLegs: [0, 1, 2, 3],
+    reservedLegs: [0, 1, 2],
+    busyLegs: [],
+    owner: policyOf(snap.owner),
+    agentId: DRY_AGENT,
+    otherTopUpBudget: 0,
+  }));
+
   return {
     config: dryConfig,
     client,
     legs,
     bus,
     decider,
+    strategies,
+    drafter,
     replay: new ReplayCache(),
     guardConfig: DEFAULT_GUARD_CONFIG,
     hedger: new Hedger(legs, config.policy, bus),
@@ -188,7 +283,9 @@ export function buildDryRunDeps(fixtureName = 'hedged', opts: { replayStartMs?: 
         let id = 1_000_000;
         const tEnd = recorded.timeline.at(-1)?.t ?? t0;
         // guard demo, then the recorded decision proposals (C18b), then the recorded freeze revocation, 2 s apart
+        const strategyStart = tEnd + 2000 * (replayedProposals.length + revoked.length + 2);
         const script = [
+          ...recordedStrategyEvents(snap.owner).map((e) => ({ t: strategyStart + e.t, type: e.type, data: e.data })),
           ...recorded.timeline.map((x) => ({ t: x.t, type: x.event, data: { ...x.detail, owner: snap.owner, recordedOffsetMs: x.t } })),
           ...replayedProposals.map((r, i) => ({ t: tEnd + 2000 * (i + 1), type: DECISION_EVENTS.proposed, data: proposalEvent(r) })),
           ...revoked.map((e, i) => ({ t: tEnd + 2000 * (replayedProposals.length + i + 1), type: e.type, data: { ...e.data, recorded: true } })),

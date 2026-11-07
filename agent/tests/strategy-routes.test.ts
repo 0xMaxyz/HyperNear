@@ -94,6 +94,19 @@ describe('strategy routes', () => {
     expect(await stopped.json()).toMatchObject({ state: 'stopped' });
   });
 
+  it('resume: a paused strategy restarts on a signed startStrategy over the stored spec hash, nothing else', async () => {
+    const { d } = setup();
+    const base = await serve(d);
+    await post(`${base}/strategy/start`, await start(specHash(spec)));
+    const resumeCmd = (hash: string, n: number) => signed(newCommand(OWNER, 'startStrategy', spec.id, '0', 30, Date.now() + n, hash as Hex));
+    expect((await post(`${base}/strategy/resume`, await resumeCmd(specHash(spec), 1))).status).toBe(422); // still running: not resumable
+    await post(`${base}/strategy/pause`, await signed(newCommand(OWNER, 'pauseStrategy', spec.id, '0', 30, Date.now() + 2)));
+    expect((await post(`${base}/strategy/resume`, await resumeCmd(`0x${'ab'.repeat(32)}`, 3))).status).toBe(401);
+    const ok = await post(`${base}/strategy/resume`, await resumeCmd(specHash(spec), 4));
+    expect(await ok.json()).toMatchObject({ id: spec.id, state: 'running' });
+    expect((await post(`${base}/strategy/resume`, await signed(newCommand(OWNER, 'startStrategy', 'nope', '0', 30, Date.now() + 5, specHash(spec) as Hex)))).status).toBe(404);
+  });
+
   it('refuses a spec other than the one signed (401), a zero hash (400), an invalid spec (422), a replay (401)', async () => {
     const { d } = setup();
     const base = await serve(d);

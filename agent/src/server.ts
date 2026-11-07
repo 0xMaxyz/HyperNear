@@ -10,6 +10,7 @@
 //   POST /decision/:id/reject     {command, sig}: action reject, coin = the proposal's; emits decision.rejected {reason:'owner'}
 //   POST /decision/mode           {command, sig}: action setDecisionMode, mode ('off'|'propose'|'auto') in command.coin
 //   POST /strategy/start  {command, sig, spec}: action startStrategy, command.specHash = specHash(validated spec)
+//   POST /strategy/resume {command, sig}: action startStrategy, command.coin = strategy id, command.specHash = hash of the stored spec of a paused/restored strategy
 //   POST /strategy/pause|stop {command, sig}: action pauseStrategy|stopStrategy, command.coin = strategy id (kill switch)
 //   GET  /strategies/:owner  the owner's strategies (state, held levels, resting orders, dead-man status)
 //   POST /strategy/draft  {owner, text}: plain language -> {spec, specHash, diff, warnings} (Claude drafts, spec.ts validates; starts nothing)
@@ -222,6 +223,18 @@ export function handler(d: Deps) {
         const v = await d.strategies.validate(cmd.owner, body.spec);
         if (!v.ok) throw new HttpError(422, v.errors.join('; '));
         if (specHash(v.spec) !== cmd.specHash) throw new HttpError(401, 'command.specHash must be the specHash of the spec (the owner signed another spec)');
+        d.bus.emit('command', { ...cmd });
+        return reply(200, await d.strategies.start(cmd.owner, v.spec));
+      }
+      if (req.method === 'POST' && url.pathname === '/strategy/resume') {
+        if (!d.strategies) throw new HttpError(503, 'strategies off');
+        const cmd = await verifyCommand(verifier(d), await readJson(req), 'startStrategy');
+        await assertOptedIn(d, cmd.owner);
+        const stored = d.strategies.get(cmd.owner, cmd.coin);
+        if (!stored) throw new HttpError(404, `no strategy ${cmd.coin} for ${cmd.owner}`);
+        if (specHash(stored) !== cmd.specHash) throw new HttpError(401, 'command.specHash is not the hash of the stored spec');
+        const v = await d.strategies.validate(cmd.owner, stored); // contract policy again; only a paused strategy passes
+        if (!v.ok) throw new HttpError(422, v.errors.join('; '));
         d.bus.emit('command', { ...cmd });
         return reply(200, await d.strategies.start(cmd.owner, v.spec));
       }

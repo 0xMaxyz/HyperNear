@@ -80,7 +80,7 @@ export class StrategyRunner {
   }
 
   status() {
-    return { id: this.spec.id, type: this.spec.type, leg: this.spec.leg, coin: this.spec.coin, state: this.state, deadman: this.deadman, held: this.grid.held, resting: Object.keys(this.grid.orders).length, twap: this.spec.type === 'twap' ? this.twap : undefined };
+    return { id: this.spec.id, spec: this.spec, type: this.spec.type, leg: this.spec.leg, coin: this.spec.coin, state: this.state, deadman: this.deadman, held: this.grid.held, resting: Object.keys(this.grid.orders).length, twap: this.spec.type === 'twap' ? this.twap : undefined };
   }
 
   /** One pass: sync with the exchange, check limits, place what the ladder is missing. Never throws (errors pause after MAX_ERRORS). */
