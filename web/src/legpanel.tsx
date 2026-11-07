@@ -122,6 +122,10 @@ export function LegPanel({ view, demo }: { view?: OwnerView; demo: boolean }) {
   for (const o of mine) lines.push({ price: Number(o.limitPx), title: `${o.side === 'B' ? 'buy' : 'sell'} ${o.sz}`, color: '--muted', style: LineStyle.Dotted });
   const cs = candles.state === 'ok' ? candles.data.candles : [];
   const last = cs.at(-1);
+  // a line far outside the candles would flatten the chart; it stays listed in the positions table instead
+  const lo = Math.min(...cs.map((c) => c.l)) * 0.85;
+  const hi = Math.max(...cs.map((c) => c.h)) * 1.15;
+  const inRange = lines.filter((l) => cs.length === 0 || (l.price >= lo && l.price <= hi));
   const summary = last ? `${coin} ${dry ? '15m' : interval} candles, ${cs.length} bars, last close ${px(last.c)}, range ${px(Math.min(...cs.map((c) => c.l)))} to ${px(Math.max(...cs.map((c) => c.h)))}` : 'No candles';
 
   return (
@@ -152,8 +156,8 @@ export function LegPanel({ view, demo }: { view?: OwnerView; demo: boolean }) {
       </div>
       {candles.state === 'loading' && <p className="state">Loading candles…</p>}
       {candles.state === 'error' && <p className="state err" role="alert">{candles.message}</p>}
-      {candles.state === 'ok' && (cs.length === 0 ? <p className="state">No candles for {coin} in this window.</p> : <Chart candles={cs} lines={lines} summary={summary} />)}
-      {candles.state === 'ok' && <p className="muted small">{candles.data.note} {dry && 'Coin and candle size are fixed in dry-run. '}Lines: dashed entry, solid liquidation, dotted resting orders.</p>}
+      {candles.state === 'ok' && (cs.length === 0 ? <p className="state">No candles for {coin} in this window.</p> : <Chart candles={cs} lines={inRange} summary={summary} />)}
+      {candles.state === 'ok' && <p className="muted small">{candles.data.note} {dry && 'Coin and candle size are fixed in dry-run. '}Lines: dashed entry, solid liquidation, dotted resting orders; anything far outside the chart is only in the tables.</p>}
 
       <div className="two">
         <div>
