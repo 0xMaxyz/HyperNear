@@ -1,0 +1,15 @@
+{
+  "name": "@hypernear/validation",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:live": "LIVE=1 vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@perps-platform/core": "workspace:*",
+    "viem": "2.54.3"
+  }
+}
