@@ -40,7 +40,7 @@ export interface StrategyLimits {
   /** Largest exposure in USD: position plus resting opening orders. */
   maxNotional: number;
   maxLeverage: number;
-  /** Pause and cancel when equity falls this far below the day's start (USD). */
+  /** Pause and cancel when the strategy's own PnL (fills, positions at mark, funding; pnl.ts) falls below minus this (USD). */
   maxDailyLoss: number;
   /** Budget (USD/day) of guard top-ups this strategy may use; the sum over strategies must fit the contract's cap. */
   topUpCapPerDay: number;

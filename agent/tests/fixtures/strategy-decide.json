@@ -1,5 +1,5 @@
 {
-  "facts": { "strategy": "grid", "margin": "far", "dayPnl": "about flat", "topUpBudget": "unused", "price": "inside the grid range", "vol": "normal", "progress": "no inventory" },
+  "facts": { "strategy": "twap", "pnl": "about flat", "budget": "unused", "fillRate": "high: most fill", "slicesLeft": "many left", "liqDistance": "far: over 30%", "price": "inside the limit price", "vol": "normal" },
   "calm": { "nearLiquidation": 0.02, "losing": 0.03, "budgetLow": 0.04, "offPlan": 0.05, "volatile": 0.06 },
   "cases": [
     { "name": "everything calm: Jev decides, continue", "probs": {}, "action": "continue_strategy", "source": "jev", "flagged": false, "models": [] },

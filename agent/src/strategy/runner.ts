@@ -4,6 +4,7 @@
 import type { OrderPolicy } from '../config.ts';
 import { floorSize, roundPx } from '../market.ts';
 import { emptyGrid, gridPrices, missingOrders, reconcile, wantedOrders, type GridState } from './grid.ts';
+import type { PnlBreakdown } from './pnl.ts';
 import type { CoinInfo, TradingPort } from './port.ts';
 import { checkOrder, type GridSpec, type StrategySpec, type TwapSpec } from './spec.ts';
 
@@ -28,6 +29,10 @@ export interface RunnerSaved {
   twap: TwapState;
   /** guard top-ups taken today (UTC day number, USD): the strategy's topUpCapPerDay is checked against this */
   topUp: { day: number; usd: number };
+  /** epoch ms the strategy first started: PnL is counted from here */
+  startedAt: number;
+  /** grid orders placed / filled (the fill rate fact) */
+  gridStats: { placed: number; filled: number };
 }
 
 export interface RunnerOpts {
@@ -55,17 +60,22 @@ export class StrategyRunner {
   grid: GridState = emptyGrid();
   twap: TwapState = { done: 0, skipped: 0, filledSize: 0, nextAt: 0 };
   topUp = { day: 0, usd: 0 };
+  startedAt: number;
+  gridStats = { placed: 0, filled: 0 };
+  /** PnL at the last tick (pnl.ts: fills, positions at mark and funding since startedAt; never equity). */
+  lastPnl?: PnlBreakdown;
   /** 'unavailable': the exchange refused scheduleCancel (testnet and mainnet require $1M traded volume). */
   deadman: 'off' | 'armed' | 'unavailable' = 'off';
   readonly #o: RunnerOpts;
   #leverageSet = false;
-  #dayStart?: { day: number; equity: number };
   #errors = 0;
   #busy = false;
 
   constructor(o: RunnerOpts) {
     this.spec = o.spec;
     this.#o = o;
+    this.startedAt = o.initial?.startedAt ?? (o.now ?? Date.now)();
+    if (o.initial?.gridStats) this.gridStats = { ...o.initial.gridStats };
     if (o.initial?.state) this.state = o.initial.state;
     if (o.initial?.held) this.grid = { held: o.initial.held, orders: {} };
     if (o.initial?.twap) this.twap = { ...o.initial.twap };
@@ -73,7 +83,11 @@ export class StrategyRunner {
   }
 
   snapshot(): RunnerSaved {
-    return { state: this.state, held: this.grid.held, twap: this.twap, topUp: this.topUp };
+    return { state: this.state, held: this.grid.held, twap: this.twap, topUp: this.topUp, startedAt: this.startedAt, gridStats: this.gridStats };
+  }
+
+  async refreshPnl() {
+    this.lastPnl = await this.#o.port.pnl(this.startedAt).catch(() => this.lastPnl);
   }
 
   /** USD of the daily top-up budget (limits.topUpCapPerDay) left today. */
@@ -88,11 +102,6 @@ export class StrategyRunner {
     this.#o.onChange?.();
   }
 
-  /** Account value at the start of the UTC day, as the daily-loss check sees it (undefined before the first tick). */
-  dayStartEquity() {
-    return this.#dayStart?.equity;
-  }
-
   get #now() {
     return (this.#o.now ?? Date.now)();
   }
@@ -101,7 +110,7 @@ export class StrategyRunner {
   }
 
   status() {
-    return { id: this.spec.id, spec: this.spec, type: this.spec.type, leg: this.spec.leg, coin: this.spec.coin, state: this.state, deadman: this.deadman, held: this.grid.held, resting: Object.keys(this.grid.orders).length, twap: this.spec.type === 'twap' ? this.twap : undefined };
+    return { id: this.spec.id, spec: this.spec, type: this.spec.type, leg: this.spec.leg, coin: this.spec.coin, state: this.state, deadman: this.deadman, held: this.grid.held, resting: Object.keys(this.grid.orders).length, twap: this.spec.type === 'twap' ? this.twap : undefined, pnl: this.lastPnl };
   }
 
   /** One pass: sync with the exchange, check limits, place what the ladder is missing. Never throws (errors pause after MAX_ERRORS). */
@@ -129,13 +138,11 @@ export class StrategyRunner {
       this.#leverageSet = true;
     }
 
-    // limits.maxDailyLoss: equity against the day's first reading. shortcut: a top-up during the day offsets a loss, so the
-    // check is lenient after top-ups; a per-day ledger of deposits would fix it.
-    const equity = await port.equity();
-    const day = Math.floor(this.#now / DAY_MS);
-    if (this.#dayStart?.day !== day) this.#dayStart = { day, equity };
-    if (equity < this.#dayStart.equity - spec.limits.maxDailyLoss) {
-      return this.pause(`daily loss: equity $${equity.toFixed(2)} is more than $${spec.limits.maxDailyLoss} below the day's start $${this.#dayStart.equity.toFixed(2)}`);
+    // limits.maxDailyLoss: the strategy's own PnL since it started (fills, positions at mark, funding), so a guard top-up
+    // is not a gain and an owner transfer is not a loss. shortcut: counted since the start, not reset each UTC day.
+    const pnl = (this.lastPnl = await port.pnl(this.startedAt));
+    if (pnl.total < -spec.limits.maxDailyLoss) {
+      return this.pause(`loss limit: PnL ${pnl.total.toFixed(2)} USD since the start (realized ${pnl.realized.toFixed(2)}, fees ${pnl.fees.toFixed(2)}, unrealized ${pnl.unrealized.toFixed(2)}, funding ${pnl.funding.toFixed(2)}) is below -${spec.limits.maxDailyLoss}`);
     }
 
     if (spec.type === 'twap') return this.#twap(spec, info);
@@ -188,6 +195,7 @@ export class StrategyRunner {
     const [open, filled] = await Promise.all([port.openOids(), port.filledOids()]);
     const r = reconcile(this.grid, open, filled);
     this.grid = r.state;
+    this.gridStats.filled += r.filled.length;
     for (const f of r.filled) this.#emit('fill', { oid: f.oid, level: f.order.level, side: f.order.side, px: f.order.px, sz: f.order.sz });
     for (const f of r.lost) this.#emit('order.lost', { oid: f.oid, level: f.order.level, side: f.order.side });
 
@@ -209,6 +217,7 @@ export class StrategyRunner {
         this.#emit('order.rejected', { level: w.level, side: w.side, px: w.px, error: res.error });
         continue;
       }
+      this.gridStats.placed++;
       this.grid.orders[res.oid] = { level: w.level, side: w.side, px: w.px, sz: w.sz };
       this.#emit('order', { oid: res.oid, level: w.level, side: w.side, px: w.px, sz: w.sz });
     }

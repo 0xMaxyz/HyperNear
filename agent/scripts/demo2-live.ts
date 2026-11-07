@@ -150,7 +150,7 @@ try {
   // ---- stress 1, then the guard (reserve leg only, within the strategy budget)
   stress1 = await stress('1');
   const snap = await legs.snapshot(ow);
-  const input = manager.inputs(ow, snap, 0.6)[0];
+  const input = (await manager.inputs(ow, snap, 0.6))[0];
   const decisionP =
     input && process.env.TYPESAFE_API_KEY && process.env.ANTHROPIC_API_KEY
       ? proposeStrategyAction(input, { ask: jevAskStrategy(), escalate: claudeStrategyEscalator() }).then((p) => ({ facts: input.facts, ...p }), (e) => ({ error: String(e) }))

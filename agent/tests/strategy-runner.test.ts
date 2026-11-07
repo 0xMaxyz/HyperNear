@@ -13,7 +13,7 @@ const spec = v.spec as GridSpec;
 /** In-memory exchange: resting orders by oid, fills the test adds by hand. */
 class FakePort implements TradingPort {
   mid = 74000;
-  equityUsd = 100;
+  pnlTotal = 0;
   pos = 0;
   frozen = false;
   deadmanRefuses = false;
@@ -37,8 +37,8 @@ class FakePort implements TradingPort {
   async position() {
     return this.pos;
   }
-  async equity() {
-    return this.equityUsd;
+  async pnl() {
+    return { realized: this.pnlTotal, fees: 0, unrealized: 0, funding: 0, total: this.pnlTotal, fills: 0 };
   }
   async setLeverage() {}
   async place(o: PlaceRequest) {
@@ -171,10 +171,10 @@ describe('StrategyRunner', () => {
     expect(runner.state).toBe('stopped');
   });
 
-  it('pauses itself when equity falls maxDailyLoss below the day start', async () => {
+  it('pauses itself when its own PnL falls below -maxDailyLoss (not on equity)', async () => {
     const { port, runner } = setup();
     await runner.tick();
-    port.equityUsd = 100 - spec.limits.maxDailyLoss - 1;
+    port.pnlTotal = -spec.limits.maxDailyLoss - 1;
     await runner.tick();
     expect(runner.state).toBe('paused');
     expect(port.open.size).toBe(0);

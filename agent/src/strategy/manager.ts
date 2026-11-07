@@ -90,15 +90,19 @@ export class StrategyManager {
   }
 
   /** Decision-layer facts for the owner's running (or finished, still holding) strategies, from a fresh leg snapshot. */
-  inputs(owner: Hex, snap: OwnerSnapshot, annualVol: number, id?: string): StrategyInput[] {
-    return this.#mine(owner).flatMap(({ runner }) => {
+  async inputs(owner: Hex, snap: OwnerSnapshot, annualVol: number, id?: string): Promise<StrategyInput[]> {
+    const out: StrategyInput[] = [];
+    for (const { runner } of this.#mine(owner)) {
+      await runner.refreshPnl(); // a finished TWAP no longer ticks: read the PnL now
       const spec = runner.spec;
       const leg = snap.legs.find((l) => l.leg === spec.leg);
       const mid = Number(snap.market.mids[spec.coin]);
-      if ((id && spec.id !== id) || !leg || !(mid > 0) || (runner.state !== 'running' && runner.state !== 'done')) return [];
-      const progress = spec.type === 'twap' ? { done: runner.twap.done, of: spec.params.slices } : { held: runner.grid.held.length };
-      return [strategyInput({ owner, spec, dayStartEquity: runner.dayStartEquity(), leg, topUpLeft: runner.topUpLeft(), mid, annualVol, progress })];
-    });
+      if ((id && spec.id !== id) || !leg || !(mid > 0) || (runner.state !== 'running' && runner.state !== 'done')) continue;
+      const t = runner.twap;
+      const [attempts, fills, slicesLeft] = spec.type === 'twap' ? [t.done + t.skipped, t.done, spec.params.slices - t.done - t.skipped] : [runner.gridStats.placed, runner.gridStats.filled, undefined];
+      out.push(strategyInput({ owner, spec, pnl: runner.lastPnl, leg, topUpLeft: runner.topUpLeft(), mid, annualVol, attempts, fills, slicesLeft }));
+    }
+    return out;
   }
 
   /** The runner of an owner's strategy (for the decision layer's facts). */

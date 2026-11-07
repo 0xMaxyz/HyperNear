@@ -25,7 +25,7 @@ function fakePort(open: string[] = []): TradingPort & { open: Set<string>; place
     openOids: async () => new Set(p.open),
     filledOids: async () => new Set<string>(),
     position: async () => 0,
-    equity: async () => 100,
+    pnl: async () => ({ realized: 0, fees: 0, unrealized: 0, funding: 0, total: 0, fills: 0 }),
     setLeverage: async () => {},
     place: async (o: PlaceRequest) => {
       p.placed.push(o);

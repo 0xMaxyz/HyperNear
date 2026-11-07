@@ -3,6 +3,7 @@ import type { Hex } from 'viem';
 import { RelayRejectionError } from '@perps-platform/core';
 import type { Legs } from '../legs.ts';
 import { position, roundPx } from '../market.ts';
+import { strategyPnl, type PnlBreakdown } from './pnl.ts';
 
 export interface CoinInfo {
   asset: number;
@@ -26,8 +27,8 @@ export interface TradingPort {
   filledOids(): Promise<Set<string>>;
   /** Signed position size of the coin on the leg. */
   position(coin: string): Promise<number>;
-  /** Account value (USD) of the leg. */
-  equity(): Promise<number>;
+  /** The strategy's PnL since `since` (ms) from the leg's fills, positions and funding (pnl.ts); never from equity. */
+  pnl(since: number): Promise<PnlBreakdown>;
   setLeverage(asset: number, leverage: number): Promise<void>;
   /** Post-only limit order; `error` carries the exchange's refusal (e.g. it would have crossed). */
   place(o: PlaceRequest): Promise<{ oid?: string; error?: string; fill?: { sz: number; px: number } }>;
@@ -59,9 +60,7 @@ export async function hlPort(legs: Legs, owner: Hex, leg: number, slippage = 0.0
     async position(coin) {
       return Number(position(await hl.clearinghouseState({ user }), coin)?.szi ?? 0);
     },
-    async equity() {
-      return Number((await hl.clearinghouseState({ user })).marginSummary.accountValue);
-    },
+    pnl: (since) => strategyPnl(hl, user, since),
     async setLeverage(asset, leverage) {
       await hl.updateLeverage({ asset, isCross: true, leverage });
     },

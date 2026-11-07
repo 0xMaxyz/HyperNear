@@ -20,8 +20,8 @@ export const STRATEGY_ACTION_IDS = Object.keys(STRATEGY_ACTIONS) as StrategyActi
 /** Short questions: from ci32 a Jev request body past about 1.4 KB hangs (see jev.ts). */
 export const STRATEGY_QUESTIONS = {
   nearLiquidation: 'Is the strategy account close to liquidation?',
-  losing: 'Is the strategy losing money beyond its fees today?',
-  budgetLow: 'Is most of the strategy top-up budget used?',
+  losing: 'Is the strategy losing money?',
+  budgetLow: 'Is the top-up budget almost or fully used?',
   offPlan: 'Is the price outside what the strategy was built for?',
   volatile: 'Is the market volatile enough to stop trading it?',
 } as const;

@@ -317,7 +317,7 @@ export function buildDeps(config: AgentConfig): Deps {
     intervalMs: config.decide.intervalSec * 1000,
     // strategy decisions (propose only): accept pauses the strategy
     proposeStrategy: (i) => (clients ? proposeStrategyAction(i, strategyClients!) : Promise.reject(new Error('decision layer off'))),
-    strategyInputs: async (owner, id) => d.strategies!.inputs(owner, await legs.snapshot(owner), config.guard.annualVol, id),
+    strategyInputs: async (owner, id) => await d.strategies!.inputs(owner, await legs.snapshot(owner), config.guard.annualVol, id),
     executeStrategy: (owner, id) => d.strategies!.pause(owner, id, 'accepted strategy proposal'),
   });
   const strategyClients: StrategyClients | undefined = clients && { ask: jevAskStrategy(), escalate: claudeStrategyEscalator() };

@@ -54,26 +54,62 @@ describe('proposeStrategyAction (fixture driven: Jev gate 0.90, Claude on the un
   });
 });
 
-describe('strategyInput (bucketed facts)', () => {
+describe('strategyInput (the strategy\'s own buckets)', () => {
   const ctx = specFx.context as unknown as SpecContext;
-  const parsed = validateSpec(specFx.base, ctx);
+  const parsed = validateSpec(specFx.twap, ctx); // limits: maxDailyLoss 10, topUpCapPerDay 20
   if (!parsed.ok) throw new Error('fixture');
-  const leg = (accountValue: number, maint: number) => ({ clearinghouse: ch({ accountValue, maint, withdrawable: 0, positions: [{ coin: 'BTC', szi: '0.0013' }] }) });
+  const leg = (liq: string | null) => ({ clearinghouse: ch({ accountValue: 10, maint: 1, withdrawable: 0, positions: [{ coin: 'BTC', szi: '0.0013', liq: liq ?? undefined }] }) });
+  const pnl = (total: number) => ({ realized: total, fees: 0, unrealized: 0, funding: 0, total, fills: 3 });
   const make = (o: Partial<Parameters<typeof strategyInput>[0]> = {}) =>
-    strategyInput({ owner: OWNER, spec: parsed.spec, dayStartEquity: 25, leg: leg(25, 1), topUpLeft: 20, mid: 75000, annualVol: 0.6, progress: { held: 0 }, ...o });
+    strategyInput({ owner: OWNER, spec: parsed.spec, pnl: pnl(0), leg: leg('60000'), topUpLeft: 20, mid: 75000, annualVol: 0.6, attempts: 4, fills: 4, slicesLeft: 5, ...o });
 
-  it('calm account: far from liquidation, flat day, unused budget, inside the range', () => {
-    expect(make().facts).toMatchObject({ strategy: 'grid', margin: expect.stringContaining('far'), dayPnl: 'about flat', topUpBudget: 'unused', price: 'inside the grid range', vol: 'normal', progress: 'no inventory' });
+  it('calm bot: flat PnL, unused budget, fills, slices left, liquidation far', () => {
+    expect(make().facts).toMatchObject({ strategy: 'twap', pnl: 'about flat', budget: 'unused', fillRate: 'high: most fill', slicesLeft: 'many left', liqDistance: expect.stringContaining('moderate'), price: 'inside the limit price', vol: 'normal' });
   });
-  it('stressed: very close to liquidation, large loss, budget almost used, price outside', () => {
-    const f = make({ leg: leg(8, 6), dayStartEquity: 25, topUpLeft: 3, mid: 90000 }).facts;
-    expect(f.margin).toContain('close');
-    expect(f.dayPnl).toBe('large loss: over half the daily loss limit');
-    expect(f.topUpBudget).toBe('almost used up');
-    expect(f.price).toBe('outside the grid range');
+  it('PnL is bucketed against the loss limit', () => {
+    expect(make({ pnl: pnl(6) }).facts.pnl).toBe('profit');
+    expect(make({ pnl: pnl(-2) }).facts.pnl).toBe('small loss: under half the loss limit');
+    expect(make({ pnl: pnl(-6) }).facts.pnl).toBe('large loss: over half the loss limit');
+    expect(make({ pnl: pnl(-10) }).facts.pnl).toBe('at the loss limit');
+    expect(make({ pnl: undefined }).facts.pnl).toBe('unknown');
+  });
+  it('budget, fill rate, slices left and distance to liquidation', () => {
+    expect(make({ topUpLeft: 12 }).facts.budget).toBe('partly used');
+    expect(make({ topUpLeft: 3 }).facts.budget).toBe('almost used up');
+    expect(make({ topUpLeft: 0 }).facts.budget).toBe('used up');
+    expect(make({ attempts: 6, fills: 1 }).facts.fillRate).toContain('low');
+    expect(make({ attempts: 0, fills: 0 }).facts.fillRate).toBe('no attempts yet');
+    expect(make({ slicesLeft: 0 }).facts.slicesLeft).toBe('none left');
+    expect(make({ slicesLeft: 2 }).facts.slicesLeft).toBe('few left');
+    expect(make({ leg: leg('72000') }).facts.liqDistance).toContain('near'); // 4% away
+    expect(make({ leg: leg('74000') }).facts.liqDistance).toContain('very near'); // 1.3% away
+  });
+  it('a 20x bot is not "far from liquidation" just because its margin ratio is over 6x', () => {
+    // 8.7% away (the Demo 2 state): near, whatever the hedge's margin buckets would say
+    expect(make({ leg: leg(String(75000 * (1 - 0.087))) }).facts.liqDistance).toContain('near');
   });
   it('strings only, no raw numbers beyond the bucket text', () => {
     for (const v of Object.values(make().facts)) expect(v).not.toMatch(/\d{3,}/);
+  });
+
+  // A stand-in for Jev that reads the buckets the way the yes/no questions mean them: enough to show the facts can lead to "pause".
+  const readsBuckets = (facts: Record<string, string>): StrategyProbs => ({
+    nearLiquidation: /^(near|very near)/.test(facts.liqDistance!) ? 0.96 : 0.03,
+    losing: /loss/.test(facts.pnl!) ? 0.95 : 0.03,
+    budgetLow: /^(almost used up|used up)/.test(facts.budget!) ? 0.94 : 0.04,
+    offPlan: /^(outside|beyond)/.test(facts.price!) ? 0.95 : 0.03,
+    volatile: /^(elevated|extreme)/.test(facts.vol!) ? 0.93 : 0.05,
+  });
+  const propose = (o: Parameters<typeof make>[0]) =>
+    proposeStrategyAction(make(o), { ask: async (f) => readsBuckets(f), escalate: async () => { throw new Error('Jev should have decided'); }, shuffle: (x) => x, newId: () => 'p' });
+
+  it('a bot whose top-up budget is used up and that keeps losing is told to pause; either alone is not enough', async () => {
+    expect(await propose({ topUpLeft: 0, pnl: pnl(-6), attempts: 6, fills: 2 })).toMatchObject({ action: 'pause_strategy', source: 'jev', flagged: false });
+    expect(await propose({ topUpLeft: 0, pnl: pnl(0) })).toMatchObject({ action: 'continue_strategy' });
+    expect(await propose({ topUpLeft: 20, pnl: pnl(-6) })).toMatchObject({ action: 'continue_strategy' });
+  });
+  it('near liquidation alone pauses', async () => {
+    expect(await propose({ leg: leg('72000') })).toMatchObject({ action: 'pause_strategy' });
   });
 });
 
