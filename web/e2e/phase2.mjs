@@ -38,6 +38,7 @@ async function withAgent(fn) {
 }
 
 const browser = await chromium.launch();
+process.on('uncaughtException', (e) => { console.error(e); process.exit(1); }); // the agent child dies with its stdout pipe
 await withAgent(async () => {
   const wallet = privateKeyToAccount(DEMO_KEY);
   const owner = wallet.address.toLowerCase();
@@ -49,7 +50,7 @@ await withAgent(async () => {
   page.on('console', (m) => m.type() === 'error' && !/403|422|503|404|Failed to load resource/.test(m.text()) && errors.push(m.text()));
   const posts = [];
   page.on('response', async (r) => {
-    if (r.request().method() !== 'POST') return;
+    if (r.request().method() !== 'POST' || !r.url().startsWith('http://localhost:8787')) return; // the agent's calls only, not Privy's
     posts.push({ path: new URL(r.url()).pathname, body: JSON.parse(r.request().postData() ?? '{}'), status: r.status(), out: await r.json().catch(() => ({})) });
   });
 
