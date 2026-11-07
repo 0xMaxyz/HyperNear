@@ -7,8 +7,10 @@ import { hypernearDomain, type ChainTag, type OwnerIntentTypedData } from './int
 export type DecisionAction = 'hold' | 'close_both' | 'reduce_hedge' | 'add_hedge' | 'take_profit';
 
 /** setDecisionMode: the mode ('off' | 'propose' | 'auto') goes in `coin`, ratio "0". prepareAgents: coin "", ratio "0".
- * reject: dismisses a proposal, coin = the proposal's coin. */
-export type CommandAction = 'openHedge' | 'closeHedge' | DecisionAction | 'setDecisionMode' | 'prepareAgents' | 'reject';
+ * reject: dismisses a proposal, coin = the proposal's coin.
+ * startStrategy: coin = specHash of the spec sent beside the command (interim: a specHash field comes later);
+ * pauseStrategy / stopStrategy: coin = the strategy id. ratio "0" for all three. */
+export type CommandAction = 'openHedge' | 'closeHedge' | DecisionAction | 'setDecisionMode' | 'prepareAgents' | 'reject' | 'startStrategy' | 'pauseStrategy' | 'stopStrategy';
 
 export interface Command {
   owner: Hex;

@@ -83,6 +83,8 @@ export class Relayer {
   readonly limiter: RateLimiter;
   readonly post?: HlPoster;
   readonly bus?: EventBus;
+  /** Runs before a freeze's revocations are posted, while the agent keys still work (strategies cancel their resting orders). */
+  onBeforeRevoke?: (owner: Hex) => Promise<void>;
   /** post + bus: after a freeze, the revoking approveAgent actions go to HL at once and to /events. */
   constructor(client: HyperNearClient, limiter: RateLimiter, post?: HlPoster, bus?: EventBus) {
     this.client = client;
@@ -93,6 +95,7 @@ export class Relayer {
 
   /** Posts every revocation of a freeze to HL; emits 'agents.revoked' with one entry per leg/name. */
   async postRevocations(owner: Hex, revoked: Revoked[]) {
+    await this.onBeforeRevoke?.(owner).catch((e) => this.bus?.emit('agents.revoke.hook_failed', { owner, error: String(e) }));
     const chain = (await this.client.getConfig()).hl_mainnet ? 'Mainnet' : 'Testnet';
     const legs = await Promise.all(
       revoked.map(async (r) => {
