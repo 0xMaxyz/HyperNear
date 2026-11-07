@@ -4,10 +4,14 @@
 //
 //   NEAR_NETWORK=testnet node agent/scripts/guard-demo.ts      (core + @hypernear/client built; ci32)
 //
-// Stress = (1) leg1 leverage 3x -> 40x (agent L1 action), (2) owner-mode usdClassTransfer of all of leg1's withdrawable
-// perp USDC to its spot balance. HL refuses to move margin below the initial margin, so only a high leverage gets a leg
-// near liquidation; at 40x the initial margin is ~2x maintenance. The owner has no usdSend intent (by design), so the
-// margin leaves through usdClassTransfer and stays on leg1's spot side; the cleanup moves it back.
+// Stress, in two steps on leg1:
+//  (1) the owner moves all of leg1's withdrawable perp USDC to spot (owner-mode usdClassTransfer; the owner has no usdSend
+//      intent by design). Measured: HL keeps ~10% of notional as non-withdrawable, so this leaves ~8x maintenance and the
+//      guard (rightly) stays quiet: transfers alone cannot push a BTC leg near liquidation.
+//  (2) leg1 is over-leveraged: leverage 40x and a bigger short until initial margin ~= 95% of its account (~2.1x
+//      maintenance; liquidation ~1-2% away). The demo guard fires at <= 2.5x maintenance (the plan allows "earlier
+//      than 2x"); override with HYPERNEAR_GUARD_MARGIN_FLOOR.
+// The cleanup closes both legs and moves leg1's parked spot USDC back to perp, so the script can run again.
 // Keys (never printed): ~/.near-credentials/testnet/<contract>.json (relayer), ~/.near-credentials/testnet/<agent>.json
 // (function-call key), HYPERNEAR_DATA_DIR/agent-keys.json (HL API wallets), owner = HYPERNEAR_TEST_OWNER_KEY or the public test key.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -151,11 +155,23 @@ export async function runGuardDemo(o: GuardDemoOptions = {}) {
   await leg1.updateLeverage({ asset: btc.asset, isCross: true, leverage: btc.maxLeverage });
   s = await until(() => legs.snapshot(ow), (x) => position(leg(x, 1).clearinghouse, 'BTC')?.leverage.value === btc.maxLeverage, 'leg1 leverage');
   const out = Math.floor(Number(leg(s, 1).clearinghouse.withdrawable) * 100) / 100 - 0.01;
-  const tStress0 = Date.now();
+  const tMove0 = Date.now();
   await classTransfer(1, out.toFixed(2), false);
+  timeline.push({ t: Date.now(), event: 'stress.marginMoved', detail: { movedToSpot: out.toFixed(2), signAndPostMs: Date.now() - tMove0 } });
+  s = await until(() => legs.snapshot(ow), (x) => Number(leg(x, 1).clearinghouse.withdrawable) < 0.05, 'leg1 margin moved');
+  log(`stress 1: $${out.toFixed(2)} moved perp -> spot on leg1 (owner intent, ${Date.now() - tMove0} ms); ` +
+    `leg1 margin ratio ${ratio(s, 1).toFixed(2)}x: HL keeps ~10% of notional, so transfers alone cannot get near liquidation`);
+  // (2) over-leverage: leg1 sells more BTC at 40x until its initial margin is ~95% of its account (~2.1x maintenance)
+  mid = Number(s.market.mids.BTC);
+  const av1 = Number(leg(s, 1).clearinghouse.marginSummary.accountValue);
+  const addUsd = 0.95 * btc.maxLeverage * av1 - Math.abs(szi(s, 1)) * mid;
+  const addSize = (Math.floor((addUsd / mid) * 10 ** btc.szDecimals) / 10 ** btc.szDecimals).toFixed(btc.szDecimals);
+  if (Number(addSize) * mid < 10) throw new Error(`leg1 account $${av1} too small to over-leverage (needs a $10 order)`);
+  const tStress0 = Date.now();
+  await leg1.limitOrderOpen({ asset: btc.asset, isBuy: false, price: roundPx(mid * 0.97, btc.szDecimals), size: addSize, tif: 'Ioc' });
   const tStress = Date.now();
-  timeline.push({ t: tStress, event: 'stress.posted', detail: { leverage: btc.maxLeverage, movedToSpot: out.toFixed(2), signAndPostMs: tStress - tStress0 } });
-  log(`stress: leg1 at ${btc.maxLeverage}x, $${out.toFixed(2)} moved perp -> spot (owner intent, ${tStress - tStress0} ms)`);
+  timeline.push({ t: tStress, event: 'stress.posted', detail: { leverage: btc.maxLeverage, addedShort: addSize, addedUsd: Number(addSize) * mid, orderMs: tStress - tStress0 } });
+  log(`stress 2: leg1 sells ${addSize} BTC more at ${btc.maxLeverage}x (~$${(Number(addSize) * mid).toFixed(0)}), t0 for the timeline`);
 
   // ---- wait for detect -> rebalance -> recovery
   const seen = (type: string) => timeline.find((x) => x.event === type && x.t >= tStress);
