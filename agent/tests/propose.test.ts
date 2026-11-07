@@ -84,14 +84,14 @@ describe('proposeAction', () => {
     const escalate = vi.fn(async () => ({ action: 'hold' as Action, rationale: 'ok' }));
     const p = await proposeAction(STATE, BIG, clients({ ask: async () => probs, escalate }));
     expect(escalate).toHaveBeenCalledOnce();
-    expect(escalate.mock.calls[0]![0]).toBe(OPUS_MODEL);
+    expect((escalate.mock.calls[0] as unknown[])[0]).toBe(OPUS_MODEL);
     expect(p.model).toBe(OPUS_MODEL);
   });
 
   it('the Opus threshold is configurable', async () => {
     const escalate = vi.fn(async () => ({ action: 'hold' as Action, rationale: 'ok' }));
     await proposeAction(STATE, SMALL, clients({ ask: async () => decisive({ volatile: 0.4 }), escalate }), { escalateOpusNotional: 100 });
-    expect(escalate.mock.calls[0]![0]).toBe(OPUS_MODEL);
+    expect((escalate.mock.calls[0] as unknown[])[0]).toBe(OPUS_MODEL);
   });
 
   it('disagreement takes the less risky action by the state-derived ranking and flags it', async () => {
