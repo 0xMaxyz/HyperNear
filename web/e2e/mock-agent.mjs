@@ -4,6 +4,7 @@
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { build } from 'esbuild';
 import { breakeven } from '../../agent/src/breakeven.ts';
@@ -11,7 +12,7 @@ import { breakeven } from '../../agent/src/breakeven.ts';
 const CHAIN_TAG = process.env.VITE_CHAIN_TAG ?? 'near-testnet';
 const CONTRACT = process.env.VITE_CONTRACT_ID ?? 'leash-spike-1107.testnet';
 const outfile = join(tmpdir(), `hypernear-verify-${process.pid}.mjs`);
-await build({ entryPoints: [new URL('./verify-entry.ts', import.meta.url).pathname.replace(/^/([A-Za-z]:)/, '$1')], bundle: true, platform: 'node', format: 'esm', outfile, logLevel: 'error' });
+await build({ entryPoints: [fileURLToPath(new URL('./verify-entry.ts', import.meta.url))], bundle: true, platform: 'node', format: 'esm', outfile, logLevel: 'error' });
 const verify = await import(outfile);
 
 const fixture = JSON.parse(readFileSync(new URL(`../../agent/fixtures/${process.env.MOCK_FIXTURE === 'empty' ? 'flat' : (process.env.MOCK_FIXTURE ?? 'hedged')}.json`, import.meta.url), 'utf8'));

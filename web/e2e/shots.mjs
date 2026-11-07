@@ -14,7 +14,7 @@ const check = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ?
 
 async function withAgent(fixture, fn) {
   const p = spawn('node', ['e2e/mock-agent.mjs'], { env: { ...process.env, MOCK_FIXTURE: fixture }, stdio: ['ignore', 'pipe', 'inherit'] });
-  await new Promise((res) => p.stdout.once('data', res));
+  await new Promise((res, rej) => { p.stdout.once('data', res); p.once('exit', (c) => rej(new Error(`mock agent exited early (${c})`))); });
   try { await fn(); } finally { p.kill(); await new Promise((r) => setTimeout(r, 300)); }
 }
 
