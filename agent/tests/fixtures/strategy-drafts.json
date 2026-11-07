@@ -20,7 +20,7 @@
     { "name": "REJECTED: top-up budget above the contract cap", "text": "grid, let it top up $80 a day", "model": { "cannot": "", "spec": "grid", "patch": { "limits.topUpCapPerDay": 80 } }, "ok": false, "errors": ["exceed the contract's daily cap $50"] },
     { "name": "REJECTED: coin not allowed", "text": "grid DOGE", "model": { "cannot": "", "spec": "grid", "patch": { "coin": "DOGE" } }, "ok": false, "errors": ["coin must be one of BTC, ETH"] },
     { "name": "REJECTED: leverage above the order policy", "text": "grid at 20x", "model": { "cannot": "", "spec": "grid", "patch": { "limits.maxLeverage": 20 } }, "ok": false, "errors": ["can only tighten the policy"] },
-    { "name": "REJECTED: order and exposure above the caps", "text": "grid with $500", "model": { "cannot": "", "spec": "grid", "patch": { "params.sizePerLevel": "0.001", "limits.maxNotional": 500 } }, "ok": false, "errors": ["above the order policy max"] },
+    { "name": "REJECTED: order above the caps", "text": "grid with $500", "model": { "cannot": "", "spec": "grid", "patch": { "params.sizePerLevel": "0.002", "limits.maxNotional": 500 } }, "ok": false, "errors": ["above the order policy max"] },
     { "name": "REJECTED: reserved leg", "text": "grid on leg 1", "model": { "cannot": "", "spec": "grid", "patch": { "leg": 1 } }, "ok": false, "errors": ["leg 1 is reserved"] },
     { "name": "REJECTED: field the model invented", "text": "grid with a stop loss", "model": { "cannot": "", "spec": "grid", "patch": { "stopLoss": 5 } }, "ok": false, "errors": ["unknown field \"stopLoss\""] },
     { "name": "the model declines", "text": "what is the weather", "model": { "cannot": "That is not a strategy request.", "spec": null }, "ok": false, "errors": ["That is not a strategy request."] },

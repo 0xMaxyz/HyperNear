@@ -58,7 +58,9 @@ const newDir = () => {
   dirs.push(d);
   return d;
 };
-afterEach(() => (dirs.length = 0));
+afterEach(() => {
+  dirs.length = 0;
+});
 
 describe('StrategyManager persistence', () => {
   it('saves specs and progress (0600, no keys) and drops stopped strategies', async () => {

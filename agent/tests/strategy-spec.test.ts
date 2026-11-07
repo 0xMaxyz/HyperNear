@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canonicalJson, checkOrder, specHash, validateSpec, type OrderRequest, type OrderView, type SpecContext, type StrategySpec } from '../src/strategy/spec';
+import { canonicalJson, checkOrder, specHash, type GridSpec, validateSpec, type OrderRequest, type OrderView, type SpecContext, type StrategySpec } from '../src/strategy/spec';
 import fx from './fixtures/strategy-spec.json';
 
 /** Sets "a.b.c" on a deep copy. */
@@ -50,7 +50,7 @@ describe('validateSpec (fixture driven)', () => {
 
 describe('specHash', () => {
   it('does not depend on key order and changes with any value', () => {
-    const a = fx.base as unknown as StrategySpec;
+    const a = fx.base as unknown as GridSpec;
     const reordered = { limits: a.limits, leg: a.leg, coin: a.coin, params: { sizePerLevel: a.params.sizePerLevel, levels: a.params.levels, upper: a.params.upper, lower: a.params.lower }, type: a.type, id: a.id } as StrategySpec;
     expect(specHash(reordered)).toBe(specHash(a));
     expect(specHash(patched(a, { 'limits.maxDailyLoss': 11 }))).not.toBe(specHash(a));

@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { gridPrices, missingOrders, reconcile, wantedOrders } from '../src/strategy/grid';
 import type { PlaceRequest, TradingPort } from '../src/strategy/port';
 import { StrategyRunner } from '../src/strategy/runner';
-import { validateSpec, type SpecContext, type StrategySpec } from '../src/strategy/spec';
+import { validateSpec, type GridSpec, type SpecContext, type StrategySpec } from '../src/strategy/spec';
 import fx from './fixtures/strategy-spec.json';
 
 const ctx = fx.context as unknown as SpecContext;
 const v = validateSpec(fx.base, ctx);
 if (!v.ok) throw new Error('fixture spec invalid');
-const spec = v.spec;
+const spec = v.spec as GridSpec;
 
 /** In-memory exchange: resting orders by oid, fills the test adds by hand. */
 class FakePort implements TradingPort {
