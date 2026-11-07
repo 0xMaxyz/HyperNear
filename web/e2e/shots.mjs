@@ -96,7 +96,7 @@ await withAgent('hedged', async () => {
   ];
   await page.route('**/events', (route) => route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream', 'access-control-allow-origin': '*' }, body: frames.map((e) => `id: ${e.id}\nevent: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join('') }));
   await demo(page, 4000);
-  check('decision panel shows action, source, factors and rationale', (await page.getByText('Jev and Claude disagreed').count()) === 1 && (await page.locator('.probs li').count()) === 5 && (await page.locator('.rationale').count()) === 1);
+  check('decision panel shows action, source, factors and rationale', (await page.locator("section[aria-labelledby=dec-h]").getByText("Jev and Claude disagreed").count()) === 1 && (await page.locator('.probs li').count()) === 5 && (await page.locator('.rationale').count()) === 1);
   check('revoked event is in the log', (await page.locator('.log li', { hasText: 'trading keys revoked on Hyperliquid: 3 of 3' }).count()) === 1);
   check('Accept is disabled when only viewing', await page.getByRole('button', { name: /Accept and sign/ }).isDisabled());
   await page.getByRole('button', { name: 'Dismiss' }).click();
