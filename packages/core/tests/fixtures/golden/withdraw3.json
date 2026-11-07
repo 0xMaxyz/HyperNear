@@ -1,0 +1,35 @@
+{
+  "actionType": "withdraw3",
+  "input": {
+    "action": {
+      "amount": "1",
+      "destination": "0x0000000000000000000000000000000000000001",
+      "hyperliquidChain": "Testnet",
+      "signatureChainId": "0x66eee",
+      "time": 1700000000000,
+      "type": "withdraw3"
+    },
+    "isMainnet": false,
+    "primaryType": "HyperliquidTransaction:Withdraw"
+  },
+  "metadata": {
+    "generatedBy": "packages/core/scripts/golden-fixtures/generate_fixtures.py",
+    "notes": "withdraw3 is a user-signed (EIP-712 typed-data) action, signed like usdSend: msgpack is wire-format reference only, not part of the signing preimage. actionHash is the EIP-191/712 digest that is actually ECDSA-signed.",
+    "sdkName": "hyperliquid-python-sdk",
+    "sdkVersion": "0.24.0"
+  },
+  "output": {
+    "actionHash": "0x25dfad5670ac3525cb78818472e6e2b96b41be3740ac8414f896de9e4133bd10",
+    "msgpack": "86ab64657374696e6174696f6ed92a307830303030303030303030303030303030303030303030303030303030303030303030303030303031a6616d6f756e74a131a474696d65cf0000018bcfe56800a474797065a9776974686472617733b07369676e6174757265436861696e4964a730783636656565b068797065726c6971756964436861696ea7546573746e6574",
+    "signature": {
+      "r": "0x2286cd33a609702eb677711e73813c292a532489eba92e86d7c0a53144da2763",
+      "s": "0x7bf48680e27088d883f71f978ff8ae377bd0ff0906b597157c0d870c1a1da75c",
+      "v": 28
+    }
+  },
+  "signingScheme": "sign_user_signed_action",
+  "wallet": {
+    "address": "0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A",
+    "privateKey": "0x1111111111111111111111111111111111111111111111111111111111111111"
+  }
+}

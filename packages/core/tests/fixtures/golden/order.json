@@ -1,0 +1,47 @@
+{
+  "actionType": "order",
+  "input": {
+    "action": {
+      "grouping": "na",
+      "orders": [
+        {
+          "a": 0,
+          "b": true,
+          "p": "50000",
+          "r": false,
+          "s": "0.01",
+          "t": {
+            "limit": {
+              "tif": "Gtc"
+            }
+          }
+        }
+      ],
+      "type": "order"
+    },
+    "expiresAfter": null,
+    "isMainnet": false,
+    "nonce": 1700000000000,
+    "vaultAddress": null
+  },
+  "metadata": {
+    "generatedBy": "packages/core/scripts/golden-fixtures/generate_fixtures.py",
+    "notes": "msgpack is the exact preimage keccak-hashed (with nonce/vaultAddress/expiresAfter appended as raw bytes, per action_hash()) to build the phantom-agent EIP-712 message that source/connectionId wraps.",
+    "sdkName": "hyperliquid-python-sdk",
+    "sdkVersion": "0.24.0"
+  },
+  "output": {
+    "actionHash": "0x43b2c4012d15b632da3982d9af83348e3d5b03904f6cecc770dcfd99f7de8308",
+    "msgpack": "83a474797065a56f72646572a66f72646572739186a16100a162c3a170a53530303030a173a4302e3031a172c2a17481a56c696d697481a3746966a3477463a867726f7570696e67a26e61",
+    "signature": {
+      "r": "0x8880931afa9236a30998d9c3993e7f22704fb994883484696923d03156d3bd04",
+      "s": "0x2a102a13132a9000bce818968817ada0a7423601ca9ae1c35f40de1242d05b7f",
+      "v": 28
+    }
+  },
+  "signingScheme": "sign_l1_action",
+  "wallet": {
+    "address": "0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A",
+    "privateKey": "0x1111111111111111111111111111111111111111111111111111111111111111"
+  }
+}

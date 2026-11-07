@@ -1,0 +1,49 @@
+{
+  "actionType": "batchModify",
+  "input": {
+    "action": {
+      "modifies": [
+        {
+          "oid": 123,
+          "order": {
+            "a": 0,
+            "b": true,
+            "p": "31000",
+            "r": false,
+            "s": "0.2",
+            "t": {
+              "limit": {
+                "tif": "Gtc"
+              }
+            }
+          }
+        }
+      ],
+      "type": "batchModify"
+    },
+    "expiresAfter": null,
+    "isMainnet": false,
+    "nonce": 1700000000000,
+    "vaultAddress": null
+  },
+  "metadata": {
+    "generatedBy": "packages/core/scripts/golden-fixtures/generate_fixtures.py",
+    "notes": "batchModify is an L1 action, signed exactly like `order`/`modify`: msgpack is the exact preimage keccak-hashed (with nonce/vaultAddress/expiresAfter appended as raw bytes, per action_hash()) to build the phantom-agent EIP-712 message that source/connectionId wraps. Carries a 'modifies' array of {oid, order} entries \u2014 this fixture uses one entry, identical to generate_modify_fixture's oid/order, so the two fixtures are directly comparable.",
+    "sdkName": "hyperliquid-python-sdk",
+    "sdkVersion": "0.24.0"
+  },
+  "output": {
+    "actionHash": "0x2c81bc661ad00b7d08e979ba9d189d822fef7128e47dbe3bf6dbc8a6e9c35c3a",
+    "msgpack": "82a474797065ab62617463684d6f64696679a86d6f6469666965739182a36f69647ba56f7264657286a16100a162c3a170a53331303030a173a3302e32a172c2a17481a56c696d697481a3746966a3477463",
+    "signature": {
+      "r": "0x2a1f89991a87554f1795e1c2537d08cb4a9c77b5c35aaf3f806d7ea22fcd2365",
+      "s": "0x19601bbc0d113b1a0e2cb6037f51431361c97df7f58941b5ac4ac78340ba472d",
+      "v": 27
+    }
+  },
+  "signingScheme": "sign_l1_action",
+  "wallet": {
+    "address": "0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A",
+    "privateKey": "0x1111111111111111111111111111111111111111111111111111111111111111"
+  }
+}

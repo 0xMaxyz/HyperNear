@@ -1,0 +1,35 @@
+{
+  "actionType": "approveBuilderFee",
+  "input": {
+    "action": {
+      "builder": "0x0000000000000000000000000000000000000002",
+      "hyperliquidChain": "Testnet",
+      "maxFeeRate": "0.01%",
+      "nonce": 1700000000000,
+      "signatureChainId": "0x66eee",
+      "type": "approveBuilderFee"
+    },
+    "isMainnet": false,
+    "primaryType": "HyperliquidTransaction:ApproveBuilderFee"
+  },
+  "metadata": {
+    "generatedBy": "packages/core/scripts/golden-fixtures/generate_fixtures.py",
+    "notes": "approveBuilderFee is a user-signed (EIP-712 typed-data) action, signed like usdSend: msgpack is wire-format reference only, not part of the signing preimage. actionHash is the EIP-191/712 digest that is actually ECDSA-signed.",
+    "sdkName": "hyperliquid-python-sdk",
+    "sdkVersion": "0.24.0"
+  },
+  "output": {
+    "actionHash": "0xdb7a497f32b4b3218fd3074d8f0718a8d8cec067291833970c57d1342d3a0ec6",
+    "msgpack": "86a474797065b1617070726f76654275696c646572466565aa6d617846656552617465a5302e303125a76275696c646572d92a307830303030303030303030303030303030303030303030303030303030303030303030303030303032a56e6f6e6365cf0000018bcfe56800b07369676e6174757265436861696e4964a730783636656565b068797065726c6971756964436861696ea7546573746e6574",
+    "signature": {
+      "r": "0xd9d089310c1e33b522c4c51f7d428dac3e2faaaddb5c5d7a6499464357a03268",
+      "s": "0x25e2248bc7bd25c888c88cf1e35134110bc6bf10645cf508959a2df63521be51",
+      "v": 28
+    }
+  },
+  "signingScheme": "sign_user_signed_action",
+  "wallet": {
+    "address": "0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A",
+    "privateKey": "0x1111111111111111111111111111111111111111111111111111111111111111"
+  }
+}

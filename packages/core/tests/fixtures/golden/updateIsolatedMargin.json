@@ -1,0 +1,35 @@
+{
+  "actionType": "updateIsolatedMargin",
+  "input": {
+    "action": {
+      "asset": 0,
+      "isBuy": true,
+      "ntli": 1000000,
+      "type": "updateIsolatedMargin"
+    },
+    "expiresAfter": null,
+    "isMainnet": false,
+    "nonce": 1700000000000,
+    "vaultAddress": null
+  },
+  "metadata": {
+    "generatedBy": "packages/core/scripts/golden-fixtures/generate_fixtures.py",
+    "notes": "updateIsolatedMargin is an L1 action (phantom-agent scheme), signed exactly like `order` \u2014 the wrapper must dispatch it to the agent tier, not the master tier. msgpack is the exact preimage keccak-hashed (with nonce/vaultAddress/expiresAfter appended as raw bytes, per action_hash()) to build the phantom-agent EIP-712 message that source/connectionId wraps. Per-position margin adjustment without external fund movement, so shares the agent tier with leverage changes.",
+    "sdkName": "hyperliquid-python-sdk",
+    "sdkVersion": "0.24.0"
+  },
+  "output": {
+    "actionHash": "0xaab953f3d8c7aee3815e345292be5a968a253ba9848bf013984e97a87bdc60d4",
+    "msgpack": "84a474797065b475706461746549736f6c617465644d617267696ea5617373657400a56973427579c3a46e746c69ce000f4240",
+    "signature": {
+      "r": "0xfb8ab75258d7349ff56261d1d0b0000a9c68b5a52244aba38983213b13b4663e",
+      "s": "0x57285995034833201721bfa505ef60a994a70a1b0224d05cfd836bd597a51848",
+      "v": 27
+    }
+  },
+  "signingScheme": "sign_l1_action",
+  "wallet": {
+    "address": "0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A",
+    "privateKey": "0x1111111111111111111111111111111111111111111111111111111111111111"
+  }
+}

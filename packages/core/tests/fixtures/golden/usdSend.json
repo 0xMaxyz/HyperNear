@@ -1,0 +1,35 @@
+{
+  "actionType": "usdSend",
+  "input": {
+    "action": {
+      "amount": "1",
+      "destination": "0x0000000000000000000000000000000000000001",
+      "hyperliquidChain": "Testnet",
+      "signatureChainId": "0x66eee",
+      "time": 1700000000000,
+      "type": "usdSend"
+    },
+    "isMainnet": false,
+    "primaryType": "HyperliquidTransaction:UsdSend"
+  },
+  "metadata": {
+    "generatedBy": "packages/core/scripts/golden-fixtures/generate_fixtures.py",
+    "notes": "usdSend is a user-signed (EIP-712 typed-data) action, not an L1 action: msgpack is recorded for wire-format reference only and is NOT part of the signing preimage here. actionHash is the EIP-191/712 digest (0x19 0x01 || domainSeparator || structHash) that is actually ECDSA-signed.",
+    "sdkName": "hyperliquid-python-sdk",
+    "sdkVersion": "0.24.0"
+  },
+  "output": {
+    "actionHash": "0xbc86e4309ba9f5ccb0fc80bb8fc81aa8f7d66be6c2c1eb174789c33b25a2425c",
+    "msgpack": "86ab64657374696e6174696f6ed92a307830303030303030303030303030303030303030303030303030303030303030303030303030303031a6616d6f756e74a131a474696d65cf0000018bcfe56800a474797065a775736453656e64b07369676e6174757265436861696e4964a730783636656565b068797065726c6971756964436861696ea7546573746e6574",
+    "signature": {
+      "r": "0x84993287b7ba037f8bd35a12888dabfea745429355221fd4fc0cefab185b2531",
+      "s": "0x59b2d0c9e0da8d4be5dbaf4679cf396a7f5fbb818780bd7e9e2073eb55ffc0cf",
+      "v": 27
+    }
+  },
+  "signingScheme": "sign_user_signed_action",
+  "wallet": {
+    "address": "0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A",
+    "privateKey": "0x1111111111111111111111111111111111111111111111111111111111111111"
+  }
+}

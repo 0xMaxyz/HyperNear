@@ -1,0 +1,49 @@
+{
+  "actionType": "triggerTpLimit",
+  "input": {
+    "action": {
+      "grouping": "na",
+      "orders": [
+        {
+          "a": 0,
+          "b": false,
+          "p": "50000",
+          "r": true,
+          "s": "0.01",
+          "t": {
+            "trigger": {
+              "isMarket": false,
+              "tpsl": "tp",
+              "triggerPx": "55000"
+            }
+          }
+        }
+      ],
+      "type": "order"
+    },
+    "expiresAfter": null,
+    "isMainnet": false,
+    "nonce": 1700000000000,
+    "vaultAddress": null
+  },
+  "metadata": {
+    "generatedBy": "packages/core/scripts/golden-fixtures/generate_fixtures.py",
+    "notes": "triggerTpLimit is `HlClient.triggerOrderOpen`'s (tp, limit) wire order, signed exactly like `order` (same sign_l1_action scheme) \u2014 the `t.trigger` (isMarket/triggerPx/tpsl) is the only thing distinguishing it from a `t.limit` order. msgpack is the exact preimage keccak-hashed (with nonce/vaultAddress/expiresAfter appended as raw bytes, per action_hash()) to build the phantom-agent EIP-712 message that source/connectionId wraps.",
+    "sdkName": "hyperliquid-python-sdk",
+    "sdkVersion": "0.24.0"
+  },
+  "output": {
+    "actionHash": "0xea3c64d0b1d512d01d7b3211d44cc22f1fe5a34917b1d4224441ab046b2b6456",
+    "msgpack": "83a474797065a56f72646572a66f72646572739186a16100a162c2a170a53530303030a173a4302e3031a172c3a17481a77472696767657283a869734d61726b6574c2a9747269676765725078a53535303030a47470736ca27470a867726f7570696e67a26e61",
+    "signature": {
+      "r": "0xed64053fcc0b4714784551d8aa2f99c8e6e2c2eef72b56e77521b9ece750d3ec",
+      "s": "0x0f7d5be25e4bf37d85010baec113caa3d5dc57e2902712057ae5a4a5c6979eee",
+      "v": 27
+    }
+  },
+  "signingScheme": "sign_l1_action",
+  "wallet": {
+    "address": "0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A",
+    "privateKey": "0x1111111111111111111111111111111111111111111111111111111111111111"
+  }
+}

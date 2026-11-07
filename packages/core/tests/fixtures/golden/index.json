@@ -1,0 +1,102 @@
+{
+  "approveAgent": {
+    "file": "approveAgent.json",
+    "signingScheme": "sign_user_signed_action"
+  },
+  "approveBuilderFee": {
+    "file": "approveBuilderFee.json",
+    "signingScheme": "sign_user_signed_action"
+  },
+  "batchModify": {
+    "file": "batchModify.json",
+    "signingScheme": "sign_l1_action"
+  },
+  "cancel": {
+    "file": "cancel.json",
+    "signingScheme": "sign_l1_action"
+  },
+  "createSubAccount": {
+    "file": "createSubAccount.json",
+    "signingScheme": "sign_l1_action"
+  },
+  "limitOrderAlo": {
+    "file": "limitOrderAlo.json",
+    "signingScheme": "sign_l1_action"
+  },
+  "limitOrderGtc": {
+    "file": "limitOrderGtc.json",
+    "signingScheme": "sign_l1_action"
+  },
+  "limitOrderIoc": {
+    "file": "limitOrderIoc.json",
+    "signingScheme": "sign_l1_action"
+  },
+  "marketOrder": {
+    "file": "marketOrder.json",
+    "signingScheme": "sign_l1_action"
+  },
+  "modify": {
+    "file": "modify.json",
+    "signingScheme": "sign_l1_action"
+  },
+  "order": {
+    "file": "order.json",
+    "signingScheme": "sign_l1_action"
+  },
+  "sendAsset": {
+    "file": "sendAsset.json",
+    "signingScheme": "sign_user_signed_action"
+  },
+  "setReferrer": {
+    "file": "setReferrer.json",
+    "signingScheme": "sign_l1_action"
+  },
+  "subAccountSpotTransfer": {
+    "file": "subAccountSpotTransfer.json",
+    "signingScheme": "sign_l1_action"
+  },
+  "subAccountTransfer": {
+    "file": "subAccountTransfer.json",
+    "signingScheme": "sign_l1_action"
+  },
+  "triggerSlLimit": {
+    "file": "triggerSlLimit.json",
+    "signingScheme": "sign_l1_action"
+  },
+  "triggerSlMarket": {
+    "file": "triggerSlMarket.json",
+    "signingScheme": "sign_l1_action"
+  },
+  "triggerTpLimit": {
+    "file": "triggerTpLimit.json",
+    "signingScheme": "sign_l1_action"
+  },
+  "triggerTpMarket": {
+    "file": "triggerTpMarket.json",
+    "signingScheme": "sign_l1_action"
+  },
+  "twapCancel": {
+    "file": "twapCancel.json",
+    "signingScheme": "sign_l1_action"
+  },
+  "twapOrder": {
+    "file": "twapOrder.json",
+    "signingScheme": "sign_l1_action"
+  },
+  "updateIsolatedMargin": {
+    "file": "updateIsolatedMargin.json",
+    "signingScheme": "sign_l1_action"
+  },
+  "updateLeverage": {
+    "file": "updateLeverage.json",
+    "signingScheme": "sign_l1_action"
+  },
+  "usdSend": {
+    "file": "usdSend.json",
+    "signingScheme": "sign_user_signed_action"
+  },
+  "withdraw3": {
+    "file": "withdraw3.json",
+    "signingScheme": "sign_user_signed_action"
+  }
+}

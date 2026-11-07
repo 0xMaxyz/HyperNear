@@ -1,0 +1,45 @@
+{
+  "actionType": "modify",
+  "input": {
+    "action": {
+      "oid": 123,
+      "order": {
+        "a": 0,
+        "b": true,
+        "p": "31000",
+        "r": false,
+        "s": "0.2",
+        "t": {
+          "limit": {
+            "tif": "Gtc"
+          }
+        }
+      },
+      "type": "modify"
+    },
+    "expiresAfter": null,
+    "isMainnet": false,
+    "nonce": 1700000000000,
+    "vaultAddress": null
+  },
+  "metadata": {
+    "generatedBy": "packages/core/scripts/golden-fixtures/generate_fixtures.py",
+    "notes": "modify is an L1 action, signed exactly like `order`: msgpack is the exact preimage keccak-hashed (with nonce/vaultAddress/expiresAfter appended as raw bytes, per action_hash()) to build the phantom-agent EIP-712 message that source/connectionId wraps. Unlike `order`'s trailing 'grouping'/'builder' fields, the modify action carries 'oid' (order/client-order id) and a single replacement 'order' object.",
+    "sdkName": "hyperliquid-python-sdk",
+    "sdkVersion": "0.24.0"
+  },
+  "output": {
+    "actionHash": "0x8ce6681549bcd207d2e3c4da2a7a557de11a8b797032742b0f527fc41fb1c63e",
+    "msgpack": "83a474797065a66d6f64696679a36f69647ba56f7264657286a16100a162c3a170a53331303030a173a3302e32a172c2a17481a56c696d697481a3746966a3477463",
+    "signature": {
+      "r": "0xe1dd18fa0371b8c3eb338be2412aa9ecc6b92b242e37454d13fe0fd895043fcc",
+      "s": "0x47ebc16dfe1d892c721c732dff7b8d868e61a866f996982f5aa723c20e051871",
+      "v": 28
+    }
+  },
+  "signingScheme": "sign_l1_action",
+  "wallet": {
+    "address": "0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A",
+    "privateKey": "0x1111111111111111111111111111111111111111111111111111111111111111"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "actionType": "updateLeverage",
+  "input": {
+    "action": {
+      "asset": 0,
+      "isCross": true,
+      "leverage": 5,
+      "type": "updateLeverage"
+    },
+    "expiresAfter": null,
+    "isMainnet": false,
+    "nonce": 1700000000000,
+    "vaultAddress": null
+  },
+  "metadata": {
+    "generatedBy": "packages/core/scripts/golden-fixtures/generate_fixtures.py",
+    "notes": "updateLeverage is an L1 action (phantom-agent scheme), signed exactly like `order` \u2014 the wrapper must dispatch it to the agent tier, not the master tier. msgpack is the exact preimage keccak-hashed (with nonce/vaultAddress/expiresAfter appended as raw bytes, per action_hash()) to build the phantom-agent EIP-712 message that source/connectionId wraps.",
+    "sdkName": "hyperliquid-python-sdk",
+    "sdkVersion": "0.24.0"
+  },
+  "output": {
+    "actionHash": "0x4a2f0def3cccafc69efda4409db55f1144941a44fb0deecd2687ecd80db99c2e",
+    "msgpack": "84a474797065ae7570646174654c65766572616765a5617373657400a7697343726f7373c3a86c6576657261676505",
+    "signature": {
+      "r": "0xa56de77bf548c250c5ea75797b1b6b5c20c83b7dd9fdea8122475db468fe1fd5",
+      "s": "0x7ad04f8c2828c708b29dd44ede9db50ed704ed971189d4e1b50271c1e1961786",
+      "v": 27
+    }
+  },
+  "signingScheme": "sign_l1_action",
+  "wallet": {
+    "address": "0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A",
+    "privateKey": "0x1111111111111111111111111111111111111111111111111111111111111111"
+  }
+}

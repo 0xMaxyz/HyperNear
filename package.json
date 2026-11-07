@@ -1,0 +1,21 @@
+{
+  "name": "hypernear",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Smart accounts for Hyperliquid, keys held by NEAR",
+  "license": "MIT",
+  "scripts": {
+    "test": "pnpm -r --if-present test",
+    "typecheck": "pnpm -r --if-present typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.0.1",
+    "typescript": "^5.3.3",
+    "vitest": "^1.2.0"
+  },
+  "packageManager": "pnpm@11.15.1",
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "actionType": "createSubAccount",
+  "input": {
+    "action": {
+      "name": "testSubAccount",
+      "type": "createSubAccount"
+    },
+    "expiresAfter": null,
+    "isMainnet": false,
+    "nonce": 1700000000000,
+    "vaultAddress": null
+  },
+  "metadata": {
+    "generatedBy": "packages/core/scripts/golden-fixtures/generate_fixtures.py",
+    "notes": "createSubAccount is an L1 action (phantom-agent scheme), signed exactly like `order` \u2014 the wrapper must dispatch it to the agent tier, not the master tier. msgpack is the exact preimage keccak-hashed (with nonce/vaultAddress/expiresAfter appended as raw bytes, per action_hash()) to build the phantom-agent EIP-712 message that source/connectionId wraps.",
+    "sdkName": "hyperliquid-python-sdk",
+    "sdkVersion": "0.24.0"
+  },
+  "output": {
+    "actionHash": "0xeb76adff3d1620117dd024ef125bc26a3986b53f82ab76e55ae4cf83c8b83cdf",
+    "msgpack": "82a474797065b06372656174655375624163636f756e74a46e616d65ae746573745375624163636f756e74",
+    "signature": {
+      "r": "0xe204a928e8c1c84f723ae8daefe3b8f89aae3a0270c5337de6191948383b2ac9",
+      "s": "0x14843254507dbc30d6c8f6de283f1153601003e8d5c5df6d2af45272957156ab",
+      "v": 28
+    }
+  },
+  "signingScheme": "sign_l1_action",
+  "wallet": {
+    "address": "0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A",
+    "privateKey": "0x1111111111111111111111111111111111111111111111111111111111111111"
+  }
+}

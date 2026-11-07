@@ -1,0 +1,361 @@
+[
+  {
+    "actionType": "userFills",
+    "endpoint": "info",
+    "response": [
+      {
+        "closedPnl": "0.0",
+        "coin": "AVAX",
+        "crossed": false,
+        "dir": "Open Long",
+        "hash": "0xa166e3fa63c25663024b03f2e0da011a00307e4017465df020210d3d432e7ca1",
+        "oid": 90542681,
+        "px": "18.435",
+        "side": "B",
+        "startPosition": "26.86",
+        "sz": "93.53",
+        "time": 1681222254710,
+        "fee": "0.01",
+        "feeToken": "USDC",
+        "tid": 118906512037579,
+        "twapId": null
+      },
+      {
+        "closedPnl": "-1.25",
+        "coin": "ETH",
+        "crossed": true,
+        "dir": "Close Short",
+        "hash": "0xb277e3fa63c25663024b03f2e0da011a00307e4017465df020210d3d432e7cb2",
+        "oid": 90542682,
+        "px": "3200.5",
+        "side": "A",
+        "startPosition": "-2.0",
+        "sz": "1.0",
+        "time": 1681222300000,
+        "fee": "0.5",
+        "builderFee": "0.05",
+        "feeToken": "USDC",
+        "tid": 118906512037580,
+        "twapId": 42,
+        "cloid": "0x0123456789abcdef0123456789abcdef",
+        "liquidation": {
+          "liquidatedUser": "0x0000000000000000000000000000000000000002",
+          "markPx": "3195.0",
+          "method": "market"
+        }
+      }
+    ]
+  },
+  {
+    "actionType": "historicalOrders",
+    "endpoint": "info",
+    "response": [
+      {
+        "order": {
+          "coin": "AVAX",
+          "side": "B",
+          "limitPx": "18.435",
+          "sz": "0.0",
+          "oid": 90542681,
+          "timestamp": 1681222254710,
+          "origSz": "93.53",
+          "triggerCondition": "N/A",
+          "isTrigger": false,
+          "triggerPx": "0.0",
+          "children": [],
+          "isPositionTpsl": false,
+          "reduceOnly": false,
+          "orderType": "Limit",
+          "tif": "Gtc",
+          "cloid": null
+        },
+        "status": "filled",
+        "statusTimestamp": 1681222254800
+      },
+      {
+        "order": {
+          "coin": "ETH",
+          "side": "A",
+          "limitPx": "3200.5",
+          "sz": "1.0",
+          "oid": 90542682,
+          "timestamp": 1681222300000,
+          "origSz": "1.0",
+          "triggerCondition": "N/A",
+          "isTrigger": true,
+          "triggerPx": "3195.0",
+          "children": [],
+          "isPositionTpsl": true,
+          "reduceOnly": true,
+          "orderType": "Take Profit Limit",
+          "tif": null,
+          "cloid": "0x0123456789abcdef0123456789abcdef"
+        },
+        "status": "triggered",
+        "statusTimestamp": 1681222310000
+      }
+    ]
+  },
+  {
+    "actionType": "openOrders",
+    "endpoint": "info",
+    "response": [
+      {
+        "coin": "AVAX",
+        "side": "B",
+        "limitPx": "18.435",
+        "sz": "50.0",
+        "oid": 90542681,
+        "timestamp": 1681222254710,
+        "origSz": "93.53",
+        "triggerCondition": "N/A",
+        "isTrigger": false,
+        "triggerPx": "0.0",
+        "children": [],
+        "isPositionTpsl": false,
+        "reduceOnly": false,
+        "orderType": "Limit",
+        "tif": "Gtc",
+        "cloid": null
+      },
+      {
+        "coin": "ETH",
+        "side": "A",
+        "limitPx": "3200.5",
+        "sz": "1.0",
+        "oid": 90542682,
+        "timestamp": 1681222300000,
+        "origSz": "1.0",
+        "triggerCondition": "N/A",
+        "isTrigger": true,
+        "triggerPx": "3195.0",
+        "children": [],
+        "isPositionTpsl": true,
+        "reduceOnly": true,
+        "orderType": "Take Profit Limit",
+        "tif": null,
+        "cloid": "0x0123456789abcdef0123456789abcdef"
+      }
+    ]
+  },
+  {
+    "actionType": "userFunding",
+    "endpoint": "info",
+    "response": [
+      {
+        "time": 1681222254710,
+        "hash": "0xc388e3fa63c25663024b03f2e0da011a00307e4017465df020210d3d432e7cc3",
+        "delta": {
+          "type": "funding",
+          "coin": "BTC",
+          "usdc": "12.50",
+          "szi": "0.5",
+          "fundingRate": "0.00001234",
+          "nSamples": 8
+        }
+      },
+      {
+        "time": 1681222314710,
+        "hash": "0xd499e3fa63c25663024b03f2e0da011a00307e4017465df020210d3d432e7dd4",
+        "delta": {
+          "type": "funding",
+          "coin": "ETH",
+          "usdc": "-5.75",
+          "szi": "-2.0",
+          "fundingRate": "-0.00000567",
+          "nSamples": null
+        }
+      }
+    ]
+  },
+  {
+    "actionType": "fundingHistory",
+    "endpoint": "info",
+    "response": [
+      {
+        "coin": "BTC",
+        "fundingRate": "0.00001234",
+        "premium": "0.025",
+        "time": 1681222254710
+      },
+      {
+        "coin": "BTC",
+        "fundingRate": "0.00001567",
+        "premium": "0.032",
+        "time": 1681222314710
+      },
+      {
+        "coin": "ETH",
+        "fundingRate": "-0.00000567",
+        "premium": "-0.015",
+        "time": 1681222254710
+      }
+    ]
+  },
+  {
+    "actionType": "referral",
+    "endpoint": "info",
+    "response": {
+      "referredBy": {
+        "referrer": "0x0000000000000000000000000000000000000003",
+        "code": "REFERRAL_CODE_123"
+      },
+      "cumVlm": "150000.50",
+      "unclaimedRewards": "250.75",
+      "claimedRewards": "1500.25",
+      "builderRewards": "100.00",
+      "referrerState": {
+        "stage": "ready",
+        "data": {
+          "code": "MY_REFERRAL_CODE",
+          "nReferrals": 3,
+          "referralStates": [
+            {
+              "cumVlm": "75000.25",
+              "cumRewardedFeesSinceReferred": "350.50",
+              "cumFeesRewardedToReferrer": "175.25",
+              "timeJoined": 1681222000000,
+              "user": "0x0000000000000000000000000000000000000004",
+              "tokenToState": [
+                [0, {"cumVlm": "75000.25", "cumRewardedFeesSinceReferred": "350.50", "cumFeesRewardedToReferrer": "175.25"}]
+              ]
+            },
+            {
+              "cumVlm": "50000.10",
+              "cumRewardedFeesSinceReferred": "200.30",
+              "cumFeesRewardedToReferrer": "100.15",
+              "timeJoined": 1681222100000,
+              "user": "0x0000000000000000000000000000000000000005",
+              "tokenToState": [
+                [0, {"cumVlm": "50000.10", "cumRewardedFeesSinceReferred": "200.30", "cumFeesRewardedToReferrer": "100.15"}]
+              ]
+            },
+            {
+              "cumVlm": "25000.05",
+              "cumRewardedFeesSinceReferred": "100.15",
+              "cumFeesRewardedToReferrer": "50.08",
+              "timeJoined": 1681222200000,
+              "user": "0x0000000000000000000000000000000000000006",
+              "tokenToState": [
+                [0, {"cumVlm": "25000.05", "cumRewardedFeesSinceReferred": "100.15", "cumFeesRewardedToReferrer": "50.08"}]
+              ]
+            }
+          ]
+        }
+      },
+      "rewardHistory": [
+        {
+          "earned": "500.25",
+          "vlm": "100000.00",
+          "referralVlm": "25000.00",
+          "time": 1681222254710
+        },
+        {
+          "earned": "300.50",
+          "vlm": "120000.00",
+          "referralVlm": "30000.00",
+          "time": 1681222314710
+        }
+      ],
+      "tokenToState": [
+        [0, {"cumVlm": "150000.50", "unclaimedRewards": "250.75", "claimedRewards": "1500.25", "builderRewards": "100.00"}]
+      ]
+    }
+  },
+  {
+    "actionType": "userRole",
+    "endpoint": "info",
+    "response": {
+      "role": "user"
+    }
+  },
+  {
+    "actionType": "userRole_agent",
+    "endpoint": "info",
+    "response": {
+      "role": "agent",
+      "data": {
+        "user": "0x0000000000000000000000000000000000000001"
+      }
+    }
+  },
+  {
+    "actionType": "userRole_subAccount",
+    "endpoint": "info",
+    "response": {
+      "role": "subAccount",
+      "data": {
+        "master": "0x0000000000000000000000000000000000000002"
+      }
+    }
+  },
+  {
+    "actionType": "subAccounts",
+    "endpoint": "info",
+    "response": [
+      {
+        "name": "testSubAccount",
+        "subAccountUser": "0x0000000000000000000000000000000000000003",
+        "master": "0x0000000000000000000000000000000000000001",
+        "clearinghouseState": {
+          "marginSummary": {
+            "accountValue": "5000",
+            "totalNtlPos": "12000",
+            "totalRawUsd": "5000",
+            "totalMarginUsed": "1200"
+          },
+          "crossMarginSummary": {
+            "accountValue": "5000",
+            "totalNtlPos": "12000",
+            "totalRawUsd": "5000",
+            "totalMarginUsed": "1200"
+          },
+          "crossMaintenanceMarginUsed": "240",
+          "withdrawable": "3800",
+          "assetPositions": [
+            {
+              "type": "oneWay",
+              "position": {
+                "coin": "BTC",
+                "szi": "0.1",
+                "leverage": { "type": "cross", "value": 5 },
+                "entryPx": "50000",
+                "positionValue": "5000",
+                "unrealizedPnl": "20",
+                "returnOnEquity": "0.01",
+                "liquidationPx": "42000",
+                "marginUsed": "1000",
+                "maxLeverage": 50,
+                "cumFunding": { "allTime": "0.2", "sinceOpen": "0.1", "sinceChange": "0.01" }
+              }
+            }
+          ],
+          "time": 1700000000000
+        },
+        "spotState": {
+          "balances": [
+            { "coin": "USDC", "token": 0, "total": "100.0", "hold": "0.0", "entryNtl": "100.0" }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "actionType": "subAccounts_empty",
+    "endpoint": "info",
+    "response": null
+  },
+  {
+    "actionType": "meta",
+    "endpoint": "info",
+    "response": {
+      "universe": [
+        { "szDecimals": 5, "name": "BTC", "maxLeverage": 50, "marginTableId": 1 },
+        { "szDecimals": 4, "name": "ETH", "maxLeverage": 50, "marginTableId": 2 },
+        { "szDecimals": 2, "name": "OLD-DELISTED", "maxLeverage": 3, "marginTableId": 3, "isDelisted": true }
+      ],
+      "marginTables": [],
+      "collateralToken": 0
+    }
+  }
+]

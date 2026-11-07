@@ -1,0 +1,35 @@
+{
+  "actionType": "approveAgent",
+  "input": {
+    "action": {
+      "agentAddress": "0x1563915e194D8CfBA1943570603F7606A3115508",
+      "agentName": "testAgent",
+      "hyperliquidChain": "Testnet",
+      "nonce": 1700000000000,
+      "signatureChainId": "0x66eee",
+      "type": "approveAgent"
+    },
+    "isMainnet": false,
+    "primaryType": "HyperliquidTransaction:ApproveAgent"
+  },
+  "metadata": {
+    "generatedBy": "packages/core/scripts/golden-fixtures/generate_fixtures.py",
+    "notes": "approveAgent is a user-signed (EIP-712 typed-data) action, signed like usdSend: msgpack is wire-format reference only, not part of the signing preimage. actionHash is the EIP-191/712 digest that is actually ECDSA-signed. agentAddress is derived from the fixed throwaway key 0x2222222222222222222222222222222222222222222222222222222222222222 for reproducibility, not from Python's normal secrets.token_hex().",
+    "sdkName": "hyperliquid-python-sdk",
+    "sdkVersion": "0.24.0"
+  },
+  "output": {
+    "actionHash": "0x5e9e66b9d1689ee0a3b1665296bbcf057cf6c93b9f9bf8df4dbf59acdd9bc299",
+    "msgpack": "86a474797065ac617070726f76654167656e74ac6167656e7441646472657373d92a307831353633393135653139344438436642413139343335373036303346373630364133313135353038a96167656e744e616d65a9746573744167656e74a56e6f6e6365cf0000018bcfe56800b07369676e6174757265436861696e4964a730783636656565b068797065726c6971756964436861696ea7546573746e6574",
+    "signature": {
+      "r": "0xec44898000c8010f471ae6c5693f00309797bd44a847e10b450747d8e4d3720c",
+      "s": "0x07aaee27662d446f47090c339941fb449ef677270bc5352ba0d0ad65ecc2f940",
+      "v": 28
+    }
+  },
+  "signingScheme": "sign_user_signed_action",
+  "wallet": {
+    "address": "0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A",
+    "privateKey": "0x1111111111111111111111111111111111111111111111111111111111111111"
+  }
+}

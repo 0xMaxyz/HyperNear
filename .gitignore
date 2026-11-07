@@ -1,0 +1,17 @@
+node_modules
+dist
+target
+.turbo
+coverage
+test-results
+*.log
+.DS_Store
+.pnpm-store/
+# secrets
+.env
+.env.*
+!.env.example
+# generated claim artefacts that may carry secrets stay local; results/ JSON is committed
+contract/out/*.key
+out/**/*secret*
+out/**/*.key

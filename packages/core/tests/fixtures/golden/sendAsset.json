@@ -1,0 +1,39 @@
+{
+  "actionType": "sendAsset",
+  "input": {
+    "action": {
+      "amount": "1",
+      "destination": "0x0000000000000000000000000000000000000001",
+      "destinationDex": "test",
+      "fromSubAccount": "",
+      "hyperliquidChain": "Testnet",
+      "nonce": 1700000000000,
+      "signatureChainId": "0x66eee",
+      "sourceDex": "",
+      "token": "USDC:0xeb62eee3685fc4c43992febcd9e75443",
+      "type": "sendAsset"
+    },
+    "isMainnet": false,
+    "primaryType": "HyperliquidTransaction:SendAsset"
+  },
+  "metadata": {
+    "generatedBy": "packages/core/scripts/golden-fixtures/generate_fixtures.py",
+    "notes": "sendAsset is a user-signed (EIP-712 typed-data) action, signed like usdSend: msgpack is wire-format reference only, not part of the signing preimage. actionHash is the EIP-191/712 digest that is actually ECDSA-signed. Note the action's nonce field doubles as the request-level nonce (no separate `time` field).",
+    "sdkName": "hyperliquid-python-sdk",
+    "sdkVersion": "0.24.0"
+  },
+  "output": {
+    "actionHash": "0x9001b29b2657853298627b06c8514a1e245ce8b5b16f4509cc9a49968f01cbd6",
+    "msgpack": "8aa474797065a973656e644173736574ab64657374696e6174696f6ed92a307830303030303030303030303030303030303030303030303030303030303030303030303030303031a9736f75726365446578a0ae64657374696e6174696f6e446578a474657374a5746f6b656ed927555344433a30786562363265656533363835666334633433393932666562636439653735343433a6616d6f756e74a131ae66726f6d5375624163636f756e74a0a56e6f6e6365cf0000018bcfe56800b07369676e6174757265436861696e4964a730783636656565b068797065726c6971756964436861696ea7546573746e6574",
+    "signature": {
+      "r": "0x612d8a82c926189296fdaa190e68c79e9d599ee43011bd11b4d1dc4c0470e387",
+      "s": "0x112320eb95b255dd59987dc397b27c08c8b529e4581fe560c981c12b1b706d33",
+      "v": 28
+    }
+  },
+  "signingScheme": "sign_user_signed_action",
+  "wallet": {
+    "address": "0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A",
+    "privateKey": "0x1111111111111111111111111111111111111111111111111111111111111111"
+  }
+}

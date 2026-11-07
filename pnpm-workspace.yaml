@@ -1,0 +1,7 @@
+packages:
+  - 'packages/*'
+  - 'agent'
+  - 'validation'
+  - 'web'
+allowBuilds:
+  esbuild: true
