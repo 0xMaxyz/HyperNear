@@ -164,7 +164,11 @@ await page.addInitScript(() => {
     const cur = document.createElement('div');
     cur.id = 'demo-cursor';
     cur.style.cssText = `position:fixed;left:0;top:0;width:22px;height:22px;margin:-11px 0 0 -11px;border:3px solid ${ink};background:rgba(244,241,234,.85);border-radius:50%;pointer-events:none;z-index:2147483645;transform:translate(640px,360px);transition:transform .55s ease-in-out;opacity:0`;
-    document.documentElement.append(card, cap, cur);
+    const tag = document.createElement('div');
+    tag.id = 'demo-tag';
+    tag.textContent = 'dry-run replay of live testnet runs';
+    tag.style.cssText = `position:fixed;top:0;right:0;display:none;padding:3px 10px 4px;background:${ink};color:${paper};font:600 12px/1.2 system-ui,sans-serif;border-radius:0 0 0 5px;z-index:2147483644`;
+    document.documentElement.append(card, cap, cur, tag);
     card.style.display = 'flex';
     card.innerHTML = `<div>HyperNear: smart accounts for Hyperliquid</div><div style="font-weight:400;font-size:26px;max-width:960px">Keys held by NEAR Chain Signatures.<br>Policy in a public NEAR contract.</div>`;
   };
@@ -174,6 +178,7 @@ await page.addInitScript(() => {
   if (document.readyState !== 'loading') ready();
 });
 const card = (html, small = '') => page.evaluate(([h, s]) => { const c = document.getElementById('demo-card'); c.innerHTML = h ? `<div>${h}</div>${s ? `<div style="font-weight:400;font-size:26px;max-width:980px">${s}</div>` : ''}` : ''; c.style.display = h ? 'flex' : 'none'; }, [html, small]);
+const tag = (on) => page.evaluate((v) => { document.getElementById('demo-tag').style.display = v ? 'block' : 'none'; }, on);
 const cap = (text) => page.evaluate((t) => { const c = document.getElementById('demo-cap'); c.textContent = t; c.style.display = t ? 'block' : 'none'; }, text);
 /** Where the click happens: a ring glides to the element, pulses, then the real click is made. */
 async function tap(locator) {
@@ -251,8 +256,14 @@ await card('A Hyperliquid master key is a bare EOA.', 'No withdrawal lock. No ca
 mark('problem');
 await sleep(5000);
 
-// ---- 3. log in
+// ---- the disclosure, then the UI part with its corner tag
 await card('');
+await tag(true);
+await cap('Recorded replay: every on-chain event shown happened live on NEAR + Hyperliquid testnet (tx links in docs/claims.md). The UI runs in dry-run mode; signatures are real.');
+mark('disclosure');
+await sleep(3800);
+
+// ---- 3. log in
 await cap('Log in with a passkey, email or any wallet (Privy). Your wallet address owns every account below.');
 await sleep(2600);
 await tap(page.getByRole('button', { name: /Log in with/ }));
@@ -366,6 +377,7 @@ mark('freeze');
 
 // ---- 9. end card
 await cap('');
+await tag(false);
 await card('Every claim tested live on NEAR + Hyperliquid testnet.', 'docs/claims.md<br><span style="font-size:30px;font-weight:600">github.com/OWNER/hypernear</span>');
 mark('end card');
 await sleep(6200);
