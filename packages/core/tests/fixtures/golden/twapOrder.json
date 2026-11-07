@@ -1,0 +1,40 @@
+{
+  "actionType": "twapOrder",
+  "input": {
+    "action": {
+      "twap": {
+        "a": 0,
+        "b": true,
+        "m": 10,
+        "r": false,
+        "s": "1",
+        "t": true
+      },
+      "type": "twapOrder"
+    },
+    "expiresAfter": null,
+    "isMainnet": false,
+    "nonce": 1700000000000,
+    "vaultAddress": null
+  },
+  "metadata": {
+    "generatedBy": "packages/core/scripts/golden-fixtures/generate_fixtures.py",
+    "notes": "twapOrder is an L1 action (phantom-agent scheme), signed exactly like `order` \u2014 the wrapper dispatches it to the agent tier. Distinct action type from `order`: the payload is `{type, twap: {a, b, s, r, m, t}}`, not `{type, orders, grouping}`. msgpack is the exact preimage keccak-hashed (with nonce/vaultAddress/expiresAfter appended as raw bytes, per action_hash()) to build the phantom-agent EIP-712 message that source/connectionId wraps. `m` is TWAP duration in minutes (5-1440); `t` enables randomized child-order timing.",
+    "sdkName": "hyperliquid-python-sdk",
+    "sdkVersion": "0.24.0"
+  },
+  "output": {
+    "actionHash": "0xb8ab277dab598711d9bc2163e4c90b393c4de1f91bb2685f6e86c7f7f6fff436",
+    "msgpack": "82a474797065a9747761704f72646572a47477617086a16100a162c3a173a131a172c2a16d0aa174c3",
+    "signature": {
+      "r": "0x54e26bd37dc1240c7a77239e918ee92d79bba7e0aa05d94822f3be413198989c",
+      "s": "0x4515cfb9fb9fdf490e7d8909ca9de742fd7b18adc16f856c33dba0965a643e5c",
+      "v": 28
+    }
+  },
+  "signingScheme": "sign_l1_action",
+  "wallet": {
+    "address": "0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A",
+    "privateKey": "0x1111111111111111111111111111111111111111111111111111111111111111"
+  }
+}

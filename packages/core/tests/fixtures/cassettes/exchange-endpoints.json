@@ -1,0 +1,174 @@
+[
+  {
+    "actionType": "clearinghouseState",
+    "endpoint": "info",
+    "response": {
+      "marginSummary": {
+        "accountValue": "10000",
+        "totalNtlPos": "28600",
+        "totalRawUsd": "10000",
+        "totalMarginUsed": "2860"
+      },
+      "crossMarginSummary": {
+        "accountValue": "10000",
+        "totalNtlPos": "28600",
+        "totalRawUsd": "10000",
+        "totalMarginUsed": "2860"
+      },
+      "crossMaintenanceMarginUsed": "572",
+      "withdrawable": "7140",
+      "assetPositions": [
+        {
+          "type": "oneWay",
+          "position": {
+            "coin": "BTC",
+            "szi": "0.5",
+            "leverage": { "type": "cross", "value": 5 },
+            "entryPx": "50000",
+            "positionValue": "25000",
+            "unrealizedPnl": "100",
+            "returnOnEquity": "0.02",
+            "liquidationPx": "40000",
+            "marginUsed": "5000",
+            "maxLeverage": 50,
+            "cumFunding": { "allTime": "1", "sinceOpen": "0.5", "sinceChange": "0.1" }
+          }
+        },
+        {
+          "type": "oneWay",
+          "position": {
+            "coin": "ETH",
+            "szi": "-1.2",
+            "leverage": { "type": "cross", "value": 10 },
+            "entryPx": "3000",
+            "positionValue": "3600",
+            "unrealizedPnl": "-50",
+            "returnOnEquity": "-0.01",
+            "liquidationPx": "3500",
+            "marginUsed": "360",
+            "maxLeverage": 50,
+            "cumFunding": { "allTime": "-1", "sinceOpen": "-0.2", "sinceChange": "-0.05" }
+          }
+        },
+        {
+          "type": "oneWay",
+          "position": {
+            "coin": "SOL",
+            "szi": "0.0",
+            "leverage": { "type": "cross", "value": 5 },
+            "entryPx": "150",
+            "positionValue": "0",
+            "unrealizedPnl": "0",
+            "returnOnEquity": "0",
+            "liquidationPx": null,
+            "marginUsed": "0",
+            "maxLeverage": 20,
+            "cumFunding": { "allTime": "0", "sinceOpen": "0", "sinceChange": "0" }
+          }
+        }
+      ],
+      "time": 1700000000000
+    }
+  },
+  {
+    "actionType": "withdraw3",
+    "endpoint": "exchange",
+    "response": { "status": "ok", "response": { "type": "default" } }
+  },
+  {
+    "actionType": "sendAsset",
+    "endpoint": "exchange",
+    "response": { "status": "ok", "response": { "type": "default" } }
+  },
+  {
+    "actionType": "approveAgent",
+    "endpoint": "exchange",
+    "response": { "status": "ok", "response": { "type": "default" } }
+  },
+  {
+    "actionType": "approveBuilderFee",
+    "endpoint": "exchange",
+    "response": { "status": "ok", "response": { "type": "default" } }
+  },
+  {
+    "actionType": "setReferrer",
+    "endpoint": "exchange",
+    "response": { "status": "ok", "response": { "type": "default" } }
+  },
+  {
+    "actionType": "updateLeverage",
+    "endpoint": "exchange",
+    "response": { "status": "ok", "response": { "type": "default" } }
+  },
+  {
+    "actionType": "updateIsolatedMargin",
+    "endpoint": "exchange",
+    "response": { "status": "ok", "response": { "type": "default" } }
+  },
+  {
+    "actionType": "order",
+    "endpoint": "exchange",
+    "response": {
+      "status": "ok",
+      "response": { "type": "order", "data": { "statuses": [{ "resting": { "oid": 1 } }] } }
+    }
+  },
+  {
+    "actionType": "modify",
+    "endpoint": "exchange",
+    "response": { "status": "ok", "response": { "type": "default" } }
+  },
+  {
+    "actionType": "batchModify",
+    "endpoint": "exchange",
+    "response": {
+      "status": "ok",
+      "response": { "type": "order", "data": { "statuses": [{ "resting": { "oid": 123 } }] } }
+    }
+  },
+  {
+    "actionType": "cancel",
+    "endpoint": "exchange",
+    "response": {
+      "status": "ok",
+      "response": { "type": "cancel", "data": { "statuses": ["success", "success"] } }
+    }
+  },
+  {
+    "actionType": "twapOrder",
+    "endpoint": "exchange",
+    "response": {
+      "status": "ok",
+      "response": { "type": "twapOrder", "data": { "status": { "running": { "twapId": 1 } } } }
+    }
+  },
+  {
+    "actionType": "twapCancel",
+    "endpoint": "exchange",
+    "response": {
+      "status": "ok",
+      "response": { "type": "twapCancel", "data": { "status": "success" } }
+    }
+  },
+  {
+    "actionType": "createSubAccount",
+    "endpoint": "exchange",
+    "response": {
+      "status": "ok",
+      "response": {
+        "type": "createSubAccount",
+        "data": "0x0000000000000000000000000000000000000003"
+      }
+    }
+  },
+  {
+    "actionType": "subAccountTransfer",
+    "endpoint": "exchange",
+    "response": { "status": "ok", "response": { "type": "default" } }
+  },
+  {
+    "actionType": "subAccountSpotTransfer",
+    "endpoint": "exchange",
+    "response": { "status": "ok", "response": { "type": "default" } }
+  }
+]

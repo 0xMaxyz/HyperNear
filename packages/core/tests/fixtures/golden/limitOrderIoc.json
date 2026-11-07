@@ -1,0 +1,47 @@
+{
+  "actionType": "limitOrderIoc",
+  "input": {
+    "action": {
+      "grouping": "na",
+      "orders": [
+        {
+          "a": 0,
+          "b": true,
+          "p": "50000",
+          "r": false,
+          "s": "0.01",
+          "t": {
+            "limit": {
+              "tif": "Ioc"
+            }
+          }
+        }
+      ],
+      "type": "order"
+    },
+    "expiresAfter": null,
+    "isMainnet": false,
+    "nonce": 1700000000000,
+    "vaultAddress": null
+  },
+  "metadata": {
+    "generatedBy": "packages/core/scripts/golden-fixtures/generate_fixtures.py",
+    "notes": "limitOrderIoc is `HlClient.limitOrderOpen`'s (Ioc time-in-force) wire order, signed exactly like `order` (same sign_l1_action scheme) \u2014 msgpack is the exact preimage keccak-hashed (with nonce/vaultAddress/expiresAfter appended as raw bytes, per action_hash()) to build the phantom-agent EIP-712 message that source/connectionId wraps.",
+    "sdkName": "hyperliquid-python-sdk",
+    "sdkVersion": "0.24.0"
+  },
+  "output": {
+    "actionHash": "0x38f5d1661d7dcafaa8bdb789d272b5ea4482ae6a37179b7254b79f2a2d0d4222",
+    "msgpack": "83a474797065a56f72646572a66f72646572739186a16100a162c3a170a53530303030a173a4302e3031a172c2a17481a56c696d697481a3746966a3496f63a867726f7570696e67a26e61",
+    "signature": {
+      "r": "0xed6c61c9ce4000340cd03938dd6ba855f34e4c06d5e6e8a9740de05e735d681f",
+      "s": "0x2df6a9ef9b11b5103d2d341337704d88ffb37635a037950ac36f68401abde56a",
+      "v": 28
+    }
+  },
+  "signingScheme": "sign_l1_action",
+  "wallet": {
+    "address": "0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A",
+    "privateKey": "0x1111111111111111111111111111111111111111111111111111111111111111"
+  }
+}

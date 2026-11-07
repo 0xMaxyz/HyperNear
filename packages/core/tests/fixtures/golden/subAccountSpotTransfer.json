@@ -1,0 +1,36 @@
+{
+  "actionType": "subAccountSpotTransfer",
+  "input": {
+    "action": {
+      "amount": "1",
+      "isDeposit": true,
+      "subAccountUser": "0x0000000000000000000000000000000000000001",
+      "token": "USDC:0xeb62eee3685fc4c43992febcd9e75443",
+      "type": "subAccountSpotTransfer"
+    },
+    "expiresAfter": null,
+    "isMainnet": false,
+    "nonce": 1700000000000,
+    "vaultAddress": null
+  },
+  "metadata": {
+    "generatedBy": "packages/core/scripts/golden-fixtures/generate_fixtures.py",
+    "notes": "subAccountSpotTransfer is an L1 action (phantom-agent scheme), signed exactly like `order` \u2014 the wrapper must dispatch it to the agent tier, not the master tier, despite moving funds. msgpack is the exact preimage keccak-hashed (with nonce/vaultAddress/expiresAfter appended as raw bytes, per action_hash()) to build the phantom-agent EIP-712 message that source/connectionId wraps. `amount` is a plain decimal string (not wei-scaled), matching sendAsset's convention, unlike subAccountTransfer's 1e6-scaled `usd`.",
+    "sdkName": "hyperliquid-python-sdk",
+    "sdkVersion": "0.24.0"
+  },
+  "output": {
+    "actionHash": "0xc05633febaf98a6ea62c2da574684c1acd7a06184b946fcae7f35383203090af",
+    "msgpack": "85a474797065b67375624163636f756e7453706f745472616e73666572ae7375624163636f756e7455736572d92a307830303030303030303030303030303030303030303030303030303030303030303030303030303031a969734465706f736974c3a5746f6b656ed927555344433a30786562363265656533363835666334633433393932666562636439653735343433a6616d6f756e74a131",
+    "signature": {
+      "r": "0xbecda5171122b59f5e7aea1c502f42a4961edf427cc01f13c7135bf6e2e2083d",
+      "s": "0x24499de3bb443a78fcc6557f85174aacf6edac9b5786fc2c5915dc954226132b",
+      "v": 28
+    }
+  },
+  "signingScheme": "sign_l1_action",
+  "wallet": {
+    "address": "0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A",
+    "privateKey": "0x1111111111111111111111111111111111111111111111111111111111111111"
+  }
+}

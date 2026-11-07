@@ -1,0 +1,33 @@
+{
+  "actionType": "setReferrer",
+  "input": {
+    "action": {
+      "code": "TESTCODE",
+      "type": "setReferrer"
+    },
+    "expiresAfter": null,
+    "isMainnet": false,
+    "nonce": 1700000000000,
+    "vaultAddress": null
+  },
+  "metadata": {
+    "generatedBy": "packages/core/scripts/golden-fixtures/generate_fixtures.py",
+    "notes": "setReferrer is an L1 action (phantom-agent scheme), signed exactly like `order` despite being a user-facing/account action \u2014 the wrapper must dispatch it to the agent tier, not the master tier. msgpack is the exact preimage keccak-hashed (with nonce/vaultAddress/expiresAfter appended as raw bytes, per action_hash()) to build the phantom-agent EIP-712 message that source/connectionId wraps.",
+    "sdkName": "hyperliquid-python-sdk",
+    "sdkVersion": "0.24.0"
+  },
+  "output": {
+    "actionHash": "0x9f1e2d8cffec546ab3ba681a291e01e5527c59db3c42787ee726ec0f80d98e8a",
+    "msgpack": "82a474797065ab7365745265666572726572a4636f6465a854455354434f4445",
+    "signature": {
+      "r": "0x1e2b713ef4f6dcc307f2f2ce48cdb5bc0323a61a3fc9699ea4ef5cd93e7770d4",
+      "s": "0x1560a29675292b002600a413b8150a6257e4cbb97ac2e9c659d9516c780a6889",
+      "v": 27
+    }
+  },
+  "signingScheme": "sign_l1_action",
+  "wallet": {
+    "address": "0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A",
+    "privateKey": "0x1111111111111111111111111111111111111111111111111111111111111111"
+  }
+}

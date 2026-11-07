@@ -1,0 +1,47 @@
+{
+  "actionType": "marketOrder",
+  "input": {
+    "action": {
+      "grouping": "na",
+      "orders": [
+        {
+          "a": 0,
+          "b": true,
+          "p": "54000",
+          "r": false,
+          "s": "0.01",
+          "t": {
+            "limit": {
+              "tif": "FrontendMarket"
+            }
+          }
+        }
+      ],
+      "type": "order"
+    },
+    "expiresAfter": null,
+    "isMainnet": false,
+    "nonce": 1700000000000,
+    "vaultAddress": null
+  },
+  "metadata": {
+    "generatedBy": "packages/core/scripts/golden-fixtures/generate_fixtures.py",
+    "notes": "marketOrder is signed exactly like `order` (same sign_l1_action scheme, the 'FrontendMarket' tif is just a note to the matching engine that this is a marketable order) \u2014 msgpack is the exact preimage keccak-hashed (with nonce/vaultAddress/expiresAfter appended as raw bytes, per action_hash()) to build the phantom-agent EIP-712 message that source/connectionId wraps. The price (54000) is midPx=50000 with 8% buy-side slippage, rounded to 5 significant figures and (6 - szDecimals=3) decimal places \u2014 see packages/core/src/hl/pricing.ts's computeSlippagePrice, ported from the previously-shipped @rabby-wallet/hyperliquid-sdk's getSlippagePx.",
+    "sdkName": "hyperliquid-python-sdk",
+    "sdkVersion": "0.24.0"
+  },
+  "output": {
+    "actionHash": "0x1a3ca125291c9353c4217e5d4f660b6cf0b1eff2e136c7caf57f4e928a77a5c4",
+    "msgpack": "83a474797065a56f72646572a66f72646572739186a16100a162c3a170a53534303030a173a4302e3031a172c2a17481a56c696d697481a3746966ae46726f6e74656e644d61726b6574a867726f7570696e67a26e61",
+    "signature": {
+      "r": "0xc4b40455d82f6f62e59fa4e9932b86ed0aacb0f32044617668bf5cff4c31f2a9",
+      "s": "0x73aa3bcc46063686f31f83ebc264a18b4ddbc6d7374b99c1f6559d4e30f508c0",
+      "v": 27
+    }
+  },
+  "signingScheme": "sign_l1_action",
+  "wallet": {
+    "address": "0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A",
+    "privateKey": "0x1111111111111111111111111111111111111111111111111111111111111111"
+  }
+}
