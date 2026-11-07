@@ -25,7 +25,7 @@ describe('C3 offline: artefacts recover to their derived address', () => {
   for (const [name, path] of Object.entries(FILES)) {
     const f = loadSignedActionFile(path);
     it.skipIf(!f)(name, async () => {
-      expect(await recoverUserSigned(f!.action, f!.signature)).toBe(f!.address);
+      expect((await recoverUserSigned(f!.action, f!.signature)).toLowerCase()).toBe(f!.address.toLowerCase());
     });
   }
 });

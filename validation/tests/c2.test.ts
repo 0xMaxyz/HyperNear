@@ -28,7 +28,7 @@ const FUND = '5';
 describe('C2 offline: contract-dev artefact is self-consistent', () => {
   const f = loadSignedActionFile(C2_FILE);
   it.skipIf(!f)('signature recovers to the derived address', async () => {
-    expect(await recoverUserSigned(f!.action, f!.signature)).toBe(f!.address);
+    expect((await recoverUserSigned(f!.action, f!.signature)).toLowerCase()).toBe(f!.address.toLowerCase());
   });
 });
 

@@ -35,3 +35,10 @@ Running log for TypeScript work (core, validation/, agent/). Newest decisions fi
 - On ci32 the wallet file lives at ~/secrets/lab-wallets.json (0600, indices 1-10 only, copied from the laptop outside git); jobs set LAB_WALLETS_PATH to it.
 - HL testnet is reachable directly from ci32 (no proxy needed for these reads).
 - Unverified until run live: funding amounts (5 to 25 USDC per leg), the 30 s balance-poll windows, whether a never-seen address can `approveAgent` before it holds funds (C10/C2 fund first).
+
+## Live results so far (testnet, lab wallets; details in validation/results/*.json on the box)
+- C2 OK: MPC-signed approveAgent (leash-spike-1107.testnet, test/leg0 -> agent 0x7bfc..c2c6) accepted; extraAgents lists it. Sign-and-poll ~15.8 s, ~12.1 TGas. The contract/out file's nonce goes stale, so the test re-signs on ci32 via `C2_SIGN_DIR=~/work/near_hck-contract` (needs near credentials there); `contract/out/` is gitignored, so copy the file to the box and set `C2_FILE_PATH`.
+- C10 OK (local key and derived addresses): sending 20 USDC to a never-funded address credits 19 (1 USDC activation fee, taken from the credit); the first action then costs nothing extra.
+- C4 OK: approved agent places and cancels (also on leg0 with the MPC-approved agent); the same agent on a second master is rejected ("Extra agent already used."), so one agent key per leg.
+- C5 OK: with a $15 BTC long open, withdrawable 22.476 of 23.99 account value; usdSend of 22.47 succeeded.
+- C11 OK, agent CAN sign subAccountTransfer: lab #10 raised volume to $108k in 3 BTC IOC round trips (~$28.6 of fees), createSubAccount, a fresh API wallet moved 1 USDC in and out.
