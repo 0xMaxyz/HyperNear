@@ -98,5 +98,5 @@ describe.skipIf(!live)('C11: agent-signed subAccountTransfer (lab wallet #10)', 
         r.warn('agent-signed subAccountTransfer rejected by HL');
       }
     });
-  });
+  }, 600_000);
 });
