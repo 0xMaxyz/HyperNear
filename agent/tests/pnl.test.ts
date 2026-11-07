@@ -4,7 +4,7 @@ import { breakevens, DEFAULT_TAKER_RATE, legCosts, openTime } from '../src/pnl.t
 import { ch, snap } from './agent-helpers.ts';
 
 const fill = (coin: string, time: number, startPosition: string, fee: string): HlUserFill =>
-  ({ coin, px: '100000', sz: '0.0001', side: 'B', time, startPosition, dir: 'Open Long', closedPnl: '0', hash: '0x0', oid: 1, crossed: true, fee } as HlUserFill);
+  ({ coin, px: "100000", sz: "0.0001", side: "B", time, startPosition, dir: "Open Long", closedPnl: "0", hash: "0x0", oid: 1, crossed: true, fee } as unknown as HlUserFill);
 const funding = (coin: string, time: number, usdc: string): HlUserFunding =>
   ({ time, hash: '0x0', delta: { type: 'funding', coin, usdc, szi: '0', fundingRate: '0' } } as unknown as HlUserFunding);
 
