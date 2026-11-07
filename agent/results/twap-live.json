@@ -1,0 +1,251 @@
+{
+  "at": "2026-11-07T19:43:30.381Z",
+  "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+  "leg": 3,
+  "legAddress": "0x5cba8512a2933a08fc3d33874871fe430b6e3d91",
+  "ok": true,
+  "spec": {
+    "id": "dca-live-1",
+    "type": "twap",
+    "leg": 3,
+    "coin": "BTC",
+    "params": {
+      "side": "buy",
+      "sizePerSlice": "0.00015",
+      "slices": 4,
+      "intervalSec": 15,
+      "limitPx": 77128
+    },
+    "limits": {
+      "maxNotional": 100,
+      "maxLeverage": 3,
+      "maxDailyLoss": 5,
+      "topUpCapPerDay": 20
+    },
+    "onStop": "flatten"
+  },
+  "restart": {
+    "restoredAs": {
+      "id": "dca-live-1",
+      "type": "twap",
+      "leg": 3,
+      "coin": "BTC",
+      "state": "paused",
+      "deadman": "off",
+      "held": [],
+      "resting": 0,
+      "twap": {
+        "done": 4,
+        "skipped": 0,
+        "filledSize": 0.0006,
+        "nextAt": 1794080681866
+      }
+    },
+    "restoreResult": [
+      {
+        "id": "dca-live-1",
+        "cancelled": 1
+      }
+    ],
+    "note": "saved strategy came back paused, the resting order left on the leg was cancelled, the identical spec resumed it with its slice count intact"
+  },
+  "slices": [
+    {
+      "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+      "id": "dca-live-1",
+      "leg": 3,
+      "slice": 1,
+      "side": "buy",
+      "sz": 0.00015,
+      "avgPx": 75619.9,
+      "done": 1,
+      "of": 4
+    },
+    {
+      "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+      "id": "dca-live-1",
+      "leg": 3,
+      "slice": 2,
+      "side": "buy",
+      "sz": 0.00015,
+      "avgPx": 75620,
+      "done": 2,
+      "of": 4
+    },
+    {
+      "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+      "id": "dca-live-1",
+      "leg": 3,
+      "slice": 3,
+      "side": "buy",
+      "sz": 0.00015,
+      "avgPx": 75615,
+      "done": 3,
+      "of": 4
+    },
+    {
+      "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+      "id": "dca-live-1",
+      "leg": 3,
+      "slice": 4,
+      "side": "buy",
+      "sz": 0.00015,
+      "avgPx": 75616,
+      "done": 4,
+      "of": 4
+    }
+  ],
+  "positionBeforeFlatten": 0.0006,
+  "positionAfterStop": 0,
+  "equityUsd": {
+    "before": 24.957544,
+    "after": 24.913873
+  },
+  "events": [
+    {
+      "t": 752,
+      "type": "strategy.started",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "id": "dca-live-1",
+        "leg": 3,
+        "type": "twap",
+        "coin": "BTC"
+      }
+    },
+    {
+      "t": 4919,
+      "type": "strategy.slice",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "id": "dca-live-1",
+        "leg": 3,
+        "slice": 1,
+        "side": "buy",
+        "sz": 0.00015,
+        "avgPx": 75619.9,
+        "done": 1,
+        "of": 4
+      }
+    },
+    {
+      "t": 24195,
+      "type": "strategy.slice",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "id": "dca-live-1",
+        "leg": 3,
+        "slice": 2,
+        "side": "buy",
+        "sz": 0.00015,
+        "avgPx": 75620,
+        "done": 2,
+        "of": 4
+      }
+    },
+    {
+      "t": 25086,
+      "type": "strategy.paused",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "id": "dca-live-1",
+        "leg": 3,
+        "reason": "service restart (live run)",
+        "cancelled": 0
+      }
+    },
+    {
+      "t": 28737,
+      "type": "strategy.restored",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "id": "dca-live-1",
+        "leg": 3,
+        "state": "paused",
+        "cancelled": 1,
+        "held": [],
+        "twap": {
+          "done": 4,
+          "skipped": 0,
+          "filledSize": 0.0006,
+          "nextAt": 1794080681866
+        }
+      }
+    },
+    {
+      "t": 29842,
+      "type": "strategy.resumed",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "id": "dca-live-1",
+        "leg": 3
+      }
+    },
+    {
+      "t": 42984,
+      "type": "strategy.slice",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "id": "dca-live-1",
+        "leg": 3,
+        "slice": 3,
+        "side": "buy",
+        "sz": 0.00015,
+        "avgPx": 75615,
+        "done": 3,
+        "of": 4
+      }
+    },
+    {
+      "t": 57951,
+      "type": "strategy.slice",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "id": "dca-live-1",
+        "leg": 3,
+        "slice": 4,
+        "side": "buy",
+        "sz": 0.00015,
+        "avgPx": 75616,
+        "done": 4,
+        "of": 4
+      }
+    },
+    {
+      "t": 57951,
+      "type": "strategy.done",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "id": "dca-live-1",
+        "leg": 3,
+        "filled": 4,
+        "skipped": 0,
+        "filledSize": 0.0006
+      }
+    },
+    {
+      "t": 61500,
+      "type": "strategy.stopped",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "id": "dca-live-1",
+        "leg": 3,
+        "reason": "end of run",
+        "cancelled": 0,
+        "flattened": true
+      }
+    },
+    {
+      "t": 62380,
+      "type": "strategy.stopped",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "id": "dca-live-1",
+        "leg": 3,
+        "reason": "end of run",
+        "cancelled": 0,
+        "flattened": true
+      }
+    }
+  ]
+}
