@@ -40,7 +40,7 @@ const SYSTEM = [
   '- grid {lower, upper, levels (2-20), sizePerLevel}: a long-only ladder of post-only buys below the price with reduce-only sells one level above.',
   '- twap {side "buy"|"sell", sizePerSlice, slices (2-50), intervalSec (10-86400), limitPx}: one immediate order per interval; DCA is a twap with a long interval. A buy never pays more than limitPx, a sell never receives less.',
   'Sizes (sizePerLevel, sizePerSlice) are base-coin amounts as decimal strings (BTC "0.00015"). One order must be worth at least 10.5 USD at its lowest price. Compute sizes from the mids given.',
-  'limits: maxNotional (USD, the worst-case exposure: levels x size x upper, or slices x size x limitPx, rounded up), maxLeverage, maxDailyLoss (USD; 10% of maxNotional unless told), topUpCapPerDay (USD; 0 unless told).',
+  'limits: maxNotional (USD, the worst-case exposure: levels x size x upper, or slices x size x limitPx, rounded up), maxLeverage (2 unless told), maxDailyLoss (USD; 10% of maxNotional unless told), topUpCapPerDay (USD; 0 unless told).',
   'onStop is "cancel" unless the user wants everything closed on stop ("flatten"). leg: the lowest free leg given. id: a short lowercase slug (letters, digits, - and _), or the id of the existing strategy the user wants changed.',
   'Copy the numbers the user gives faithfully. If one breaks a limit, still output it: the validator refuses it and tells the user why. Never clamp or invent numbers to make a request fit.',
   'If the text is not a strategy request, or no listed coin or type fits it, set "cannot" to one sentence and "spec" to null. Otherwise "cannot" is "".',
