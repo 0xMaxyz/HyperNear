@@ -192,6 +192,10 @@ function summarize(e: AgentEvent): string {
       return `${who}rejected: ${String(d.action).replaceAll('_', ' ')} on ${d.coin}${d.reason ? `, ${d.reason}` : ''}`;
     case 'decision.mode':
       return `${who}decision mode set to ${d.mode}`;
+    case 'guard.rebalance.posted':
+      return `${who}rebalance posted to Hyperliquid${d.ms ? ` after ${(d.ms / 1000).toFixed(1)} s` : ''}`;
+    case 'agents.prepared':
+      return `${who}agent keys prepared for legs ${((d.legs as { leg: number }[] | undefined) ?? []).map((l) => l.leg).join(', ')}`;
     default:
       return `${who}${JSON.stringify(d).slice(0, 140)}`;
   }

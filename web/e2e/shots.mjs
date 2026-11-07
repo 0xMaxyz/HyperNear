@@ -64,7 +64,7 @@ await withAgent('hedged', async () => {
   await page.getByRole('button', { name: 'Ask for a proposal' }).click();
   await page.waitForTimeout(2500);
   check('Ask for a proposal adds a proposal to the log', (await page.locator('.log li .tag', { hasText: 'decision.proposed' }).count()) === 6);
-  check('guard replay reached the log', (await page.locator('.log li .tag', { hasText: 'guard.rebalance.posted' }).count()) >= 1);
+  check('guard replay reached the log, in words', (await page.locator('.log li', { hasText: 'rebalance posted to Hyperliquid' }).count()) >= 1);
   check('signing buttons are disabled when only viewing', await page.getByRole('button', { name: 'Open hedge' }).isDisabled());
   check('freeze copy mentions revoked trading keys', (await page.getByText(/revokes the agents' Hyperliquid trading keys/).count()) === 1);
   await shot(page, '03-hedged-light');
