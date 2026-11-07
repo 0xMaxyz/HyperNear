@@ -51,7 +51,8 @@ const agent = spawn('node', ['agent/src/server.ts', '--dry-run', '--serve'], { c
 await new Promise((res, rej) => { agent.stdout.once('data', res); agent.once('exit', (c) => rej(new Error(`agent exited early (${c})`))); });
 const cleanup = () => { try { agent.kill(); } catch {} };
 process.on('exit', cleanup);
-process.on('uncaughtException', (e) => { console.error(e); cleanup(); process.exit(1); });
+let finishing = false;
+process.on('uncaughtException', (e) => { if (finishing) return; console.error(e); cleanup(); process.exit(1); });
 
 const clients = new Set();
 let nextId = 2_000_000;
@@ -222,8 +223,9 @@ await page.route(`${BASE}/relay`, async (route) => {
 });
 await page.route(`${BASE}/agents/prepare`, async (route) => {
   const res = await route.fetch();
-  if (res.status() === 200) { prepared = await res.json(); stage = 'prepared'; }
-  await route.fulfill({ response: res });
+  const text = await res.text();
+  if (res.status() === 200) { prepared = JSON.parse(text); stage = 'prepared'; }
+  await route.fulfill({ status: res.status(), headers: res.headers(), body: text });
 });
 await page.route(`${BASE}/hedge/open`, async (route) => {
   const body = JSON.parse(route.request().postData() ?? '{}');
@@ -337,7 +339,7 @@ await act(page.getByRole('button', { name: 'Start strategy' }));
 await cap('Started on its own leg, so its losses stay on that leg. The strategy log follows every order and fill.');
 await scrollTo('#strat-log-h', { offset: 70 });
 const sFrames = strategyFrames();
-await Promise.all([play(sFrames, 4), sleep(8200)]);
+await Promise.all([play(sFrames, 14), sleep(8200)]); // the recorded runs last about 130 s; 14x keeps both on screen for 9 s
 await sleep(800);
 mark('strategies');
 
@@ -362,6 +364,8 @@ await card('Every claim tested live on NEAR + Hyperliquid testnet.', 'docs/claim
 mark('end card');
 await sleep(6200);
 const total = (Date.now() - t0) / 1000;
+finishing = true;
+await page.unrouteAll({ behavior: 'ignoreErrors' }); // a poll still in flight must not fail the shutdown
 await ctx.close();
 const vid = await page.video().path();
 mkdirSync(OUT, { recursive: true });
