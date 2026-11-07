@@ -1,4 +1,4 @@
-// Bundled by shots.mjs (esbuild): recovers the signer of a request body with the same builders the page signs with.
+// Bundled by the e2e scripts (esbuild): recovers the signer of a request body with the same builders the page signs with.
 import { recoverTypedDataAddress, type Hex } from 'viem';
 import { commandTypedData, ownerIntentTypedData } from '../src/hypernear';
 

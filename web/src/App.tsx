@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Hex } from 'viem';
-import { commandTypedData, newCommand, ownerIntentTypedData, type OwnerIntent, type OwnerIntentTypedData } from '@hypernear/client';
+import { commandTypedData, newCommand, ownerIntentTypedData, type Command, type OwnerIntent, type OwnerIntentTypedData } from '@hypernear/client';
 import { AGENT_ACCOUNT, AGENT_URL, CHAIN_TAG, CONTRACT_ID, DEMO_OWNER, getOwner, pendingDecision, post, streamEvents, type AgentEvent, type DecisionMode, type OwnerView } from './api';
+import { LegPanel } from './legpanel';
 import { Activity, BreakevenCard, DecisionPanel, LegsTable, short } from './panels';
+import { StrategiesPanel } from './strategies';
 
 export interface Auth {
   ready: boolean;
@@ -189,6 +191,7 @@ export function App({ auth }: { auth: Auth }) {
       return done(out, 'Asked the agent for a proposal. It arrives in the log and here in a few seconds');
     });
 
+  const signCommand = (c: Command) => auth.sign(commandTypedData(chainTag, contractId, c));
   const why = canSign ? undefined : 'Log in to sign';
   const locked = !canSign || busy !== null;
 
@@ -242,6 +245,8 @@ export function App({ auth }: { auth: Auth }) {
             <h2 id="legs-h">Legs</h2>
             <LegsTable view={view} loading={loading} error={error} />
           </section>
+
+          <LegPanel view={view} demo={demo} />
 
           <div className="grid">
             <section className="card" aria-labelledby="setup-h">
@@ -341,7 +346,9 @@ export function App({ auth }: { auth: Auth }) {
             </div>
           </div>
 
-          <Activity events={mine} stream={stream} />
+          <StrategiesPanel owner={owner} canSign={canSign} events={mine} sign={signCommand} tick={view?.snapshot.at} />
+
+          <Activity events={mine.filter((e) => !e.type.startsWith('strategy.'))} stream={stream} />
         </main>
       )}
     </>

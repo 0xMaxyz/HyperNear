@@ -164,3 +164,69 @@ export function pendingDecision(events: AgentEvent[], dismissed: Set<string>, fr
   const l = fromView?.latest;
   return l && l.status === 'open' && !closed.has(l.id) && !dismissed.has(l.id) ? l : undefined;
 }
+
+export async function getJson<T>(path: string): Promise<T> {
+  try {
+    return (await json(await fetch(`${AGENT_URL}${path}`, { signal: AbortSignal.timeout(8000) }))) as T;
+  } catch (e) {
+    if (e instanceof ApiError) throw e;
+    throw new ApiError(`Cannot reach the agent at ${AGENT_URL}.`);
+  }
+}
+
+// ---- Phase 2: strategies (agent/src/strategy/*)
+export interface StrategySpec {
+  id: string;
+  type: 'grid' | 'twap';
+  leg: number;
+  coin: string;
+  params: Record<string, number | string>;
+  limits: { maxNotional: number; maxLeverage: number; maxDailyLoss: number; topUpCapPerDay: number };
+  onStop: 'cancel' | 'flatten';
+}
+export interface SpecChange {
+  path: string;
+  from: unknown;
+  to: unknown;
+}
+/** POST /strategy/draft {owner, text}: the model only drafts; the agent validated every number. */
+export interface DraftOk {
+  spec: StrategySpec;
+  specHash: string;
+  diff: { against: string; changes: SpecChange[] };
+  warnings: string[];
+}
+export interface DraftRefused {
+  ok: false;
+  errors: string[];
+  /** what the model proposed, unvalidated */
+  draft?: unknown;
+}
+export interface StrategyStatus {
+  id: string;
+  type: 'grid' | 'twap';
+  leg: number;
+  coin: string;
+  state: string;
+  deadman?: string;
+  held?: unknown;
+  resting?: number;
+  twap?: { done: number; skipped: number; filledSize?: string };
+}
+
+/** Canonical JSON (keys sorted), the same as agent/src/strategy/spec.ts canonicalJson, so the hash can be recomputed here. */
+export function canonicalJson(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(canonicalJson).join(',')}]`;
+  if (v && typeof v === 'object') {
+    const o = v as Record<string, unknown>;
+    return `{${Object.keys(o).sort().map((k) => `${JSON.stringify(k)}:${canonicalJson(o[k])}`).join(',')}}`;
+  }
+  return JSON.stringify(v);
+}
+
+/** sha256 of the canonical JSON, as 0x + 64 hex: the specHash the owner signs. */
+export async function specHashOf(spec: StrategySpec): Promise<Hex> {
+  const bytes = new TextEncoder().encode(canonicalJson(spec));
+  const d = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+  return `0x${[...d].map((b) => b.toString(16).padStart(2, '0')).join('')}` as Hex;
+}
