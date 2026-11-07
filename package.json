@@ -5,8 +5,9 @@
   "description": "Smart accounts for Hyperliquid, keys held by NEAR",
   "license": "MIT",
   "scripts": {
-    "test": "pnpm -r --if-present test",
-    "typecheck": "pnpm -r --if-present typecheck"
+    "build:core": "pnpm --filter @perps-platform/core build",
+    "test": "pnpm build:core && pnpm -r --if-present test",
+    "typecheck": "pnpm build:core && pnpm -r --if-present typecheck"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

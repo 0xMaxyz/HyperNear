@@ -449,6 +449,7 @@ packages:
     resolution: {integrity: sha512-X5XaVWZIBCT7HHZGm5I7ZQXDwLG+bGXuSrMQAW+7Zvl87h1kmc1ZB1VSRJcpUfoUrGQp4Fkoxm5kZ+Ms+aW+eA==}
     engines: {node: '>= 20.19.0'}
 
+  '@noble/post-quantum@0.6.1':
     resolution: {integrity: sha512-+pormrDZwjRw05U8ADK4JpHejo87+gBd+muRBB/ozztH5yhDLMDF4jHQWN3NQQAsu1zBNPWTG0ZwVI0CR29H0A==}
     engines: {node: '>= 20.19.0'}
 
@@ -1588,6 +1589,7 @@ snapshots:
 
   '@noble/hashes@2.4.0': {}
 
+  '@noble/post-quantum@0.6.1':
     dependencies:
       '@noble/ciphers': 2.2.0
       '@noble/curves': 2.2.0
@@ -2128,6 +2130,7 @@ snapshots:
     dependencies:
       '@noble/curves': 2.2.0
       '@noble/hashes': 2.2.0
+      '@noble/post-quantum': 0.6.1
       '@scure/base': 2.2.0
       borsh: 2.0.0
       is-my-json-valid: 2.20.6
