@@ -8,6 +8,8 @@ import { runClaim } from '../src/results';
 
 const live = LIVE && Boolean(process.env.TYPESAFE_API_KEY);
 const MODEL = 'jev-1.14.0';
+const ATTEMPT_TIMEOUT_MS = 4_000;
+const MAX_ATTEMPTS = 4;
 const FLIP_LIMIT = 0.1; // C17 pass bar for "shuffling changes the top answer": plan says "less than X%", X chosen here
 
 interface Call {
@@ -25,12 +27,12 @@ interface Call {
 describe.skipIf(!live)('C17: Jev decide fixtures', () => {
   it('50 states x 2 shuffled orders', async () => {
     await runClaim('C17', 'C17', 'Jev choice call: latency, shuffle stability, confidence', async (r) => {
-      // the first call to a pinned model can take over a minute (cold start, measured 78 s), so warm up with a long timeout
-      const client = new TypeSafeClient({ timeout: 180_000 });
-      const w0 = performance.now();
-      await client.systemOne({ state: { warmup: 'yes' }, questions: { d: choice('Pick one', { a: 'first', b: 'second' }) }, model: MODEL });
-      r.numbers.coldStartMs = Math.round(performance.now() - w0);
-      const timed = new TypeSafeClient({ timeout: 60_000, maxRetries: 0 });
+      // Jev hangs on roughly half of the attempts (looks like one bad replica behind the balancer), so: short per-attempt
+      // timeout, no hidden SDK retries, our own bounded retries, and attempts/timeouts reported.
+      const timed = new TypeSafeClient({ timeout: ATTEMPT_TIMEOUT_MS, retry: { maxRetries: 0 } });
+      let attemptsTotal = 0;
+      let attemptFailures = 0;
+      const singleAttemptMs: number[] = [];
       let consecutiveErrors = 0;
       const errors: string[] = [];
       const states = loadStates();
@@ -47,19 +49,29 @@ describe.skipIf(!live)('C17: Jev decide fixtures', () => {
           const options = Object.fromEntries(order.map((a) => [a, ACTIONS[a]]));
           const t0 = performance.now();
           let res;
-          try {
-            res = await timed.systemOne({
-              state: s.facts,
-              questions: { decision: choice('Which action is best for this hedged position right now?', options) },
-              model: MODEL,
-            });
-          } catch (e) {
-            errors.push(`${s.id}#${run}: ${e instanceof Error ? e.message : String(e)} after ${Math.round(performance.now() - t0)}ms`);
+          let lastErr = '';
+          for (let attempt = 1; attempt <= MAX_ATTEMPTS && !res; attempt++) {
+            const a0 = performance.now();
+            attemptsTotal++;
+            try {
+              res = await timed.systemOne({
+                state: s.facts,
+                questions: { decision: choice('Which action is best for this hedged position right now?', options) },
+                model: MODEL,
+              });
+              singleAttemptMs.push(performance.now() - a0);
+            } catch (e) {
+              attemptFailures++;
+              lastErr = `${e instanceof Error ? e.name + ': ' + e.message : String(e)}`;
+            }
+          }
+          if (!res) {
+            errors.push(`${s.id}#${run}: all ${MAX_ATTEMPTS} attempts failed (${lastErr})`);
             consecutiveErrors++;
             continue;
           }
           consecutiveErrors = 0;
-          const ms = performance.now() - t0;
+          const ms = performance.now() - t0; // includes failed attempts: the latency a caller really sees
           const a = res.answers.decision;
           const probs = a.probabilities as Record<string, number>;
           if (!shape) {
@@ -79,6 +91,13 @@ describe.skipIf(!live)('C17: Jev decide fixtures', () => {
       const byState = states.map((s) => calls.filter((c) => c.id === s.id));
       const complete = byState.filter((cs) => cs.length === 2);
       r.numbers.errors = errors.length;
+      r.numbers.attempts = attemptsTotal;
+      r.numbers.failedAttempts = attemptFailures;
+      r.numbers.attemptFailureRate = attemptFailures / attemptsTotal;
+      if (singleAttemptMs.length) {
+        r.numbers.successAttemptP50Ms = Math.round(percentile(singleAttemptMs, 50));
+        r.numbers.successAttemptP95Ms = Math.round(percentile(singleAttemptMs, 95));
+      }
       if (errors.length) {
         r.refs.errors = errors.slice(0, 10);
         r.warn(`${errors.length} of 100 calls failed (timeout or dropped connection)`);
@@ -91,9 +110,9 @@ describe.skipIf(!live)('C17: Jev decide fixtures', () => {
       for (const c of calls) tally[c.choice] = (tally[c.choice] ?? 0) + 1;
 
       r.numbers.calls = calls.length;
-      r.numbers.latencyP50Ms = Math.round(percentile(ms, 50));
-      r.numbers.latencyP95Ms = Math.round(percentile(ms, 95));
-      r.numbers.latencyMaxMs = Math.round(Math.max(...ms));
+      r.numbers.latencyWithRetriesP50Ms = Math.round(percentile(ms, 50));
+      r.numbers.latencyWithRetriesP95Ms = Math.round(percentile(ms, 95));
+      r.numbers.latencyWithRetriesMaxMs = Math.round(Math.max(...ms));
       r.numbers.statesComplete = complete.length;
       r.numbers.flipRate = flips / complete.length;
       r.numbers.shareTopProbAtLeast090 = top90Calls / calls.length;
@@ -104,7 +123,8 @@ describe.skipIf(!live)('C17: Jev decide fixtures', () => {
       r.refs.responseShape = shape;
       r.refs.choiceTally = tally;
       if (flips / complete.length > FLIP_LIMIT) r.warn(`top answer flips under shuffling on ${flips}/${complete.length} states (> ${FLIP_LIMIT * 100}%)`);
-      if (percentile(ms, 95) > 1000) r.warn('p95 latency above 1 s');
+      if (percentile(ms, 95) > 1000) r.warn('p95 latency (with retries) above 1 s');
+      if (attemptFailures / attemptsTotal > 0.05) r.warn(`${Math.round((100 * attemptFailures) / attemptsTotal)}% of attempts timed out or dropped`);
 
       // consumed by C18: Jev's answer per state = argmax of the mean probabilities over both runs
       const jevTop = states.flatMap((s, i) => {
