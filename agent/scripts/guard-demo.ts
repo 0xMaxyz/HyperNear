@@ -46,6 +46,8 @@ function ownerKey(): Hex {
 }
 
 const keyOf = (id: string) => JSON.parse(readFileSync(`${homedir()}/.near-credentials/testnet/${id}.json`, 'utf8')).private_key as string;
+/** Leg roles in the demo (shown in every log line, for the video). */
+const LABEL = (i: number) => (['leg0 [long]', 'leg1 [hedge]', 'leg2 [reserve]'][i] ?? `leg${i}`);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const szi = (s: OwnerSnapshot, leg: number) => Number(position(s.legs.find((l) => l.leg === leg)!.clearinghouse, 'BTC')?.szi ?? 0);
 const leg = (s: OwnerSnapshot, i: number) => s.legs.find((l) => l.leg === i)!;
@@ -92,14 +94,17 @@ export async function runGuardDemo(o: GuardDemoOptions = {}) {
   };
 
   // ---- setup: legs, agents, policy (agent = our NEAR agent, cap $50/day, 30 s cooldown)
-  const addr = [await client.registerLeg(ow, 0), await client.registerLeg(ow, 1)];
+  for (const i of [0, 1, 2]) await client.registerLeg(ow, i); // leg2 = the flat reserve the guard draws from
   await legs.approveAgents(ow, [0, 1], signOwnerIntent as never);
   const pol = await client.getOwner(ow);
   if (pol?.agent !== nearAgentId || pol.daily_cap !== 50e6 || pol.cooldown_sec !== 30 || pol.frozen) {
     if (pol?.frozen) await ownerIntent({ type: 'freeze', frozen: false });
     await ownerIntent({ type: 'setPolicy', agent: nearAgentId, dailyCap: '50', cooldownSec: 30 });
   }
-  log(`owner ${ow}; leg0 ${addr[0]}, leg1 ${addr[1]}; agent ${nearAgentId}; guard floor ${floor}x maintenance`);
+  log(`owner ${ow}; agent ${nearAgentId}; guard floor ${floor}x maintenance`);
+  for (const l of (await legs.snapshot(ow)).legs) {
+    log(`  ${LABEL(l.leg)} ${l.address}  account $${Number(l.clearinghouse.marginSummary.accountValue).toFixed(2)}`);
+  }
 
   // ---- reset: flat legs, leg1 margin back in perp
   let s = await legs.snapshot(ow);
@@ -120,7 +125,7 @@ export async function runGuardDemo(o: GuardDemoOptions = {}) {
   await until(() => legs.snapshot(ow), (x) => szi(x, 0) > 0, 'leg0 position');
   const hedge = await hedger.openHedge(ow, 'BTC', 0.5);
   s = await until(() => legs.snapshot(ow), (x) => szi(x, 1) < 0, 'leg1 hedge');
-  log(`hedged: leg0 ${szi(s, 0)} BTC, leg1 ${szi(s, 1)} BTC at 3x (hedge oid ${hedge.fill.oid}); leg1 margin ratio ${ratio(s, 1).toFixed(1)}x`);
+  log(`hedged: ${LABEL(0)} ${szi(s, 0)} BTC, ${LABEL(1)} ${szi(s, 1)} BTC at 3x (hedge oid ${hedge.fill.oid}); ${LABEL(1)} margin ratio ${ratio(s, 1).toFixed(1)}x`);
 
   // ---- guard loop (2 s ticks for the demo), timeline from the event bus
   const timeline: { t: number; event: string; detail?: Record<string, unknown> }[] = [];
@@ -132,7 +137,7 @@ export async function runGuardDemo(o: GuardDemoOptions = {}) {
       e.type === 'guard.trigger'
         ? `${(d.triggered ?? []).map((x: any) => `${x.id} ${x.reasons.join('+')}`).join(', ')} -> ${d.plan?.kind}${d.plan?.reason ? ` (${d.plan.reason})` : ''}`
         : e.type === 'guard.rebalance.start'
-          ? `leg${d.from?.leg} -> leg${d.to?.leg} $${d.amount}`
+          ? `${LABEL(d.from?.leg)} -> ${LABEL(d.to?.leg)}  $${d.amount}`
           : e.type === 'guard.rebalance.signed'
             ? `${d.method} tx ${d.txHash}`
             : e.type === 'guard.error'
