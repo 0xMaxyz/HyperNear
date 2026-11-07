@@ -63,6 +63,12 @@ interface ChainReject {
 }
 const chainRejections: ChainReject[] = [];
 let contractAccepted: unknown = null;
+const errorShapes: unknown[] = [];
+
+/** Best effort: where near-api-js puts the transaction hash on an execution error. */
+function txHashOf(x: any): string {
+  return String(x?.transaction_outcome?.id ?? x?.context?.transactionHash ?? x?.transactionHash ?? x?.data?.transaction_outcome?.id ?? x?.cause?.transaction_outcome?.id ?? x?.cause?.transactionHash ?? 'unknown');
+}
 
 function panicOf(status: any): string {
   const f = status?.Failure;
@@ -73,7 +79,19 @@ function panicOf(status: any): string {
 /** rebalance straight to the contract with the agent's function-call key (no filtering of any argument). */
 async function rebalanceTool(args: Record<string, unknown>) {
   const callArgs = { owner, from_leg: Number(args.from_leg), to_address: String(args.to_address), amount: String(args.amount), hl_time: Date.now() };
-  const res: any = await agentAcct.callFunctionRaw({ contractId, methodName: 'rebalance', args: callArgs, gas: 100_000_000_000_000n, deposit: 0n, waitUntil: 'EXECUTED_OPTIMISTIC' });
+  let res: any;
+  try {
+    res = await agentAcct.callFunctionRaw({ contractId, methodName: 'rebalance', args: callArgs, gas: 100_000_000_000_000n, deposit: 0n, waitUntil: 'EXECUTED_OPTIMISTIC' });
+  } catch (e) {
+    // near-api-js throws on a failed execution; pull the transaction hash out of the error
+    const x = e as any;
+    const txHash = txHashOf(x);
+    const panic = String(x?.message ?? e).replace(/^.*?(Smart contract panicked:[^
+]*).*$/s, '$1');
+    errorShapes.push({ name: x?.name, keys: Object.keys(x ?? {}), txHash });
+    chainRejections.push({ method: 'rebalance', txHash, panic });
+    throw new Error(`contract rejected rebalance (NEAR tx ${txHash}): ${panic}`);
+  }
   const txHash = res.transaction_outcome.id as string;
   if (res.status?.Failure) {
     const panic = panicOf(res.status);
@@ -201,6 +219,7 @@ async function main() {
     modelRuns,
     direct,
     chainRejections,
+    errorShapes,
     proposalsCreated: proposals,
     contractAcceptedAnInjectedCall: contractAccepted,
     legsBefore: startedLegs,
