@@ -138,7 +138,7 @@ await withAgent(async () => {
   const start = posts.find((p) => p.path === '/strategy/start');
   const signer = start ? await verify.commandSigner(start.body, CHAIN, CONTRACT) : '';
   check('start command: signed by the owner, action startStrategy, specHash equals the agent\'s specHash(spec)', signer === owner && start.body.command.action === 'startStrategy' && start.body.command.specHash === specHash(start.body.spec), `${start?.body.command.specHash?.slice(0, 12)}`);
-  check('the signed spec is the spec the draft showed', JSON.stringify(start.body.spec) === JSON.stringify(running));
+  check('the signed spec is the spec the draft showed', specHash(start.body.spec) === specHash(running));
 
   // ---- diff against the running strategy
   await page.getByLabel('Your rules').fill('Widen my grid to 68000 to 82000 with 14 levels');
