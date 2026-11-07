@@ -1,0 +1,702 @@
+[
+  {
+    "id": "s01",
+    "facts": {
+      "hedgeCoverage": "full: legs are about equal",
+      "longLegLiquidationDistance": "far: over 6x maintenance margin",
+      "shortLegLiquidationDistance": "comfortable: 3x to 6x maintenance margin",
+      "combinedPnl": "small profit",
+      "fundingOnHedge": "neutral",
+      "volatility": "elevated",
+      "trend": "price falling",
+      "hedgeAge": "minutes",
+      "reserveMargin": "thin"
+    }
+  },
+  {
+    "id": "s02",
+    "facts": {
+      "hedgeCoverage": "full: legs are about equal",
+      "longLegLiquidationDistance": "far: over 6x maintenance margin",
+      "shortLegLiquidationDistance": "close: 1.5x to 3x maintenance margin",
+      "combinedPnl": "small profit",
+      "fundingOnHedge": "earning",
+      "volatility": "calm",
+      "trend": "price falling",
+      "hedgeAge": "days",
+      "reserveMargin": "none available"
+    }
+  },
+  {
+    "id": "s03",
+    "facts": {
+      "hedgeCoverage": "partial: about half of the long is hedged",
+      "longLegLiquidationDistance": "comfortable: 3x to 6x maintenance margin",
+      "shortLegLiquidationDistance": "far: over 6x maintenance margin",
+      "combinedPnl": "large profit",
+      "fundingOnHedge": "paying a lot",
+      "volatility": "normal",
+      "trend": "ranging",
+      "hedgeAge": "hours",
+      "reserveMargin": "thin"
+    }
+  },
+  {
+    "id": "s04",
+    "facts": {
+      "hedgeCoverage": "full: legs are about equal",
+      "longLegLiquidationDistance": "very close: under 1.5x maintenance margin",
+      "shortLegLiquidationDistance": "very close: under 1.5x maintenance margin",
+      "combinedPnl": "large loss",
+      "fundingOnHedge": "earning",
+      "volatility": "elevated",
+      "trend": "ranging",
+      "hedgeAge": "hours",
+      "reserveMargin": "thin"
+    }
+  },
+  {
+    "id": "s05",
+    "facts": {
+      "hedgeCoverage": "none",
+      "longLegLiquidationDistance": "far: over 6x maintenance margin",
+      "shortLegLiquidationDistance": "comfortable: 3x to 6x maintenance margin",
+      "combinedPnl": "small loss",
+      "fundingOnHedge": "neutral",
+      "volatility": "elevated",
+      "trend": "price falling",
+      "hedgeAge": "hours",
+      "reserveMargin": "none available"
+    }
+  },
+  {
+    "id": "s06",
+    "facts": {
+      "hedgeCoverage": "partial: about half of the long is hedged",
+      "longLegLiquidationDistance": "close: 1.5x to 3x maintenance margin",
+      "shortLegLiquidationDistance": "close: 1.5x to 3x maintenance margin",
+      "combinedPnl": "large loss",
+      "fundingOnHedge": "paying a little",
+      "volatility": "calm",
+      "trend": "ranging",
+      "hedgeAge": "minutes",
+      "reserveMargin": "ample"
+    }
+  },
+  {
+    "id": "s07",
+    "facts": {
+      "hedgeCoverage": "full: legs are about equal",
+      "longLegLiquidationDistance": "far: over 6x maintenance margin",
+      "shortLegLiquidationDistance": "far: over 6x maintenance margin",
+      "combinedPnl": "about flat",
+      "fundingOnHedge": "neutral",
+      "volatility": "calm",
+      "trend": "ranging",
+      "hedgeAge": "days",
+      "reserveMargin": "ample"
+    }
+  },
+  {
+    "id": "s08",
+    "facts": {
+      "hedgeCoverage": "none",
+      "longLegLiquidationDistance": "close: 1.5x to 3x maintenance margin",
+      "shortLegLiquidationDistance": "far: over 6x maintenance margin",
+      "combinedPnl": "small loss",
+      "fundingOnHedge": "paying a little",
+      "volatility": "calm",
+      "trend": "price falling",
+      "hedgeAge": "minutes",
+      "reserveMargin": "thin"
+    }
+  },
+  {
+    "id": "s09",
+    "facts": {
+      "hedgeCoverage": "none",
+      "longLegLiquidationDistance": "comfortable: 3x to 6x maintenance margin",
+      "shortLegLiquidationDistance": "close: 1.5x to 3x maintenance margin",
+      "combinedPnl": "large profit",
+      "fundingOnHedge": "paying a lot",
+      "volatility": "normal",
+      "trend": "price falling",
+      "hedgeAge": "minutes",
+      "reserveMargin": "none available"
+    }
+  },
+  {
+    "id": "s10",
+    "facts": {
+      "hedgeCoverage": "none",
+      "longLegLiquidationDistance": "comfortable: 3x to 6x maintenance margin",
+      "shortLegLiquidationDistance": "comfortable: 3x to 6x maintenance margin",
+      "combinedPnl": "small loss",
+      "fundingOnHedge": "paying a little",
+      "volatility": "elevated",
+      "trend": "ranging",
+      "hedgeAge": "hours",
+      "reserveMargin": "none available"
+    }
+  },
+  {
+    "id": "s11",
+    "facts": {
+      "hedgeCoverage": "over-hedged: short is larger than long",
+      "longLegLiquidationDistance": "close: 1.5x to 3x maintenance margin",
+      "shortLegLiquidationDistance": "far: over 6x maintenance margin",
+      "combinedPnl": "small loss",
+      "fundingOnHedge": "earning",
+      "volatility": "calm",
+      "trend": "price falling",
+      "hedgeAge": "days",
+      "reserveMargin": "ample"
+    }
+  },
+  {
+    "id": "s12",
+    "facts": {
+      "hedgeCoverage": "none",
+      "longLegLiquidationDistance": "far: over 6x maintenance margin",
+      "shortLegLiquidationDistance": "close: 1.5x to 3x maintenance margin",
+      "combinedPnl": "about flat",
+      "fundingOnHedge": "earning",
+      "volatility": "normal",
+      "trend": "price rising",
+      "hedgeAge": "hours",
+      "reserveMargin": "ample"
+    }
+  },
+  {
+    "id": "s13",
+    "facts": {
+      "hedgeCoverage": "partial: about half of the long is hedged",
+      "longLegLiquidationDistance": "very close: under 1.5x maintenance margin",
+      "shortLegLiquidationDistance": "comfortable: 3x to 6x maintenance margin",
+      "combinedPnl": "large loss",
+      "fundingOnHedge": "paying a lot",
+      "volatility": "calm",
+      "trend": "ranging",
+      "hedgeAge": "days",
+      "reserveMargin": "none available"
+    }
+  },
+  {
+    "id": "s14",
+    "facts": {
+      "hedgeCoverage": "full: legs are about equal",
+      "longLegLiquidationDistance": "far: over 6x maintenance margin",
+      "shortLegLiquidationDistance": "very close: under 1.5x maintenance margin",
+      "combinedPnl": "small loss",
+      "fundingOnHedge": "neutral",
+      "volatility": "extreme",
+      "trend": "price rising",
+      "hedgeAge": "hours",
+      "reserveMargin": "none available"
+    }
+  },
+  {
+    "id": "s15",
+    "facts": {
+      "hedgeCoverage": "over-hedged: short is larger than long",
+      "longLegLiquidationDistance": "close: 1.5x to 3x maintenance margin",
+      "shortLegLiquidationDistance": "comfortable: 3x to 6x maintenance margin",
+      "combinedPnl": "small loss",
+      "fundingOnHedge": "neutral",
+      "volatility": "normal",
+      "trend": "price rising",
+      "hedgeAge": "days",
+      "reserveMargin": "none available"
+    }
+  },
+  {
+    "id": "s16",
+    "facts": {
+      "hedgeCoverage": "partial: about half of the long is hedged",
+      "longLegLiquidationDistance": "comfortable: 3x to 6x maintenance margin",
+      "shortLegLiquidationDistance": "close: 1.5x to 3x maintenance margin",
+      "combinedPnl": "about flat",
+      "fundingOnHedge": "paying a little",
+      "volatility": "elevated",
+      "trend": "price rising",
+      "hedgeAge": "hours",
+      "reserveMargin": "none available"
+    }
+  },
+  {
+    "id": "s17",
+    "facts": {
+      "hedgeCoverage": "full: legs are about equal",
+      "longLegLiquidationDistance": "comfortable: 3x to 6x maintenance margin",
+      "shortLegLiquidationDistance": "far: over 6x maintenance margin",
+      "combinedPnl": "large profit",
+      "fundingOnHedge": "neutral",
+      "volatility": "normal",
+      "trend": "price falling",
+      "hedgeAge": "hours",
+      "reserveMargin": "none available"
+    }
+  },
+  {
+    "id": "s18",
+    "facts": {
+      "hedgeCoverage": "full: legs are about equal",
+      "longLegLiquidationDistance": "very close: under 1.5x maintenance margin",
+      "shortLegLiquidationDistance": "close: 1.5x to 3x maintenance margin",
+      "combinedPnl": "large profit",
+      "fundingOnHedge": "neutral",
+      "volatility": "normal",
+      "trend": "ranging",
+      "hedgeAge": "hours",
+      "reserveMargin": "none available"
+    }
+  },
+  {
+    "id": "s19",
+    "facts": {
+      "hedgeCoverage": "partial: about half of the long is hedged",
+      "longLegLiquidationDistance": "far: over 6x maintenance margin",
+      "shortLegLiquidationDistance": "far: over 6x maintenance margin",
+      "combinedPnl": "about flat",
+      "fundingOnHedge": "paying a little",
+      "volatility": "calm",
+      "trend": "ranging",
+      "hedgeAge": "days",
+      "reserveMargin": "none available"
+    }
+  },
+  {
+    "id": "s20",
+    "facts": {
+      "hedgeCoverage": "partial: about half of the long is hedged",
+      "longLegLiquidationDistance": "close: 1.5x to 3x maintenance margin",
+      "shortLegLiquidationDistance": "far: over 6x maintenance margin",
+      "combinedPnl": "large loss",
+      "fundingOnHedge": "paying a lot",
+      "volatility": "elevated",
+      "trend": "price rising",
+      "hedgeAge": "hours",
+      "reserveMargin": "thin"
+    }
+  },
+  {
+    "id": "s21",
+    "facts": {
+      "hedgeCoverage": "full: legs are about equal",
+      "longLegLiquidationDistance": "comfortable: 3x to 6x maintenance margin",
+      "shortLegLiquidationDistance": "close: 1.5x to 3x maintenance margin",
+      "combinedPnl": "large profit",
+      "fundingOnHedge": "neutral",
+      "volatility": "extreme",
+      "trend": "ranging",
+      "hedgeAge": "days",
+      "reserveMargin": "none available"
+    }
+  },
+  {
+    "id": "s22",
+    "facts": {
+      "hedgeCoverage": "partial: about half of the long is hedged",
+      "longLegLiquidationDistance": "comfortable: 3x to 6x maintenance margin",
+      "shortLegLiquidationDistance": "close: 1.5x to 3x maintenance margin",
+      "combinedPnl": "small profit",
+      "fundingOnHedge": "paying a little",
+      "volatility": "normal",
+      "trend": "price rising",
+      "hedgeAge": "minutes",
+      "reserveMargin": "ample"
+    }
+  },
+  {
+    "id": "s23",
+    "facts": {
+      "hedgeCoverage": "none",
+      "longLegLiquidationDistance": "very close: under 1.5x maintenance margin",
+      "shortLegLiquidationDistance": "close: 1.5x to 3x maintenance margin",
+      "combinedPnl": "small loss",
+      "fundingOnHedge": "earning",
+      "volatility": "elevated",
+      "trend": "price falling",
+      "hedgeAge": "minutes",
+      "reserveMargin": "thin"
+    }
+  },
+  {
+    "id": "s24",
+    "facts": {
+      "hedgeCoverage": "partial: about half of the long is hedged",
+      "longLegLiquidationDistance": "close: 1.5x to 3x maintenance margin",
+      "shortLegLiquidationDistance": "comfortable: 3x to 6x maintenance margin",
+      "combinedPnl": "large profit",
+      "fundingOnHedge": "paying a little",
+      "volatility": "normal",
+      "trend": "ranging",
+      "hedgeAge": "minutes",
+      "reserveMargin": "thin"
+    }
+  },
+  {
+    "id": "s25",
+    "facts": {
+      "hedgeCoverage": "full: legs are about equal",
+      "longLegLiquidationDistance": "close: 1.5x to 3x maintenance margin",
+      "shortLegLiquidationDistance": "close: 1.5x to 3x maintenance margin",
+      "combinedPnl": "large loss",
+      "fundingOnHedge": "paying a lot",
+      "volatility": "calm",
+      "trend": "price rising",
+      "hedgeAge": "days",
+      "reserveMargin": "none available"
+    }
+  },
+  {
+    "id": "s26",
+    "facts": {
+      "hedgeCoverage": "partial: about half of the long is hedged",
+      "longLegLiquidationDistance": "far: over 6x maintenance margin",
+      "shortLegLiquidationDistance": "far: over 6x maintenance margin",
+      "combinedPnl": "small profit",
+      "fundingOnHedge": "paying a little",
+      "volatility": "extreme",
+      "trend": "ranging",
+      "hedgeAge": "minutes",
+      "reserveMargin": "thin"
+    }
+  },
+  {
+    "id": "s27",
+    "facts": {
+      "hedgeCoverage": "full: legs are about equal",
+      "longLegLiquidationDistance": "far: over 6x maintenance margin",
+      "shortLegLiquidationDistance": "close: 1.5x to 3x maintenance margin",
+      "combinedPnl": "small loss",
+      "fundingOnHedge": "earning",
+      "volatility": "extreme",
+      "trend": "price rising",
+      "hedgeAge": "hours",
+      "reserveMargin": "ample"
+    }
+  },
+  {
+    "id": "s28",
+    "facts": {
+      "hedgeCoverage": "over-hedged: short is larger than long",
+      "longLegLiquidationDistance": "comfortable: 3x to 6x maintenance margin",
+      "shortLegLiquidationDistance": "very close: under 1.5x maintenance margin",
+      "combinedPnl": "large profit",
+      "fundingOnHedge": "earning",
+      "volatility": "extreme",
+      "trend": "ranging",
+      "hedgeAge": "minutes",
+      "reserveMargin": "thin"
+    }
+  },
+  {
+    "id": "s29",
+    "facts": {
+      "hedgeCoverage": "none",
+      "longLegLiquidationDistance": "very close: under 1.5x maintenance margin",
+      "shortLegLiquidationDistance": "far: over 6x maintenance margin",
+      "combinedPnl": "large loss",
+      "fundingOnHedge": "paying a little",
+      "volatility": "elevated",
+      "trend": "price rising",
+      "hedgeAge": "minutes",
+      "reserveMargin": "ample"
+    }
+  },
+  {
+    "id": "s30",
+    "facts": {
+      "hedgeCoverage": "partial: about half of the long is hedged",
+      "longLegLiquidationDistance": "comfortable: 3x to 6x maintenance margin",
+      "shortLegLiquidationDistance": "very close: under 1.5x maintenance margin",
+      "combinedPnl": "small profit",
+      "fundingOnHedge": "neutral",
+      "volatility": "extreme",
+      "trend": "price rising",
+      "hedgeAge": "hours",
+      "reserveMargin": "ample"
+    }
+  },
+  {
+    "id": "s31",
+    "facts": {
+      "hedgeCoverage": "partial: about half of the long is hedged",
+      "longLegLiquidationDistance": "comfortable: 3x to 6x maintenance margin",
+      "shortLegLiquidationDistance": "far: over 6x maintenance margin",
+      "combinedPnl": "large profit",
+      "fundingOnHedge": "paying a little",
+      "volatility": "normal",
+      "trend": "price rising",
+      "hedgeAge": "hours",
+      "reserveMargin": "thin"
+    }
+  },
+  {
+    "id": "s32",
+    "facts": {
+      "hedgeCoverage": "partial: about half of the long is hedged",
+      "longLegLiquidationDistance": "comfortable: 3x to 6x maintenance margin",
+      "shortLegLiquidationDistance": "very close: under 1.5x maintenance margin",
+      "combinedPnl": "about flat",
+      "fundingOnHedge": "earning",
+      "volatility": "normal",
+      "trend": "ranging",
+      "hedgeAge": "days",
+      "reserveMargin": "ample"
+    }
+  },
+  {
+    "id": "s33",
+    "facts": {
+      "hedgeCoverage": "none",
+      "longLegLiquidationDistance": "close: 1.5x to 3x maintenance margin",
+      "shortLegLiquidationDistance": "very close: under 1.5x maintenance margin",
+      "combinedPnl": "large loss",
+      "fundingOnHedge": "earning",
+      "volatility": "elevated",
+      "trend": "ranging",
+      "hedgeAge": "hours",
+      "reserveMargin": "none available"
+    }
+  },
+  {
+    "id": "s34",
+    "facts": {
+      "hedgeCoverage": "over-hedged: short is larger than long",
+      "longLegLiquidationDistance": "comfortable: 3x to 6x maintenance margin",
+      "shortLegLiquidationDistance": "close: 1.5x to 3x maintenance margin",
+      "combinedPnl": "large profit",
+      "fundingOnHedge": "paying a lot",
+      "volatility": "extreme",
+      "trend": "ranging",
+      "hedgeAge": "hours",
+      "reserveMargin": "none available"
+    }
+  },
+  {
+    "id": "s35",
+    "facts": {
+      "hedgeCoverage": "full: legs are about equal",
+      "longLegLiquidationDistance": "very close: under 1.5x maintenance margin",
+      "shortLegLiquidationDistance": "far: over 6x maintenance margin",
+      "combinedPnl": "small loss",
+      "fundingOnHedge": "earning",
+      "volatility": "elevated",
+      "trend": "ranging",
+      "hedgeAge": "days",
+      "reserveMargin": "thin"
+    }
+  },
+  {
+    "id": "s36",
+    "facts": {
+      "hedgeCoverage": "none",
+      "longLegLiquidationDistance": "very close: under 1.5x maintenance margin",
+      "shortLegLiquidationDistance": "very close: under 1.5x maintenance margin",
+      "combinedPnl": "small loss",
+      "fundingOnHedge": "earning",
+      "volatility": "calm",
+      "trend": "price falling",
+      "hedgeAge": "minutes",
+      "reserveMargin": "thin"
+    }
+  },
+  {
+    "id": "s37",
+    "facts": {
+      "hedgeCoverage": "full: legs are about equal",
+      "longLegLiquidationDistance": "very close: under 1.5x maintenance margin",
+      "shortLegLiquidationDistance": "comfortable: 3x to 6x maintenance margin",
+      "combinedPnl": "large profit",
+      "fundingOnHedge": "paying a lot",
+      "volatility": "normal",
+      "trend": "price rising",
+      "hedgeAge": "hours",
+      "reserveMargin": "ample"
+    }
+  },
+  {
+    "id": "s38",
+    "facts": {
+      "hedgeCoverage": "full: legs are about equal",
+      "longLegLiquidationDistance": "very close: under 1.5x maintenance margin",
+      "shortLegLiquidationDistance": "comfortable: 3x to 6x maintenance margin",
+      "combinedPnl": "large loss",
+      "fundingOnHedge": "paying a lot",
+      "volatility": "normal",
+      "trend": "ranging",
+      "hedgeAge": "days",
+      "reserveMargin": "thin"
+    }
+  },
+  {
+    "id": "s39",
+    "facts": {
+      "hedgeCoverage": "over-hedged: short is larger than long",
+      "longLegLiquidationDistance": "close: 1.5x to 3x maintenance margin",
+      "shortLegLiquidationDistance": "far: over 6x maintenance margin",
+      "combinedPnl": "about flat",
+      "fundingOnHedge": "neutral",
+      "volatility": "calm",
+      "trend": "price rising",
+      "hedgeAge": "minutes",
+      "reserveMargin": "ample"
+    }
+  },
+  {
+    "id": "s40",
+    "facts": {
+      "hedgeCoverage": "none",
+      "longLegLiquidationDistance": "comfortable: 3x to 6x maintenance margin",
+      "shortLegLiquidationDistance": "far: over 6x maintenance margin",
+      "combinedPnl": "about flat",
+      "fundingOnHedge": "paying a lot",
+      "volatility": "normal",
+      "trend": "price falling",
+      "hedgeAge": "days",
+      "reserveMargin": "ample"
+    }
+  },
+  {
+    "id": "s41",
+    "facts": {
+      "hedgeCoverage": "partial: about half of the long is hedged",
+      "longLegLiquidationDistance": "far: over 6x maintenance margin",
+      "shortLegLiquidationDistance": "far: over 6x maintenance margin",
+      "combinedPnl": "large profit",
+      "fundingOnHedge": "paying a lot",
+      "volatility": "calm",
+      "trend": "price falling",
+      "hedgeAge": "minutes",
+      "reserveMargin": "none available"
+    }
+  },
+  {
+    "id": "s42",
+    "facts": {
+      "hedgeCoverage": "none",
+      "longLegLiquidationDistance": "close: 1.5x to 3x maintenance margin",
+      "shortLegLiquidationDistance": "comfortable: 3x to 6x maintenance margin",
+      "combinedPnl": "small profit",
+      "fundingOnHedge": "paying a little",
+      "volatility": "extreme",
+      "trend": "ranging",
+      "hedgeAge": "hours",
+      "reserveMargin": "none available"
+    }
+  },
+  {
+    "id": "s43",
+    "facts": {
+      "hedgeCoverage": "full: legs are about equal",
+      "longLegLiquidationDistance": "close: 1.5x to 3x maintenance margin",
+      "shortLegLiquidationDistance": "comfortable: 3x to 6x maintenance margin",
+      "combinedPnl": "large profit",
+      "fundingOnHedge": "neutral",
+      "volatility": "extreme",
+      "trend": "price falling",
+      "hedgeAge": "minutes",
+      "reserveMargin": "ample"
+    }
+  },
+  {
+    "id": "s44",
+    "facts": {
+      "hedgeCoverage": "over-hedged: short is larger than long",
+      "longLegLiquidationDistance": "close: 1.5x to 3x maintenance margin",
+      "shortLegLiquidationDistance": "far: over 6x maintenance margin",
+      "combinedPnl": "large loss",
+      "fundingOnHedge": "paying a lot",
+      "volatility": "calm",
+      "trend": "price falling",
+      "hedgeAge": "days",
+      "reserveMargin": "ample"
+    }
+  },
+  {
+    "id": "s45",
+    "facts": {
+      "hedgeCoverage": "full: legs are about equal",
+      "longLegLiquidationDistance": "comfortable: 3x to 6x maintenance margin",
+      "shortLegLiquidationDistance": "far: over 6x maintenance margin",
+      "combinedPnl": "large profit",
+      "fundingOnHedge": "earning",
+      "volatility": "normal",
+      "trend": "price rising",
+      "hedgeAge": "days",
+      "reserveMargin": "ample"
+    }
+  },
+  {
+    "id": "s46",
+    "facts": {
+      "hedgeCoverage": "partial: about half of the long is hedged",
+      "longLegLiquidationDistance": "close: 1.5x to 3x maintenance margin",
+      "shortLegLiquidationDistance": "comfortable: 3x to 6x maintenance margin",
+      "combinedPnl": "large loss",
+      "fundingOnHedge": "earning",
+      "volatility": "elevated",
+      "trend": "price falling",
+      "hedgeAge": "hours",
+      "reserveMargin": "ample"
+    }
+  },
+  {
+    "id": "s47",
+    "facts": {
+      "hedgeCoverage": "none",
+      "longLegLiquidationDistance": "far: over 6x maintenance margin",
+      "shortLegLiquidationDistance": "far: over 6x maintenance margin",
+      "combinedPnl": "about flat",
+      "fundingOnHedge": "paying a little",
+      "volatility": "elevated",
+      "trend": "ranging",
+      "hedgeAge": "days",
+      "reserveMargin": "thin"
+    }
+  },
+  {
+    "id": "s48",
+    "facts": {
+      "hedgeCoverage": "none",
+      "longLegLiquidationDistance": "close: 1.5x to 3x maintenance margin",
+      "shortLegLiquidationDistance": "comfortable: 3x to 6x maintenance margin",
+      "combinedPnl": "about flat",
+      "fundingOnHedge": "neutral",
+      "volatility": "normal",
+      "trend": "price rising",
+      "hedgeAge": "hours",
+      "reserveMargin": "thin"
+    }
+  },
+  {
+    "id": "s49",
+    "facts": {
+      "hedgeCoverage": "full: legs are about equal",
+      "longLegLiquidationDistance": "far: over 6x maintenance margin",
+      "shortLegLiquidationDistance": "close: 1.5x to 3x maintenance margin",
+      "combinedPnl": "large loss",
+      "fundingOnHedge": "earning",
+      "volatility": "calm",
+      "trend": "price falling",
+      "hedgeAge": "minutes",
+      "reserveMargin": "none available"
+    }
+  },
+  {
+    "id": "s50",
+    "facts": {
+      "hedgeCoverage": "partial: about half of the long is hedged",
+      "longLegLiquidationDistance": "very close: under 1.5x maintenance margin",
+      "shortLegLiquidationDistance": "far: over 6x maintenance margin",
+      "combinedPnl": "small loss",
+      "fundingOnHedge": "paying a lot",
+      "volatility": "normal",
+      "trend": "price falling",
+      "hedgeAge": "hours",
+      "reserveMargin": "ample"
+    }
+  }
+]
