@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import type { Command } from '@hypernear/client';
+import { ZERO_SPEC_HASH, type Command } from '@hypernear/client';
 import type { Proposal } from '../src/decide.ts';
 import { Decider, DecisionModes, type DeciderDeps } from '../src/decisions.ts';
 import { EventBus } from '../src/events.ts';
@@ -115,7 +115,7 @@ function decider(o: { proposal?: Proposal; optedIn?: boolean; mode?: 'off' | 'pr
   };
   return { dec: new Decider(deps), bus, executed };
 }
-const cmd = (over: Partial<Command> = {}): Command => ({ owner: OWNER, action: 'reduce_hedge', coin: 'BTC', ratio: '0', expiry: 0, nonce: 1, ...over });
+const cmd = (over: Partial<Command> = {}): Command => ({ owner: OWNER, action: 'reduce_hedge', coin: 'BTC', ratio: '0', expiry: 0, nonce: 1, specHash: ZERO_SPEC_HASH, ...over });
 
 describe('Decider', () => {
   it('propose mode: emits a flat decision.proposed and executes nothing', async () => {

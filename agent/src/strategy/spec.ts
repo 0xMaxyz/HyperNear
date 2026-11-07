@@ -166,7 +166,7 @@ export function canonicalJson(v: unknown): string {
   return JSON.stringify(v);
 }
 
-/** The owner signs a Command whose `coin` field carries this hash (stub until the Command gets a specHash field). */
+/** bytes32 (sha256 of the canonical JSON): the owner signs it as the Command's `specHash` for startStrategy. */
 export function specHash(spec: StrategySpec): string {
   return `0x${createHash('sha256').update(canonicalJson(spec)).digest('hex')}`;
 }

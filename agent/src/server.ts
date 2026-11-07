@@ -9,7 +9,7 @@
 //   POST /decision/:id/accept     {command, sig}: command.action/coin must equal the proposal's; executed within the order policy
 //   POST /decision/:id/reject     {command, sig}: action reject, coin = the proposal's; emits decision.rejected {reason:'owner'}
 //   POST /decision/mode           {command, sig}: action setDecisionMode, mode ('off'|'propose'|'auto') in command.coin
-//   POST /strategy/start  {command, sig, spec}: action startStrategy, command.coin = specHash(validated spec)
+//   POST /strategy/start  {command, sig, spec}: action startStrategy, command.specHash = specHash(validated spec)
 //   POST /strategy/pause|stop {command, sig}: action pauseStrategy|stopStrategy, command.coin = strategy id (kill switch)
 //   GET  /strategies/:owner  the owner's strategies (state, held levels, resting orders, dead-man status)
 //   GET  /events        SSE: hedge, guard and decision log
@@ -209,7 +209,7 @@ export function handler(d: Deps) {
         await assertOptedIn(d, cmd.owner);
         const v = await d.strategies.validate(cmd.owner, body.spec);
         if (!v.ok) throw new HttpError(422, v.errors.join('; '));
-        if (specHash(v.spec) !== cmd.coin) throw new HttpError(401, 'command.coin must be the specHash of the spec (the owner signed another spec)');
+        if (specHash(v.spec) !== cmd.specHash) throw new HttpError(401, 'command.specHash must be the specHash of the spec (the owner signed another spec)');
         d.bus.emit('command', { ...cmd });
         return reply(200, await d.strategies.start(cmd.owner, v.spec));
       }
