@@ -114,17 +114,17 @@ export function dryStrategies(owner: Hex, bus: EventBus, ctx: () => SpecContext)
     get: (o: Hex, id: string) => (o === owner && live(id) ? specs.get(id) : undefined),
     specs: (o: Hex) => (o === owner ? [...specs.keys()].filter(live).map((id) => specs.get(id)!) : []),
     context: async () => ctx(),
-    async validate(o: Hex, input: unknown) {
+    async validate(_o: Hex, input: unknown) {
       const id = (input as { id?: string } | null)?.id;
       const c = ctx();
-      const busy = [...specs.values()].filter((x) => x.id !== id && live(x.id)).map((x) => x.leg);
-      const r = validateSpec(input, { ...c, busyLegs: busy });
+      const r = validateSpec(input, { ...c, busyLegs: [] }); // simulated: a start on a used leg replaces that strategy
       if (r.ok && id && live(id) && !(states.get(id) === 'paused' && specHash(specs.get(id)!) === specHash(r.spec))) {
         return { ok: false as const, errors: [`strategy ${id} already exists (${states.get(id)}); stop it first, or send the identical spec to resume a paused one`] };
       }
       return r;
     },
     async start(_o: Hex, spec: StrategySpec) {
+      for (const [id, other] of specs) if (id !== spec.id && other.leg === spec.leg && live(id)) (states.set(id, 'stopped'), emit('stopped', id, { reason: `replaced by ${spec.id}`, cancelled: 0, flattened: false }));
       if (!specs.has(spec.id)) emit('started', spec.id, { type: spec.type, coin: spec.coin });
       else emit('resumed', spec.id);
       specs.set(spec.id, spec);
