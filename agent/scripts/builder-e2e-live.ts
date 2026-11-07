@@ -15,7 +15,7 @@ import { specHash } from '../src/strategy/spec.ts';
 // well-known PUBLIC web3 test key: a testnet owner only, never funded on any real chain
 const owner = privateKeyToAccount('0x4c0883a69102937d6231471b5dbb6204fe5129617082792ae468d01a3f362318' as Hex);
 const OW = owner.address.toLowerCase() as Hex;
-const PORT = 8799;
+const PORT = 18400 + Math.floor(Math.random() * 500); // not a fixed port: other jobs on the box run servers too
 const BASE = `http://127.0.0.1:${PORT}`;
 const TEXT = 'Buy about 11 dollars of BTC four times, one buy every 15 seconds, never paying more than 2% above the current price. Close everything when I stop it.';
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -30,9 +30,9 @@ let serverLog = '';
 server.stdout.on('data', (b) => (serverLog += b));
 server.stderr.on('data', (b) => (serverLog += b));
 
-const get = async (path: string) => (await fetch(`${BASE}${path}`)).json() as Promise<any>;
+const get = async (path: string) => (await fetch(`${BASE}${path}`, { signal: AbortSignal.timeout(60_000) })).json() as Promise<any>;
 const post = async (path: string, body: unknown) => {
-  const r = await fetch(`${BASE}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const r = await fetch(`${BASE}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(90_000) });
   return { status: r.status, body: (await r.json()) as any };
 };
 let chainTag: any;
