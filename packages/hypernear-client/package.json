@@ -1,0 +1,32 @@
+{
+  "name": "@hypernear/client",
+  "version": "0.1.0",
+  "description": "NEAR-side client for the hypernear contract: owner intents, NearMasterSigner for Hyperliquid, views and relay",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json"
+  },
+  "dependencies": {
+    "near-api-js": "7.4.0",
+    "viem": "2.54.3"
+  },
+  "peerDependencies": {
+    "@perps-platform/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@perps-platform/core": "workspace:*",
+    "undici": "^7"
+  }
+}
