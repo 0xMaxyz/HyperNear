@@ -1,0 +1,128 @@
+{
+  "name": "hedged",
+  "description": "leg0 long BTC at 3x, leg1 short 0.5x of it at 3x (after openHedge)",
+  "recordedAt": "2026-11-07T13:25:33.237Z",
+  "snapshot": {
+    "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+    "at": 1794057933236,
+    "legs": [
+      {
+        "leg": 0,
+        "address": "0xfc5f38a75535cc6a864bb5ba14d9c7f29eecacac",
+        "agent": {
+          "address": "0x35290106ae3a8dc8ce818ea4a1eecc1353bfef29",
+          "name": "leash-leg0",
+          "approvedAt": 1794057915957
+        },
+        "clearinghouse": {
+          "marginSummary": {
+            "accountValue": "14.791581",
+            "totalNtlPos": "30.2708",
+            "totalRawUsd": "-15.479219",
+            "totalMarginUsed": "10.090266"
+          },
+          "crossMarginSummary": {
+            "accountValue": "14.791581",
+            "totalNtlPos": "30.2708",
+            "totalRawUsd": "-15.479219",
+            "totalMarginUsed": "10.090266"
+          },
+          "crossMaintenanceMarginUsed": "0.378385",
+          "withdrawable": "4.701315",
+          "assetPositions": [
+            {
+              "type": "oneWay",
+              "position": {
+                "coin": "BTC",
+                "szi": "0.0004",
+                "leverage": {
+                  "type": "cross",
+                  "value": 3
+                },
+                "entryPx": "75664.0",
+                "positionValue": "30.2708",
+                "unrealizedPnl": "0.0052",
+                "returnOnEquity": "0.0005154367",
+                "liquidationPx": "39187.8962025316",
+                "marginUsed": "10.090266",
+                "maxLeverage": 40,
+                "cumFunding": {
+                  "allTime": "0.0",
+                  "sinceOpen": "0.0",
+                  "sinceChange": "0.0"
+                }
+              }
+            }
+          ],
+          "time": 1794057932693
+        },
+        "spotUsdc": 0.2
+      },
+      {
+        "leg": 1,
+        "address": "0x8056c4fa3aad69cf04c2ade906c58489e76c9986",
+        "agent": {
+          "address": "0x88d6486cc0a9b852b5c6608872559e252e31dc01",
+          "name": "leash-leg1",
+          "approvedAt": 1794057924263
+        },
+        "clearinghouse": {
+          "marginSummary": {
+            "accountValue": "8.990391",
+            "totalNtlPos": "15.1354",
+            "totalRawUsd": "24.125791",
+            "totalMarginUsed": "5.045133"
+          },
+          "crossMarginSummary": {
+            "accountValue": "8.990391",
+            "totalNtlPos": "15.1354",
+            "totalRawUsd": "24.125791",
+            "totalMarginUsed": "5.045133"
+          },
+          "crossMaintenanceMarginUsed": "0.189192",
+          "withdrawable": "3.945258",
+          "assetPositions": [
+            {
+              "type": "oneWay",
+              "position": {
+                "coin": "BTC",
+                "szi": "-0.0002",
+                "leverage": {
+                  "type": "cross",
+                  "value": 3
+                },
+                "entryPx": "75663.0",
+                "positionValue": "15.1354",
+                "unrealizedPnl": "-0.0028",
+                "returnOnEquity": "-0.000555093",
+                "liquidationPx": "119139.7086419753",
+                "marginUsed": "5.045133",
+                "maxLeverage": 40,
+                "cumFunding": {
+                  "allTime": "0.0",
+                  "sinceOpen": "0.0",
+                  "sinceChange": "0.0"
+                }
+              }
+            }
+          ],
+          "time": 1794057932693
+        },
+        "spotUsdc": 0
+      }
+    ],
+    "market": {
+      "assets": [
+        {
+          "name": "BTC",
+          "asset": 3,
+          "szDecimals": 5,
+          "maxLeverage": 40
+        }
+      ],
+      "mids": {
+        "BTC": "75663.5"
+      }
+    }
+  }
+}

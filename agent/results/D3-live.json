@@ -1,0 +1,198 @@
+{
+  "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+  "contractId": "leash-spike-1107.testnet",
+  "nearTxs": [
+    {
+      "method": "owner_execute",
+      "txHash": "Gi9BENtCa7pXUj5s9EukovcBPpafd5WareBxtxnyJ824"
+    },
+    {
+      "method": "owner_execute",
+      "txHash": "AHZNdtnfZGRGvxzTTr9ZC4XQdtRAXPG3YYmo4boedDgp"
+    },
+    {
+      "method": "register_leg",
+      "txHash": "3W8ZAT2HriECus2dVcpvtpqXF8eNi1QAteMabiq5j6FZ"
+    },
+    {
+      "method": "owner_execute",
+      "txHash": "ChcwV7nwjBXvFV4NDqFP6B4Y85trLeXgoeh96gCxwZi"
+    }
+  ],
+  "orders": {
+    "fund-leg0": {
+      "status": "ok",
+      "response": {
+        "type": "default"
+      }
+    },
+    "fund-leg1": {
+      "status": "ok",
+      "response": {
+        "type": "default"
+      }
+    },
+    "leg0Open": {
+      "totalSz": "0.0004",
+      "avgPx": "75664.0",
+      "oid": 64757932229
+    },
+    "hedgeOpen": {
+      "plan": {
+        "ok": true,
+        "leverage": {
+          "value": 3,
+          "isCross": true
+        },
+        "order": {
+          "leg": 1,
+          "coin": "BTC",
+          "asset": 3,
+          "isBuy": false,
+          "size": "0.00020",
+          "price": "73394",
+          "reduceOnly": false,
+          "notionalUsd": 15.13
+        }
+      },
+      "fill": {
+        "totalSz": "0.0002",
+        "avgPx": "75663.0",
+        "oid": 64757936533
+      },
+      "ms": 3593
+    },
+    "hedgeClose": [
+      {
+        "leg": 0,
+        "fill": {
+          "totalSz": "0.0004",
+          "avgPx": "75663.0",
+          "oid": 64757938664
+        }
+      },
+      {
+        "leg": 1,
+        "fill": {
+          "totalSz": "0.0002",
+          "avgPx": "75664.0",
+          "oid": 64757940093
+        }
+      }
+    ],
+    "fund-leg2": {
+      "status": "ok",
+      "response": {
+        "type": "default"
+      }
+    },
+    "leg2Attempts": [],
+    "leg2Open": {
+      "fraction": 0.985,
+      "size": "0.00052",
+      "fill": {
+        "totalSz": "0.00052",
+        "avgPx": "75664.0",
+        "oid": 64757954710
+      }
+    },
+    "leg2Close": {
+      "totalSz": "0.00052",
+      "avgPx": "75663.0",
+      "oid": 64757957616
+    }
+  },
+  "agents": [
+    {
+      "leg": 0,
+      "agent": "0x35290106ae3a8dc8ce818ea4a1eecc1353bfef29",
+      "approved": "now"
+    },
+    {
+      "leg": 1,
+      "agent": "0x88d6486cc0a9b852b5c6608872559e252e31dc01",
+      "approved": "now"
+    }
+  ],
+  "finalSzi": {
+    "leg0": 0,
+    "leg1": 0,
+    "leg2": 0
+  },
+  "events": [
+    {
+      "type": "hedge",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "op": "open",
+        "coin": "BTC",
+        "ratio": 0.5,
+        "order": {
+          "leg": 1,
+          "coin": "BTC",
+          "asset": 3,
+          "isBuy": false,
+          "size": "0.00020",
+          "price": "73394",
+          "reduceOnly": false,
+          "notionalUsd": 15.13
+        },
+        "leverage": {
+          "value": 3,
+          "isCross": true
+        },
+        "fill": {
+          "totalSz": "0.0002",
+          "avgPx": "75663.0",
+          "oid": 64757936533
+        }
+      }
+    },
+    {
+      "type": "hedge",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "op": "close",
+        "coin": "BTC",
+        "order": {
+          "leg": 0,
+          "coin": "BTC",
+          "asset": 3,
+          "isBuy": false,
+          "size": "0.00040",
+          "price": "73394",
+          "reduceOnly": true,
+          "notionalUsd": 30.27
+        },
+        "fill": {
+          "totalSz": "0.0004",
+          "avgPx": "75663.0",
+          "oid": 64757938664
+        }
+      }
+    },
+    {
+      "type": "hedge",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "op": "close",
+        "coin": "BTC",
+        "order": {
+          "leg": 1,
+          "coin": "BTC",
+          "asset": 3,
+          "isBuy": true,
+          "size": "0.00020",
+          "price": "77933",
+          "reduceOnly": true,
+          "notionalUsd": 15.13
+        },
+        "fill": {
+          "totalSz": "0.0002",
+          "avgPx": "75664.0",
+          "oid": 64757940093
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,72 @@
+{
+  "name": "flat",
+  "description": "two funded legs, no position",
+  "recordedAt": "2026-11-07T13:25:24.263Z",
+  "snapshot": {
+    "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+    "at": 1794057907197,
+    "legs": [
+      {
+        "leg": 0,
+        "address": "0xfc5f38a75535cc6a864bb5ba14d9c7f29eecacac",
+        "agent": null,
+        "clearinghouse": {
+          "marginSummary": {
+            "accountValue": "14.8",
+            "totalNtlPos": "0.0",
+            "totalRawUsd": "14.8",
+            "totalMarginUsed": "0.0"
+          },
+          "crossMarginSummary": {
+            "accountValue": "14.8",
+            "totalNtlPos": "0.0",
+            "totalRawUsd": "14.8",
+            "totalMarginUsed": "0.0"
+          },
+          "crossMaintenanceMarginUsed": "0.0",
+          "withdrawable": "14.8",
+          "assetPositions": [],
+          "time": 1794057906691
+        },
+        "spotUsdc": 0.2
+      },
+      {
+        "leg": 1,
+        "address": "0x8056c4fa3aad69cf04c2ade906c58489e76c9986",
+        "agent": null,
+        "clearinghouse": {
+          "marginSummary": {
+            "accountValue": "9.0",
+            "totalNtlPos": "0.0",
+            "totalRawUsd": "9.0",
+            "totalMarginUsed": "0.0"
+          },
+          "crossMarginSummary": {
+            "accountValue": "9.0",
+            "totalNtlPos": "0.0",
+            "totalRawUsd": "9.0",
+            "totalMarginUsed": "0.0"
+          },
+          "crossMaintenanceMarginUsed": "0.0",
+          "withdrawable": "9.0",
+          "assetPositions": [],
+          "time": 1794057906691
+        },
+        "spotUsdc": 0
+      }
+    ],
+    "market": {
+      "assets": [
+        {
+          "name": "BTC",
+          "asset": 3,
+          "szDecimals": 5,
+          "maxLeverage": 40
+        }
+      ],
+      "mids": {
+        "BTC": "75663.5"
+      }
+    }
+  }
+}
