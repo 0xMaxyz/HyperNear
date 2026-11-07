@@ -2,31 +2,47 @@
   "claim": "C3",
   "title": "HL accepts usdClassTransfer signed by MPC (caller-supplied nonce)",
   "status": "✅",
-  "at": "2026-11-07T12:35:26.368Z",
+  "at": "2026-11-07T12:41:32.212Z",
   "network": "testnet",
   "numbers": {
     "signGasTGas": 12.22,
-    "perpBefore": 18,
-    "spotBefore": 0,
-    "perpAfter": 17,
-    "spotAfter": 1
+    "signerPerpBefore": 12,
+    "signerSpotBefore": 2,
+    "signerPerpAfter": 11,
+    "signerSpotAfter": 3,
+    "leg1TotalBefore": 19,
+    "leg1TotalAfter": 19
   },
   "refs": {
-    "nearSignTx": "FAaf7wkqcfugZGZhZ31Abz8miQwVSeNUV5ujs3AJeHfE",
+    "nearSignTx": "AxYVw9UM5475w7gf1d9bSNfTz5aTHkeJVjTv5kPqvpQE",
     "action": {
       "type": "usdClassTransfer",
       "hyperliquidChain": "Testnet",
       "signatureChainId": "0x66eee",
       "amount": "1",
       "toPerp": false,
-      "nonce": 1794054908031
+      "nonce": 1794055272675
     },
     "exchange": {
       "status": "ok",
       "response": {
         "type": "default"
       }
-    }
+    },
+    "ledger": [
+      {
+        "type": "internalTransfer",
+        "usdc": "1.0",
+        "user": "0xff689f4bf14686c751df87304178eacb3c2194e3",
+        "destination": "0x6c116aef0a090893af5d80b39602666a9a450328",
+        "fee": "0.0"
+      },
+      {
+        "type": "accountClassTransfer",
+        "usdc": "1.0",
+        "toPerp": false
+      }
+    ]
   },
   "notes": []
 }

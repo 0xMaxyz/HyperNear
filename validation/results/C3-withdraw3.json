@@ -2,29 +2,43 @@
   "claim": "C3",
   "title": "HL accepts withdraw3 signed by MPC (caller-supplied nonce)",
   "status": "✅",
-  "at": "2026-11-07T12:35:44.675Z",
+  "at": "2026-11-07T12:43:58.126Z",
   "network": "testnet",
   "numbers": {
-    "signGasTGas": 12.15,
-    "perpBefore": 17,
-    "spotBefore": 1,
-    "perpAfter": 15,
-    "spotAfter": 1
+    "signGasTGas": 12.25,
+    "signerPerpBefore": 19,
+    "signerSpotBefore": 0,
+    "signerPerpAfter": 17,
+    "signerSpotAfter": 0,
+    "leg1TotalBefore": 19,
+    "leg1TotalAfter": 17,
+    "ledgerSeen": true
   },
   "refs": {
-    "nearSignTx": "2mqQguZBwRycyxmbGxTkbpghVLY1c42PnZ9oPCHNM43z",
+    "nearSignTx": "79D12deyDXkabqRzBTisYL89bvE9myAH2LovE8wcHoU5",
     "action": {
       "type": "withdraw3",
       "hyperliquidChain": "Testnet",
       "signatureChainId": "0x66eee",
       "destination": "0x75c450e9597b5ca41aa86b18f630f51278c350e3",
       "amount": "2",
-      "time": 1794054926698
+      "time": 1794055292214
     },
     "exchange": {
       "status": "ok",
       "response": {
         "type": "default"
+      }
+    },
+    "ledger": [],
+    "ledgerEntry": {
+      "time": 1794055432420,
+      "hash": "0x2bb54334a3b3dc7baaf965c2509a667e2641dc4d8dbccf14a66ac154e28b3064",
+      "delta": {
+        "type": "withdraw",
+        "usdc": "1.0",
+        "nonce": 1794055174474000,
+        "fee": "1.0"
       }
     }
   },
