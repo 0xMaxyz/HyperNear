@@ -1,0 +1,38 @@
+# Claims ledger
+
+This file records the test result behind each claim that HyperNear builds on. Each claim was tested live on NEAR testnet and Hyperliquid (HL) testnet where a test applies, as of 2026-11-07. Claims marked ⏳ have no result yet and must not be built on.
+
+Status: ✅ confirmed, ❌ refuted, ⚠️ partly confirmed or no public evidence, ⏳ pending.
+
+| # | Claim | Status | Evidence | Consequence for the design |
+|---|---|---|---|---|
+| C1 | A NEAR contract can call `v1.signer-prod.testnet`, and the recovered signer equals the derived address | ✅ | 11/11 sign calls recovered to the MPC `derived_public_key` address [`0xe8e7c69788249d5bc17ddbd441cdf41f6f8a0274`](https://app.hyperliquid-testnet.xyz/explorer/address/0xe8e7c69788249d5bc17ddbd441cdf41f6f8a0274), all low-s. Example NEAR tx [5ofs76x8…](https://testnet.nearblocks.io/txns/5ofs76x8CdXMorzZTinnSovpvRsJZmoHZhPDNtfjUogh). Checked against the MPC view, not chainsig.js. Source: `contract/NOTES.md`. | Contract custody through Chain Signatures works. The OutLayer fallback is not needed. |
+| C2 | HL testnet accepts `approveAgent` signed by MPC from a derived address (`signatureChainId` 0x66eee) | ✅ | Derived address [`0xff689f4b…`](https://app.hyperliquid-testnet.xyz/explorer/address/0xff689f4bf14686c751df87304178eacb3c2194e3) approved agent `leash-leg0` (0x7bfcce…); HL returned `ok`. NEAR sign tx [6hEDswnz…](https://testnet.nearblocks.io/txns/6hEDswnziqMfxYxR85TN9vuXb66xY3KkMMSoXEsJQErT). Sign-to-listed took 15,842 ms. A local-key harness self-check also passed. | The MPC signing path to HL is real. Approval works from a derived address. |
+| C3 | HL accepts `usdSend`, `withdraw3` and `usdClassTransfer` signed by MPC, with caller-supplied `time` nonces | ✅ | All three returned `ok`. `usdSend` 1 USDC, leg 0 to [leg 1](https://app.hyperliquid-testnet.xyz/explorer/address/0x6c116aef0a090893af5d80b39602666a9a450328), NEAR tx [5YETHthJ…](https://testnet.nearblocks.io/txns/5YETHthJtWddKgsAkjKbD9rV9d2UxmiF2NUVJRvdoNHr). `usdClassTransfer` 1 USDC to spot, NEAR tx [AxYVw9UM…](https://testnet.nearblocks.io/txns/AxYVw9UM5475w7gf1d9bSNfTz5aTHkeJVjTv5kPqvpQE). `withdraw3` 2 USDC to `0x75c450…`, NEAR tx [79D12dey…](https://testnet.nearblocks.io/txns/79D12deyDXkabqRzBTisYL89bvE9myAH2LovE8wcHoU5); the HL ledger shows a withdraw entry with fee 1.0 USDC. | All three actions are available to the policy contract. Withdrawals carry a fee. |
+| C4 | The approved API wallet trades the leg; one agent address cannot serve two masters | ✅ | Leg 0: resting order oid 64755250533, cancel `success`. Leg 1: resting order oid 64755082460, cancel `success`. Approving the same agent on a second master was rejected: "Extra agent already used." | One agent key per leg, as planned. |
+| C5 | A leg with an open cross position can `usdSend` up to `withdrawable` | ✅ | Withdrawable 22.476295 USDC with a 0.0002-size position open (filled at avg 75844.0). `usdSend` of 22.47 was `ok`. Withdrawable fell to 0.006295 and the position stayed open. The position was then closed at avg 75836.0. | The margin guard can move free margin out of a hedged leg, but only up to `withdrawable`. |
+| C6 | End-to-end latency (NEAR tx, MPC, callback, HL) and NEAR cost per signature | ⚠️ | NEAR side, submit to `EXECUTED_OPTIMISTIC`, 11 sequential calls: p50 12.1 s, p95 12.8 s, min 11.3 s. HL side from the C2 run: 15.8 s from sign to listed agent. A single end-to-end run was not measured. Cost ~0.00113 NEAR per signature. | The margin guard must budget about 16 s per master action until a full end-to-end run exists. |
+| C7 | The contract pays the signer deposit from its own balance when called through a function-call key | ⏳ | Not run. | If it fails, the owner pre-funds the deposit. |
+| C8 | `env::ecrecover` verifies a viem EIP-712 owner intent and a live Privy passkey signature | ⏳ | Not run. | If it fails, use EIP-191 `personal_sign` over the intent hash (still ecrecover). |
+| C9/C15 | 1Click delivers USDC to a never-funded HL address; spot or perps; minimum; fee | ⏳ | Not run (planned: mainnet, about $6). | If it fails, fund through the Arbitrum bridge. |
+| C10 | A fresh derived address can receive `usdSend` and then act (1 USDC activation fee) | ✅ | Fresh address [`0xcaAe712d…`](https://app.hyperliquid-testnet.xyz/explorer/address/0xcaAe712dAd9c944a42DAdc096DbF8178f5838fd6): sent 5, received 4, 1 USDC activation fee. The first action after `usdSend` was `ok`, with no second fee. Derived legs [leg 0](https://app.hyperliquid-testnet.xyz/explorer/address/0xff689f4bf14686c751df87304178eacb3c2194e3) and [leg 1](https://app.hyperliquid-testnet.xyz/explorer/address/0x6c116aef0a090893af5d80b39602666a9a450328): each sent 20, received 19, 1 USDC fee, both act. | Legs are funded by `usdSend` with a 1 USDC activation fee. |
+| C11 | An API wallet can do `subAccountTransfer` | ✅ | Lab wallet [`0x306d1dBe…`](https://app.hyperliquid-testnet.xyz/explorer/address/0x306d1dBe4A4f93f06c8070B047edE9F59e37a2DC) created subaccount [`0x4c163613…`](https://app.hyperliquid-testnet.xyz/explorer/address/0x4c163613b406241f43a5492a917f4c0759670ac5), then deposit and withdraw were both `ok`. Three round trips, $108,024.61 volume, 28.57 test USDC in fees. `agentCanSubAccountTransfer`: true. | Subaccounts already allow agent transfers, so the pitch is policy, not access. |
+| C12 | A NEAR AI Cloud model supports OpenAI-style tool calls | ⏳ | Not run. | If it fails, the chat drops to a CLI. |
+| C13 | Privy `signTypedData` works with a custom domain on localhost (passkey and MetaMask) | ⏳ | Not run (timeboxed to 1 h). | If it fails, use plain MetaMask through viem. |
+| C14 | `v1.signer.sign` plus our callback fits in one transaction under 300 TGas; the deposit today | ✅ | One tx, 7 receipts (sign, MPC yield and resume, `on_signed`). 300 TGas attached, 11.98 TGas burnt. Deposit: 1 yoctoNEAR, excess refunded. Example tx [5ofs76x8…](https://testnet.nearblocks.io/txns/5ofs76x8CdXMorzZTinnSovpvRsJZmoHZhPDNtfjUogh). The minimum outer gas is not measured. | No sign-then-claim split is needed. |
+| C16 | Does perps.near.com give users any policy control (withdraw lock, caps) over their HL key? | ⚠️ | No public evidence of user policy controls on perps.near.com; secondary sources only. | This is our differentiation sentence, to be stated in the README. |
+| C17 | TypeSafe Jev API access; a `choice` call returns in under 1 s; shuffling options changes the top answer less than X% of the time on 50 fixture states | ⏳ | Not run. | If there is no key, use Sonnet 5.5 alone with structured output and the same 90% gate (weaker). |
+| C18 | Claude API structured output for the escalation (Sonnet 5.5 / Opus 5.5) within the latency budget | ⏳ | Not run. | No fallback recorded. |
+
+## Alternatives (C16)
+
+- **HL native multi-sig:** a threshold of signers, but no rules about what may be signed.
+- **Privy and Turnkey policy engines:** EIP-712 rules for HL, but enforced inside the vendor's enclave, which you trust. Turnkey reportedly has a root-quorum override.
+- **Our design:** the policy is a public NEAR contract anyone can read and verify, and the key is held by NEAR's decentralized MPC network, so there is no vendor custodian.
+
+## Design consequences
+
+- Each master action takes about 12 to 16 s on NEAR and HL, so the margin guard keeps a conservative margin.
+- Each leg gets its own agent key. A second master cannot reuse an approved agent.
+- Funding a fresh leg costs 1 USDC activation fee.
+- C11 shows subaccounts already allow agent transfers, so the README leads with policy (destination lock, caps, freeze), not with access.
