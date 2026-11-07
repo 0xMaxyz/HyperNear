@@ -94,7 +94,14 @@ export function StrategiesPanel(p: {
 
   const doDraft = () =>
     act('draft', async () => {
-      const out = (await post('/strategy/draft', { owner: p.owner, text })) as Partial<DraftOk> & Partial<DraftRefused> & { error?: string };
+      // 200 {ok:true, spec, ...}; 422 {ok:false, errors, draft?} when the agent refuses the draft; 400 bad text; 503 builder off
+      let out: Partial<DraftOk> & Partial<DraftRefused> & { error?: string };
+      try {
+        out = (await post('/strategy/draft', { owner: p.owner, text })) as typeof out;
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 422 && Array.isArray(e.body.errors)) out = e.body as typeof out;
+        else throw e;
+      }
       if (out.ok === false || !out.spec) {
         setDraft({ kind: 'refused', text, errors: out.errors ?? [out.error ?? 'The agent returned no strategy.'], draft: out.draft });
         return 'The draft was refused. Nothing was started.';

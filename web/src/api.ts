@@ -60,11 +60,20 @@ export interface AgentEvent {
   data: Record<string, unknown>;
 }
 
-export class ApiError extends Error {}
+export class ApiError extends Error {
+  readonly status: number;
+  /** the parsed JSON body of the failed response (a refused draft carries its errors there) */
+  readonly body: Record<string, unknown>;
+  constructor(message: string, status = 0, body: Record<string, unknown> = {}) {
+    super(message);
+    this.status = status;
+    this.body = body;
+  }
+}
 
 async function json(r: Response) {
   const body = await r.json().catch(() => ({}));
-  if (!r.ok) throw new ApiError((body as { error?: string }).error ?? `HTTP ${r.status}`);
+  if (!r.ok) throw new ApiError((body as { error?: string }).error ?? `HTTP ${r.status}`, r.status, body as Record<string, unknown>);
   return body as Record<string, unknown>;
 }
 
