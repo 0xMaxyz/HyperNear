@@ -129,11 +129,26 @@ export class StrategyRunner {
     }
   }
 
+  /** The kill switch must not give up on one transient failure: three tries. */
+  async #killOrders() {
+    for (let i = 1; ; i++) {
+      try {
+        return await this.cancelAll();
+      } catch (e) {
+        if (i >= 3) throw e;
+      }
+    }
+  }
+
   /** Cancels every open order of the leg (it is dedicated to this strategy) and forgets them. */
   async cancelAll() {
     const { port, spec } = this.#o;
     const open = [...(await port.openOids())];
-    if (open.length) await port.cancel((await port.info(spec.coin)).asset, open);
+    if (open.length) {
+      await port.cancel((await port.info(spec.coin)).asset, open);
+      const left = await port.openOids();
+      if (left.size) throw new Error(`${left.size} orders still resting after cancel`);
+    }
     this.grid = { ...this.grid, orders: {} };
     if (this.deadman === 'armed') {
       await port.armDeadman(undefined).catch(() => {});
@@ -145,14 +160,14 @@ export class StrategyRunner {
   async pause(reason: string) {
     if (this.state !== 'running') return;
     this.state = 'paused';
-    const cancelled = await this.cancelAll().catch((e) => `cancel failed: ${(e as Error).message}`);
+    const cancelled = await this.#killOrders().catch((e) => `cancel failed: ${(e as Error).message}`);
     this.#emit('paused', { reason, cancelled });
   }
 
   async stop(reason: string) {
     if (this.state === 'stopped') return;
     this.state = 'stopped';
-    const cancelled = await this.cancelAll().catch((e) => `cancel failed: ${(e as Error).message}`);
+    const cancelled = await this.#killOrders().catch((e) => `cancel failed: ${(e as Error).message}`);
     let flattened = false;
     if (this.spec.onStop === 'flatten') {
       await this.#o.port.flatten(this.spec.coin).then(() => (flattened = true), (e) => this.#emit('error', { message: `flatten failed: ${(e as Error).message}` }));
@@ -164,7 +179,7 @@ export class StrategyRunner {
   async freeze() {
     if (this.state === 'frozen' || this.state === 'stopped') return;
     this.state = 'frozen';
-    const cancelled = await this.cancelAll().catch((e) => `cancel failed (key already revoked?): ${(e as Error).message}`);
+    const cancelled = await this.#killOrders().catch((e) => `cancel failed (key already revoked?): ${(e as Error).message}`);
     this.#emit('frozen', { cancelled });
   }
 }

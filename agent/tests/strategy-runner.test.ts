@@ -145,6 +145,20 @@ describe('StrategyRunner', () => {
     expect(types()).toContain('strategy.paused');
   });
 
+  it('kill switch retries a failed cancel and reports orders that still rest', async () => {
+    const { port, runner, types } = setup();
+    await runner.tick();
+    let fails = 1;
+    const cancel = port.cancel.bind(port);
+    port.cancel = async (a, o) => {
+      if (fails-- > 0) throw new Error('transient');
+      return cancel(a, o);
+    };
+    await runner.pause('test');
+    expect(port.open.size).toBe(0);
+    expect(types()).toContain('strategy.paused');
+  });
+
   it('stop with onStop flatten also closes the position', async () => {
     const { port, events } = setup();
     const runner = new StrategyRunner({ spec: { ...spec, onStop: 'flatten' }, port, policy: ctx.orderPolicy, emit: (t, d) => events.push({ type: t, data: d }), isFrozen: async () => false });

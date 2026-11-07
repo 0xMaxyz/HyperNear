@@ -76,7 +76,18 @@ export async function hlPort(legs: Legs, owner: Hex, leg: number, slippage = 0.0
       }
     },
     async cancel(asset, oids) {
-      if (oids.length) await hl.batchCancel({ cancels: oids.map((o) => ({ a: asset, o: Number(o) })) });
+      if (!oids.length) return;
+      try {
+        await hl.batchCancel({ cancels: oids.map((o) => ({ a: asset, o: Number(o) })) });
+      } catch (e) {
+        if (!(e instanceof RelayRejectionError)) throw e;
+        // one order filled or vanished since we listed them: HL rejects the batch; cancel the rest one by one
+        for (const o of oids) {
+          await hl.cancelOrder({ asset, oid: Number(o) }).catch((err) => {
+            if (!(err instanceof RelayRejectionError)) throw err;
+          });
+        }
+      }
     },
     async flatten(coin) {
       const szi = await port.position(coin);
