@@ -12,12 +12,14 @@
  * `facts` must only hold computed, bucketed strings (no raw numbers, no free text): Jev trusts its state.
  */
 
+// Keep these short (<= 40 chars). Over ci32, Jev requests whose JSON body grows past roughly 1.4 KB hang (measured:
+// 5 descriptions of 45 chars work, 50 chars time out), and the plan wants short option descriptions anyway.
 export const ACTIONS = {
   hold: 'keep both legs as they are',
-  close_both: 'close both legs now and take the combined result',
-  reduce_hedge: 'shrink the short leg so the hedge covers less of the long leg',
-  add_hedge: 'grow the short leg so the hedge covers more of the long leg',
-  take_profit: 'close the leg that is in profit and keep the other open',
+  close_both: 'close both legs now',
+  reduce_hedge: 'shrink the short leg',
+  add_hedge: 'grow the short leg',
+  take_profit: 'close the leg in profit, keep other',
 } as const;
 export type Action = keyof typeof ACTIONS;
 export const ACTION_IDS = Object.keys(ACTIONS) as Action[];

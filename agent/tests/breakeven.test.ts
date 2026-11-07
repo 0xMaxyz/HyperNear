@@ -8,11 +8,12 @@ describe('breakeven (fixture driven)', () => {
       const r = breakeven(c.input);
       expect(r.kind).toBe(c.expect.kind);
       if (r.kind === 'price' && c.expect.kind === 'price') {
-        expect(r.price).toBeCloseTo(c.expect.price, 9);
-        // PnL really is ~0 at the reported price
-        expect(combinedPnl(c.input, r.price)).toBeCloseTo(0, 9);
+        // relative tolerance: absolute digits would depend on the price magnitude
+        expect(Math.abs(r.price - c.expect.price) / c.expect.price).toBeLessThan(1e-12);
+        // PnL really is ~0 at the reported price (relative to the leg notional)
+        expect(Math.abs(combinedPnl(c.input, r.price))).toBeLessThan(1e-9 * r.price);
       }
-      if (r.kind === 'locked' && c.expect.kind === 'locked') expect(r.lockedPnl).toBeCloseTo(c.expect.lockedPnl, 9);
+      if (r.kind === 'locked' && c.expect.kind === 'locked') expect(Math.abs(r.lockedPnl - c.expect.lockedPnl)).toBeLessThan(1e-12 * Math.max(1, Math.abs(c.expect.lockedPnl)));
     });
   }
 
