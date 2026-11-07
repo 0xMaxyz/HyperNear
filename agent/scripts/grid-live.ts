@@ -1,11 +1,12 @@
 // Phase 2 live run (testnet): one grid on a fresh strategy leg (leg 3) through the real validation, runner and kill switch.
 //   LAB_WALLETS_PATH=~/secrets/lab-wallets.json NEAR_NETWORK=testnet node agent/scripts/grid-live.ts [--check]
 // Steps: register leg 3 -> fund it from lab wallet #3 (usdSend) -> owner approves its HL API wallet -> validate + start the
-// grid just inside the BTC spread (so a post-only buy rests as best bid) -> lab wallet #3 acts as the counterparty: it sells
-// into the buy, the runner answers with a reduce-only sell one level up, the counterparty buys it back -> kill switch.
-// The counterparty step is ASSISTED: a 1-USD-step grid inside the spread would otherwise wait for the market. The result
-// file says so. Keys (never printed): ~/.near-credentials/testnet/<contract>.json, HYPERNEAR_DATA_DIR/agent-keys.json, the lab
-// wallet file (index 3 only). Owner = HYPERNEAR_TEST_OWNER_KEY or the public test key (testnet only).
+// grid just inside the BTC spread (so a post-only buy rests as best bid) -> if the market has not filled it, lab wallet #3
+// acts as the counterparty: it sells into the buy, the runner answers with a reduce-only sell one level up, the counterparty
+// buys it back -> kill switch (pause cancels everything), then stop with onStop flatten.
+// The counterparty step is ASSISTED: a 1 USD step grid on a quiet testnet book would otherwise wait for the market. The
+// result file says which fills were assisted. Keys (never printed): ~/.near-credentials/testnet/<contract>.json,
+// HYPERNEAR_DATA_DIR/agent-keys.json, the lab wallet file (index 3 only). Owner = HYPERNEAR_TEST_OWNER_KEY or the public test key.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import type { Hex } from 'viem';
@@ -15,6 +16,7 @@ import { EventBus } from '../src/events.ts';
 import { Legs } from '../src/legs.ts';
 import { agentKeySigner, hlClient, position, roundPx } from '../src/market.ts';
 import { StrategyManager } from '../src/strategy/manager.ts';
+import { hlPort } from '../src/strategy/port.ts';
 
 const RPC = 'https://test.rpc.fastnear.com';
 // well-known PUBLIC web3 test key: a testnet owner only, never funded on any real chain
@@ -95,20 +97,25 @@ const pol = await client.getOwner(ow);
 if (pol?.frozen) throw new Error('owner is frozen: unfreeze it first (this script does not)');
 if (pol?.agent !== nearAgentId) await ownerIntent({ type: 'setPolicy', agent: nearAgentId, dailyCap: '50', cooldownSec: 30 });
 
+// leftover inventory from an earlier run would confuse the ladder's bookkeeping
+await (await hlPort(legs, ow, LEG)).flatten('BTC');
+
 // ---- the grid, just inside the spread: buy at bestBid+1, sell at bestBid+2 (1 USD tick; needs a spread of at least 3)
 const book = await legs.hl.l2Book({ coin: 'BTC' });
 const bid = Number(book.levels[0]![0]!.px);
 const ask = Number(book.levels[1]![0]!.px);
 console.log(`BTC book: bid ${bid} ask ${ask}`);
 if (ask - bid < 3) throw new Error(`spread ${ask - bid} too tight for the 1-step demo grid; rerun later`);
-const meta = (await legs.hl.meta()).universe.findIndex((u) => u.name === 'BTC');
-const szDecimals = (await legs.hl.meta()).universe[meta]!.szDecimals;
+const universe = (await legs.hl.meta()).universe;
+const btc = universe.findIndex((u) => u.name === 'BTC');
+const szDecimals = universe[btc]!.szDecimals;
 const lower = bid + 1;
 const sizePerLevel = (Math.ceil((10.5 / lower) * 10 ** szDecimals) / 10 ** szDecimals).toFixed(szDecimals);
 const spec = {
   id: 'grid-live-1', type: 'grid', leg: LEG, coin: 'BTC',
   params: { lower, upper: lower + 4, levels: 5, sizePerLevel },
   limits: { maxNotional: 100, maxLeverage: 3, maxDailyLoss: 5, topUpCapPerDay: 20 },
+  onStop: 'flatten',
 };
 
 const events: { t: number; type: string; data: unknown }[] = [];
@@ -116,7 +123,7 @@ const t0 = Date.now();
 bus.subscribe((e) => {
   if (e.type.startsWith('strategy.')) {
     events.push({ t: e.at - t0, type: e.type, data: e.data });
-    console.log(`  +${((e.at - t0) / 1000).toFixed(1)}s ${e.type} ${JSON.stringify(e.data).slice(0, 160)}`);
+    console.log(`  +${((e.at - t0) / 1000).toFixed(1)}s ${e.type} ${JSON.stringify(e.data).slice(0, 200)}`);
   }
 });
 const manager = new StrategyManager({ legs, client, policy, emit: (t, d) => void bus.emit(t, d), agentId: nearAgentId, intervalMs: TICK_MS });
@@ -131,38 +138,55 @@ await manager.start(ow, v.spec);
 
 const state = () => manager.list(ow).find((s) => s.id === spec.id)!;
 const ev = (type: string) => events.filter((e) => e.type === type);
-const px = (name: string) => roundPx(name === 'buy' ? lower : lower + 1, szDecimals);
+const lastPx = (side: string) => (ev('strategy.order').filter((e) => (e.data as { side: string }).side === side).at(-1)?.data as { px: number } | undefined)?.px;
 const assisted: Record<string, unknown> = {};
-const btc = meta;
+const ioc = (isBuy: boolean, price: number) => lab.limitOrderOpen({ asset: btc, isBuy, price: roundPx(price, szDecimals), size: sizePerLevel, tif: 'Ioc' });
+/** The counterparty trades against our resting order, only if it still rests at that price (the book moves). */
+async function assist(key: string, ourSide: 'B' | 'A', price: number) {
+  const rests = (await legs.hl.openOrders({ user: legAddr })).some((o) => o.side === ourSide && Number(o.limitPx) === price);
+  if (!rests) return void (assisted[key] = 'skipped: our order no longer rests at that price (filled or moved by the market)');
+  try {
+    assisted[key] = JSON.stringify((await ioc(ourSide === 'A', price)).response.data.statuses[0]);
+  } catch (e) {
+    assisted[key] = `failed: ${(e as Error).message.slice(0, 140)}`;
+  }
+}
 let ok = false;
 try {
-  // 1. the buy rests; the counterparty sells into it
+  // 1. a buy rests; the counterparty sells into it unless the market already did
   await until(async () => ev('strategy.order').length, (n) => n >= 1, 'first resting buy');
-  const sell = await lab.limitOrderOpen({ asset: btc, isBuy: false, price: px('buy'), size: sizePerLevel, tif: 'Ioc' });
-  assisted.counterpartySell = JSON.stringify(sell.response.data.statuses[0]);
-  await until(async () => ev('strategy.fill').length, (n) => n >= 1, 'buy fill seen by the runner');
-  // 2. the runner places a reduce-only sell one level up; the counterparty buys it
-  await until(async () => ev('strategy.order').some((e) => (e.data as { side: string }).side === 'sell'), Boolean, 'reduce-only sell placed');
-  const buy = await lab.limitOrderOpen({ asset: btc, isBuy: true, price: px('sell'), size: sizePerLevel, tif: 'Ioc' });
-  assisted.counterpartyBuy = JSON.stringify(buy.response.data.statuses[0]);
-  await until(async () => ev('strategy.fill').length, (n) => n >= 2, 'sell fill seen by the runner');
+  await assist('counterpartySell', 'B', lastPx('buy')!);
+  await until(async () => ev('strategy.fill').length, (n) => n >= 1, 'buy fill seen by the runner', 180_000);
+  // 2. the runner places a reduce-only sell one level up; the counterparty buys it unless the market already did
+  await until(async () => lastPx('sell'), (p) => p !== undefined, 'reduce-only sell placed');
+  await assist('counterpartyBuy', 'A', lastPx('sell')!);
+  await until(async () => ev('strategy.fill').length, (n) => n >= 2, 'sell fill seen by the runner', 180_000);
   ok = true;
 } finally {
-  // 3. kill switch: pause cancels every resting order and the runner places nothing more
+  // 3. kill switch: pause cancels every resting order and the runner places nothing more; stop (onStop flatten) closes the position
   const paused = await manager.pause(ow, spec.id, 'kill switch (live run)');
   const open = await legs.hl.openOrders({ user: legAddr });
-  const pos = Number(position(await legs.hl.clearinghouseState({ user: legAddr }), 'BTC')?.szi ?? 0);
   await sleep(2 * TICK_MS);
   const stillOpen = (await legs.hl.openOrders({ user: legAddr })).length;
+  const placedAfterPause = ev('strategy.order').filter((e) => e.t > ev('strategy.paused')[0]!.t).length;
+  const szi = async (addr: Hex) => Number(position(await legs.hl.clearinghouseState({ user: addr }), 'BTC')?.szi ?? 0);
+  const posBeforeStop = await szi(legAddr);
   await manager.stop(ow, spec.id, 'end of run');
+  const posAfterStop = await until(() => szi(legAddr), (n) => n === 0, 'leg flat after stop', 30_000).catch((e) => `not flat: ${(e as Error).message}`);
+  // the counterparty must end flat too
+  const labPos = await szi(labAddr);
+  if (labPos !== 0) {
+    const mid = Number((await legs.hl.allMids()).BTC);
+    await lab.limitOrderOpen({ asset: btc, isBuy: labPos < 0, price: roundPx(mid * (labPos < 0 ? 1.03 : 0.97), szDecimals), size: Math.abs(labPos).toFixed(szDecimals), tif: 'Ioc', reduceOnly: true });
+  }
   manager.shutdown();
   const after = await total(legAddr);
   const labAfter = await total(labAddr);
   const result = {
     at: new Date(t0).toISOString(), owner: ow, leg: LEG, legAddress: legAddr, ok,
-    spec, validatedBy: 'StrategyManager.validate (contract policy, order policy, reserved legs, approved agent key)', refusals,
-    assisted: { note: 'a 1-USD-step grid inside the spread would otherwise wait for the market; lab wallet #3 traded against the grid', ...assisted },
-    kill: { stateAfterPause: paused.state, openOrdersAfterPause: open.length, openOrdersTwoTicksLater: stillOpen, positionAfter: pos },
+    spec: v.spec, validatedBy: 'StrategyManager.validate (contract policy, order policy, reserved legs, approved agent key)', refusals,
+    assisted: { note: 'a 1 USD step grid inside the spread would otherwise wait for the market; lab wallet #3 may trade against the grid', ...assisted },
+    kill: { stateAfterPause: paused.state, openOrdersAfterPause: open.length, openOrdersTwoTicksLater: stillOpen, ordersPlacedAfterPause: placedAfterPause, positionBeforeStop: posBeforeStop, positionAfterStop: posAfterStop, counterpartyPositionClosed: labPos },
     deadman: state().deadman,
     equityUsd: { legBefore: funded.perp, legAfter: after.perp, labBefore: labBefore.perp + labBefore.spot, labAfter: labAfter.perp + labAfter.spot },
     events,

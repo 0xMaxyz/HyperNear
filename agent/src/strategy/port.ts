@@ -1,5 +1,6 @@
 // What a runner needs from Hyperliquid, as one small interface (a fake in tests, the leg's agent key live).
 import type { Hex } from 'viem';
+import { RelayRejectionError } from '@perps-platform/core';
 import type { Legs } from '../legs.ts';
 import { position, roundPx } from '../market.ts';
 
@@ -63,10 +64,16 @@ export async function hlPort(legs: Legs, owner: Hex, leg: number, slippage = 0.0
       await hl.updateLeverage({ asset, isCross: true, leverage });
     },
     async place(o) {
-      const res = await hl.limitOrderOpen({ asset: o.asset, isBuy: o.isBuy, price: o.px, size: o.sz, tif: 'Alo', reduceOnly: o.reduceOnly });
-      const st = res.response.data.statuses[0] as Record<string, any> | undefined;
-      if (!st || 'error' in st) return { error: st ? String(st.error) : 'no status' };
-      return { oid: String((st.resting ?? st.filled).oid) };
+      try {
+        const res = await hl.limitOrderOpen({ asset: o.asset, isBuy: o.isBuy, price: o.px, size: o.sz, tif: 'Alo', reduceOnly: o.reduceOnly });
+        const st = res.response.data.statuses[0] as Record<string, any> | undefined;
+        if (!st || 'error' in st) return { error: st ? String(st.error) : 'no status' };
+        return { oid: String((st.resting ?? st.filled).oid) };
+      } catch (e) {
+        // core throws the exchange's verdict (e.g. a post-only order that would have crossed): an order outcome, not a fault
+        if (e instanceof RelayRejectionError) return { error: e.reason };
+        throw e;
+      }
     },
     async cancel(asset, oids) {
       if (oids.length) await hl.batchCancel({ cancels: oids.map((o) => ({ a: asset, o: Number(o) })) });
