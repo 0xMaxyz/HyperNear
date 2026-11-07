@@ -1,0 +1,208 @@
+{
+  "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+  "contractId": "leash-spike-1107.testnet",
+  "nearTxs": [],
+  "orders": {
+    "fund-leg1": {
+      "status": "ok",
+      "response": {
+        "type": "default"
+      }
+    },
+    "leg0Open": {
+      "totalSz": "0.0004",
+      "avgPx": "75702.0",
+      "oid": 64758078282
+    },
+    "hedgeOpen": {
+      "plan": {
+        "ok": true,
+        "leverage": {
+          "value": 3,
+          "isCross": true
+        },
+        "order": {
+          "leg": 1,
+          "coin": "BTC",
+          "asset": 3,
+          "isBuy": false,
+          "size": "0.00020",
+          "price": "73428",
+          "reduceOnly": false,
+          "notionalUsd": 15.14
+        }
+      },
+      "fill": {
+        "totalSz": "0.0002",
+        "avgPx": "75695.0",
+        "oid": 64758082577
+      },
+      "ms": 4033
+    },
+    "hedgeClose": [
+      {
+        "leg": 0,
+        "fill": {
+          "totalSz": "0.0004",
+          "avgPx": "75695.0",
+          "oid": 64758086132
+        }
+      },
+      {
+        "leg": 1,
+        "fill": {
+          "totalSz": "0.0002",
+          "avgPx": "75702.0",
+          "oid": 64758086546
+        }
+      }
+    ],
+    "fund-leg2": {
+      "status": "ok",
+      "response": {
+        "type": "default"
+      }
+    },
+    "leg2Attempts": [],
+    "leg2Open": {
+      "fraction": 0.9977675722174429,
+      "size": "0.00209",
+      "fill": {
+        "totalSz": "0.00208",
+        "avgPx": "75702.0",
+        "oid": 64758093318
+      }
+    },
+    "leg2Close": {
+      "totalSz": "0.00208",
+      "avgPx": "75694.0",
+      "oid": 64758095250
+    }
+  },
+  "agents": [
+    {
+      "leg": 0,
+      "agent": "0x35290106ae3a8dc8ce818ea4a1eecc1353bfef29",
+      "approved": "already"
+    },
+    {
+      "leg": 1,
+      "agent": "0x88d6486cc0a9b852b5c6608872559e252e31dc01",
+      "approved": "already"
+    }
+  ],
+  "finalSzi": {
+    "leg0": 0,
+    "leg1": 0,
+    "leg2": 0
+  },
+  "events": [
+    {
+      "type": "hedge",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "op": "open",
+        "coin": "BTC",
+        "ratio": 0.5,
+        "order": {
+          "leg": 1,
+          "coin": "BTC",
+          "asset": 3,
+          "isBuy": false,
+          "size": "0.00020",
+          "price": "73428",
+          "reduceOnly": false,
+          "notionalUsd": 15.14
+        },
+        "leverage": {
+          "value": 3,
+          "isCross": true
+        },
+        "fill": {
+          "totalSz": "0.0002",
+          "avgPx": "75695.0",
+          "oid": 64758082577
+        }
+      }
+    },
+    {
+      "type": "hedge",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "op": "close",
+        "coin": "BTC",
+        "order": {
+          "leg": 0,
+          "coin": "BTC",
+          "asset": 3,
+          "isBuy": false,
+          "size": "0.00040",
+          "price": "73428",
+          "reduceOnly": true,
+          "notionalUsd": 30.28
+        },
+        "fill": {
+          "totalSz": "0.0004",
+          "avgPx": "75695.0",
+          "oid": 64758086132
+        }
+      }
+    },
+    {
+      "type": "hedge",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "op": "close",
+        "coin": "BTC",
+        "order": {
+          "leg": 1,
+          "coin": "BTC",
+          "asset": 3,
+          "isBuy": true,
+          "size": "0.00020",
+          "price": "77969",
+          "reduceOnly": true,
+          "notionalUsd": 15.14
+        },
+        "fill": {
+          "totalSz": "0.0002",
+          "avgPx": "75702.0",
+          "oid": 64758086546
+        }
+      }
+    }
+  ],
+  "run1": {
+    "note": "first run (2026-11-07 13:25Z): agents approved and leg2 registered here; same flow otherwise",
+    "nearTxs": [
+      {
+        "method": "owner_execute",
+        "what": "approveAgent leg0",
+        "txHash": "Gi9BENtCa7pXUj5s9EukovcBPpafd5WareBxtxnyJ824"
+      },
+      {
+        "method": "owner_execute",
+        "what": "approveAgent leg1",
+        "txHash": "AHZNdtnfZGRGvxzTTr9ZC4XQdtRAXPG3YYmo4boedDgp"
+      },
+      {
+        "method": "register_leg",
+        "what": "leg2",
+        "txHash": "3W8ZAT2HriECus2dVcpvtpqXF8eNi1QAteMabiq5j6FZ"
+      },
+      {
+        "method": "owner_execute",
+        "what": "approveAgent leg2",
+        "txHash": "ChcwV7nwjBXvFV4NDqFP6B4Y85trLeXgoeh96gCxwZi"
+      }
+    ],
+    "oids": {
+      "leg0Open": 64757932229,
+      "hedgeOpen": 64757936533,
+      "closeLeg0": 64757938664,
+      "closeLeg1": 64757940093,
+      "leg2Open": 64757954710,
+      "leg2Close": 64757957616
+    }
+  }
+}

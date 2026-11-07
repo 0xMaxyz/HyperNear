@@ -1,0 +1,108 @@
+{
+  "name": "flat",
+  "description": "two funded legs, no position",
+  "recordedAt": "2026-11-07T13:28:23.904Z",
+  "snapshot": {
+    "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+    "at": 1794058102874,
+    "legs": [
+      {
+        "leg": 0,
+        "address": "0xfc5f38a75535cc6a864bb5ba14d9c7f29eecacac",
+        "agent": {
+          "address": "0x35290106ae3a8dc8ce818ea4a1eecc1353bfef29",
+          "name": "leash-leg0",
+          "approvedAt": 1794057915957
+        },
+        "clearinghouse": {
+          "marginSummary": {
+            "accountValue": "14.772362",
+            "totalNtlPos": "0.0",
+            "totalRawUsd": "14.772362",
+            "totalMarginUsed": "0.0"
+          },
+          "crossMarginSummary": {
+            "accountValue": "14.772362",
+            "totalNtlPos": "0.0",
+            "totalRawUsd": "14.772362",
+            "totalMarginUsed": "0.0"
+          },
+          "crossMaintenanceMarginUsed": "0.0",
+          "withdrawable": "14.772362",
+          "assetPositions": [],
+          "time": 1794058102336
+        },
+        "spotUsdc": 0.2
+      },
+      {
+        "leg": 1,
+        "address": "0x8056c4fa3aad69cf04c2ade906c58489e76c9986",
+        "agent": {
+          "address": "0x88d6486cc0a9b852b5c6608872559e252e31dc01",
+          "name": "leash-leg1",
+          "approvedAt": 1794057924263
+        },
+        "clearinghouse": {
+          "marginSummary": {
+            "accountValue": "10.986182",
+            "totalNtlPos": "0.0",
+            "totalRawUsd": "10.986182",
+            "totalMarginUsed": "0.0"
+          },
+          "crossMarginSummary": {
+            "accountValue": "10.986182",
+            "totalNtlPos": "0.0",
+            "totalRawUsd": "10.986182",
+            "totalMarginUsed": "0.0"
+          },
+          "crossMaintenanceMarginUsed": "0.0",
+          "withdrawable": "10.986182",
+          "assetPositions": [],
+          "time": 1794058102336
+        },
+        "spotUsdc": 0
+      },
+      {
+        "leg": 2,
+        "address": "0x2a32c77d9b5e3e0ed8780e9fc5def0aa629c62ab",
+        "agent": {
+          "address": "0xd758a14c669e8872f40b54b006965b267c1fa1ab",
+          "name": "leash-leg2",
+          "approvedAt": 1794057953194
+        },
+        "clearinghouse": {
+          "marginSummary": {
+            "accountValue": "0.96407",
+            "totalNtlPos": "0.0",
+            "totalRawUsd": "0.96407",
+            "totalMarginUsed": "0.0"
+          },
+          "crossMarginSummary": {
+            "accountValue": "0.96407",
+            "totalNtlPos": "0.0",
+            "totalRawUsd": "0.96407",
+            "totalMarginUsed": "0.0"
+          },
+          "crossMaintenanceMarginUsed": "0.0",
+          "withdrawable": "0.96407",
+          "assetPositions": [],
+          "time": 1794058102336
+        },
+        "spotUsdc": 0
+      }
+    ],
+    "market": {
+      "assets": [
+        {
+          "name": "BTC",
+          "asset": 3,
+          "szDecimals": 5,
+          "maxLeverage": 40
+        }
+      ],
+      "mids": {
+        "BTC": "75698.5"
+      }
+    }
+  }
+}
