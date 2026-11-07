@@ -87,6 +87,10 @@ describe('strategy routes', () => {
     const ok = await post(`${base}/strategy/start`, await start(specHash(spec)));
     expect(ok.status).toBe(200);
     expect(await ok.json()).toMatchObject({ id: spec.id, state: 'running' });
+    // every strategy.* event names its owner and leg
+    const events = d.bus.since(0).filter((e) => e.type.startsWith('strategy.'));
+    expect(events.length).toBeGreaterThan(0);
+    for (const e of events) expect(e.data).toMatchObject({ owner: OWNER, id: spec.id, leg: spec.leg });
     expect((await (await fetch(`${base}/strategies/${OWNER}`)).json()).strategies).toMatchObject([{ id: spec.id, state: 'running' }]);
     const paused = await post(`${base}/strategy/pause`, await signed(newCommand(OWNER, 'pauseStrategy', spec.id, '0', 30, Date.now() + 1)));
     expect(await paused.json()).toMatchObject({ state: 'paused' });

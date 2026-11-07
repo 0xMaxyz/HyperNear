@@ -125,10 +125,11 @@ export function dryStrategies(owner: Hex, bus: EventBus, ctx: () => SpecContext)
     },
     async start(_o: Hex, spec: StrategySpec) {
       for (const [id, other] of specs) if (id !== spec.id && other.leg === spec.leg && live(id)) (states.set(id, 'stopped'), emit('stopped', id, { reason: `replaced by ${spec.id}`, cancelled: 0, flattened: false }));
-      if (!specs.has(spec.id)) emit('started', spec.id, { type: spec.type, coin: spec.coin });
-      else emit('resumed', spec.id);
-      specs.set(spec.id, spec);
+      const isNew = !specs.has(spec.id);
+      specs.set(spec.id, spec); // before the event: emit() reads the leg from the stored spec
       states.set(spec.id, 'running');
+      if (isNew) emit('started', spec.id, { type: spec.type, coin: spec.coin });
+      else emit('resumed', spec.id);
       return status(spec.id);
     },
     async pause(_o: Hex, id: string) {

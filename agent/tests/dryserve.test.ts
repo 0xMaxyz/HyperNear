@@ -134,6 +134,14 @@ describe('--dry-run --serve: strategies', () => {
     const sign = async (c: typeof startCmd) => ({ command: c, sig: await owner.signTypedData(commandTypedData('near-testnet', DRY_CONTRACT_ID, c) as never) });
     const started = await post(`${base}/strategy/start`, { ...(await sign(startCmd)), spec: draft.spec });
     expect(await started.json()).toMatchObject({ id: draft.spec.id, state: 'running' });
+    // the simulated strategy.started names its owner and leg (stored spec first, then the event)
+    const ctl = new AbortController();
+    const reader = (await fetch(`${base}/events`, { signal: ctl.signal })).body!.getReader();
+    let text = '';
+    while (!/"simulated":true/.test(text)) text += new TextDecoder().decode((await reader.read()).value);
+    ctl.abort();
+    const sim = [...text.matchAll(/^data: (.*)$/gm)].map((m) => JSON.parse(m[1]!)).find((e) => e.type === 'strategy.started' && e.data.simulated);
+    expect(sim.data).toMatchObject({ owner: OWNER, id: draft.spec.id, leg: draft.spec.leg });
     const pause = await post(`${base}/strategy/pause`, await sign(newCommand(OWNER, 'pauseStrategy', draft.spec.id, '0', 30, Date.now() + 1)));
     expect(await pause.json()).toMatchObject({ state: 'paused' });
     const resume = await post(`${base}/strategy/resume`, await sign(newCommand(OWNER, 'startStrategy', draft.spec.id, '0', 30, Date.now() + 2, hash as `0x${string}`)));
