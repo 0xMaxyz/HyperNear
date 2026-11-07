@@ -1,14 +1,15 @@
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { choice, TypeSafeClient } from '@typesafe-ai/sdk';
+import { choice } from '@typesafe-ai/sdk';
+import { jevClient } from '../src/jev';
 import { LIVE } from '../src/env';
 import { ACTIONS, ACTION_IDS, loadStates, percentile, shuffled, type Action } from '../src/decide';
 import { runClaim } from '../src/results';
 
 const live = LIVE && Boolean(process.env.TYPESAFE_API_KEY);
 const MODEL = 'jev-1.14.0';
-const ATTEMPT_TIMEOUT_MS = 4_000;
+const ATTEMPT_TIMEOUT_MS = 10_000;
 const MAX_ATTEMPTS = 4;
 const FLIP_LIMIT = 0.1; // C17 pass bar for "shuffling changes the top answer": plan says "less than X%", X chosen here
 
@@ -27,9 +28,9 @@ interface Call {
 describe.skipIf(!live)('C17: Jev decide fixtures', () => {
   it('50 states x 2 shuffled orders', async () => {
     await runClaim('C17', 'C17', 'Jev choice call: latency, shuffle stability, confidence', async (r) => {
-      // Jev hangs on roughly half of the attempts (looks like one bad replica behind the balancer), so: short per-attempt
-      // timeout, no hidden SDK retries, our own bounded retries, and attempts/timeouts reported.
-      const timed = new TypeSafeClient({ timeout: ATTEMPT_TIMEOUT_MS, retry: { maxRetries: 0 } });
+      // jevClient() sends Connection: close (keep-alive reuse hangs every second request, see src/jev.ts); our own bounded
+      // retries below count any remaining failures.
+      const timed = jevClient(ATTEMPT_TIMEOUT_MS);
       let attemptsTotal = 0;
       let attemptFailures = 0;
       const singleAttemptMs: number[] = [];
