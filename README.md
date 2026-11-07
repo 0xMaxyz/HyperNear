@@ -51,7 +51,7 @@ Not guaranteed:
 - **A NEAR smart contract** (Rust, near-sdk 5, [`contract/`](contract)): legs, owner intents, agent policy, freeze.
 - **Function-call access keys:** the agent's NEAR account can only call `rebalance` and `agent_usd_class_transfer` on the contract. On testnet the agent key tries `owner_execute` and NEAR refuses it.
 - **NEAR Intents 1Click:** funding script `agent/scripts/fund-leg-1click.ts`. So far we have only run dry quotes (documented in [docs/mainnet-runbook.md](docs/mainnet-runbook.md)); the mainnet funding run is part of the runbook.
-- **FastNEAR RPC** (`test.rpc.fastnear.com`): the NEAR side of a signature takes about 5.7 s p50 through it, against about 12 s measured through `rpc.testnet.near.org` (claim C6).
+- **FastNEAR RPC** (`test.rpc.fastnear.com`): a full master action (NEAR sign, Hyperliquid post, balance change) takes 7.75 s p50 / 8.78 s p95 end to end; the NEAR side alone is about 5.7 s p50 through FastNEAR, against about 12 s through `rpc.testnet.near.org` (claim C6).
 
 Also used: **Jev** by TypeSafe AI (decision layer), **Claude** (escalation and chat), **Privy** (owner login).
 
