@@ -102,6 +102,7 @@ await (await hlPort(legs, ow, LEG)).flatten('BTC');
 
 // ---- the grid, just inside the spread: buy at bestBid+1, sell at bestBid+2 (1 USD tick; needs a spread of at least 3)
 const book = await legs.hl.l2Book({ coin: 'BTC' });
+if (!book) throw new Error('no BTC book');
 const bid = Number(book.levels[0]![0]!.px);
 const ask = Number(book.levels[1]![0]!.px);
 console.log(`BTC book: bid ${bid} ask ${ask}`);
