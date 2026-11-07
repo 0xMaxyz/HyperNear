@@ -8,13 +8,14 @@ import { TypeSafeClient } from '@typesafe-ai/sdk';
  * Separate problem, also from ci32: a request whose JSON body is larger than about 1.4 KB hangs until timeout
  * (option descriptions of 45 chars OK, 50 chars hang). Keep option descriptions short.
  */
-export function jevClient(timeoutMs = 10_000): TypeSafeClient {
+export function jevClient(timeoutMs = 10_000, onBodyBytes?: (n: number) => void): TypeSafeClient {
   return new TypeSafeClient({
     timeout: timeoutMs,
     retry: { maxRetries: 0 },
     fetch: (url, init = {}) => {
       const headers = new Headers(init.headers);
       headers.set('connection', 'close');
+      if (onBodyBytes && typeof init.body === 'string') onBodyBytes(init.body.length);
       return fetch(url, { ...init, headers });
     },
   });

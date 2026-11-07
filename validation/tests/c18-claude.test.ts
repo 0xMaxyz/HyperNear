@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import Anthropic from '@anthropic-ai/sdk';
@@ -27,6 +27,7 @@ describe.skipIf(!live)('C18: Claude escalation', () => {
       let agree = 0;
       let compared = 0;
       let sample: unknown;
+      const decisions: Array<{ id: string; action: string; rationale: string }> = [];
 
       for (const [i, s] of states.entries()) {
         const order = shuffled(ACTION_IDS, 1000 + i);
@@ -64,6 +65,7 @@ describe.skipIf(!live)('C18: Claude escalation', () => {
         const out = JSON.parse(text) as { action: string; rationale: string };
         expect(ACTION_IDS).toContain(out.action);
         sample ??= { out, usage: res.usage, stop_reason: res.stop_reason };
+        decisions.push({ id: s.id, action: out.action, rationale: out.rationale });
         if (jev[s.id]) {
           compared++;
           if (jev[s.id] === out.action) agree++;
@@ -75,6 +77,8 @@ describe.skipIf(!live)('C18: Claude escalation', () => {
       r.numbers.latencyP95Ms = Math.round(percentile(ms, 95));
       r.numbers.agreementWithJev = compared ? agree / compared : null;
       r.numbers.compared = compared;
+      writeFileSync(fileURLToPath(new URL('../results/C18-runs.json', import.meta.url)), JSON.stringify({ model: MODEL, decisions }, null, 2) + '
+');
       r.refs.model = MODEL;
       r.refs.effort = 'low';
       r.refs.sample = sample;
