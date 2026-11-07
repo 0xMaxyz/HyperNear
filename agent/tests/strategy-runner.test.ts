@@ -181,11 +181,11 @@ describe('StrategyRunner', () => {
   });
 
   it('a stop that cannot clear the book ends stopped only after the retry empties it', async () => {
-    const { port, runner } = setup({ cancelFailures: 4 });
+    const { port, runner } = setup({ cancelFailures: 6 }); // three tries per attempt: the stop fails, the first retry fails, the second succeeds
     await runner.tick();
     await runner.stop('test');
     expect(runner.state).toBe('cancelling');
-    await runner.tick(); // fails once more (4th failure)
+    await runner.tick(); // the first retry fails too
     expect(runner.state).toBe('cancelling');
     await runner.tick();
     expect(runner.state).toBe('stopped');
