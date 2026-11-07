@@ -20,6 +20,7 @@ import {
   twapCancel as sdkTwapCancel,
   twapOrder as sdkTwapOrder,
   updateIsolatedMargin as sdkUpdateIsolatedMargin,
+  scheduleCancel as sdkScheduleCancel,
   updateLeverage as sdkUpdateLeverage,
   usdSend as sdkUsdSend,
   withdraw3 as sdkWithdraw3,
@@ -43,6 +44,7 @@ import type {
   TwapCancelParameters,
   TwapOrderParameters,
   UpdateIsolatedMarginParameters,
+  ScheduleCancelParameters,
   UpdateLeverageParameters,
   UsdSendParameters,
   Withdraw3Parameters,
@@ -174,6 +176,7 @@ import type {
   HlTwapOrderParams,
   HlTwapOrderResult,
   HlUpdateIsolatedMarginParams,
+  HlScheduleCancelParams,
   HlUpdateLeverageParams,
   HlUsdSendParams,
   HlUserAbstractionParams,
@@ -670,6 +673,18 @@ export class HlClient {
    * L1 action (phantom-agent scheme), signed exactly like {@link order} —
    * see {@link setReferrer}'s note. Requires config.agentSigner.
    */
+  /**
+   * Dead-man switch (L1 action, agent tier): cancels ALL of the account's open orders at `time` (ms since epoch, at least
+   * 5 s ahead). Re-arming replaces the previous time; omitting `time` removes it. Hyperliquid limits the number of
+   * triggers per day, and (per its docs) requires prior trading volume on the account.
+   */
+  async scheduleCancel(params: HlScheduleCancelParams = {}, opts?: HlL1RequestOptions): Promise<HlSuccessResult> {
+    const result = await this.#relayed(() =>
+      sdkScheduleCancel(this.#tierConfig('agent'), params as ScheduleCancelParameters, opts)
+    );
+    return result as HlSuccessResult;
+  }
+
   async updateLeverage(params: HlUpdateLeverageParams, opts?: HlL1RequestOptions): Promise<HlSuccessResult> {
     const result = await this.#relayed(() =>
       sdkUpdateLeverage(this.#tierConfig('agent'), params as UpdateLeverageParameters, opts)
