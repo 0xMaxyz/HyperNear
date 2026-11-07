@@ -1,0 +1,143 @@
+{
+  "at": "2026-11-07T19:47:38.689Z",
+  "model": "claude-sonnet-5-5",
+  "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+  "results": [
+    {
+      "text": "Run a grid on BTC about 2% either side of the current price with 5 levels, about 11 dollars per level.",
+      "ms": 8275,
+      "ok": true,
+      "spec": {
+        "id": "btc-grid",
+        "leg": 3,
+        "coin": "BTC",
+        "limits": {
+          "maxNotional": 58,
+          "maxLeverage": 2,
+          "maxDailyLoss": 5.8,
+          "topUpCapPerDay": 0
+        },
+        "onStop": "cancel",
+        "type": "grid",
+        "params": {
+          "lower": 74117.9,
+          "upper": 77143.1,
+          "levels": 5,
+          "sizePerLevel": "0.00015"
+        }
+      },
+      "specHash": "0x53a706f84db53f766bb0596ef06d4ab4177d803d3354330772ee13802363649a",
+      "diff": {
+        "against": "new",
+        "changes": []
+      },
+      "warnings": [
+        "worst-case exposure $58 (levels x size x upper) is above 80% of maxNotional $58"
+      ]
+    },
+    {
+      "text": "Buy about 11 dollars of ETH every 6 hours, 8 times, never paying more than 3% above the current price. Close it all when I stop it.",
+      "ms": 6332,
+      "ok": true,
+      "spec": {
+        "id": "eth-dca",
+        "leg": 3,
+        "coin": "ETH",
+        "limits": {
+          "maxNotional": 91,
+          "maxLeverage": 2,
+          "maxDailyLoss": 9.1,
+          "topUpCapPerDay": 0
+        },
+        "onStop": "flatten",
+        "type": "twap",
+        "params": {
+          "side": "buy",
+          "sizePerSlice": "0.0049",
+          "slices": 8,
+          "intervalSec": 21600,
+          "limitPx": 2311.57
+        }
+      },
+      "specHash": "0x7f9d0793dad13600cd4b1ff53679a00dec9964d77066d738701a253c6f0599d1",
+      "diff": {
+        "against": "new",
+        "changes": []
+      },
+      "warnings": [
+        "worst-case exposure $91 (slices x size x limitPx) is above 80% of maxNotional $91",
+        "runs for about 48 hours; the service keeps it only while it stays up (a restart pauses it)"
+      ]
+    },
+    {
+      "text": "Grid on BTC with 20x leverage and 500 dollars.",
+      "ms": 4193,
+      "ok": false,
+      "errors": [
+        "limits.maxLeverage 20 is above the order policy max 5 (a spec can only tighten the policy)"
+      ],
+      "draft": {
+        "id": "btc-grid",
+        "type": "grid",
+        "leg": 3,
+        "coin": "BTC",
+        "params": {
+          "lower": 70000,
+          "upper": 80000,
+          "levels": 5,
+          "sizePerLevel": "0.00015"
+        },
+        "limits": {
+          "maxNotional": 60,
+          "maxLeverage": 20,
+          "maxDailyLoss": 6,
+          "topUpCapPerDay": 0
+        },
+        "onStop": "cancel"
+      }
+    },
+    {
+      "text": "Grid on DOGE between 0.1 and 0.2.",
+      "ms": 4064,
+      "ok": false,
+      "errors": [
+        "DOGE is not an allowed coin; only BTC and ETH can be traded under the current policy."
+      ]
+    },
+    {
+      "text": "Top up the strategy by 80 dollars a day if it needs margin: grid on BTC 2% either side, 5 levels, 11 dollars each.",
+      "ms": 5380,
+      "ok": false,
+      "errors": [
+        "top-up budgets 0 + 80 exceed the contract's daily cap $50"
+      ],
+      "draft": {
+        "id": "btc-grid",
+        "type": "grid",
+        "leg": 3,
+        "coin": "BTC",
+        "params": {
+          "lower": 74114.95,
+          "upper": 77140.05,
+          "levels": 5,
+          "sizePerLevel": "0.00015"
+        },
+        "limits": {
+          "maxNotional": 58,
+          "maxLeverage": 2,
+          "maxDailyLoss": 5.8,
+          "topUpCapPerDay": 80
+        },
+        "onStop": "cancel"
+      }
+    },
+    {
+      "text": "What is the capital of France?",
+      "ms": 5231,
+      "ok": false,
+      "errors": [
+        "This is a general knowledge question, not a trading-strategy request."
+      ]
+    }
+  ]
+}
