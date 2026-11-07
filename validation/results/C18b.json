@@ -1,0 +1,293 @@
+{
+  "claim": "C18b",
+  "title": "Jev factors -> Claude escalation (Sonnet 5.5, forced Opus 5.5 case)",
+  "status": "✅",
+  "at": "2026-11-07T15:16:03.268Z",
+  "network": "testnet",
+  "numbers": {
+    "proposals": 5,
+    "errors": 0,
+    "latencyP50Ms": 5823,
+    "latencyMaxMs": 9025,
+    "escalatedToClaude": 5,
+    "decidedByJevAlone": 0,
+    "disagreements": 2,
+    "opusCalls": 3
+  },
+  "refs": {
+    "rows": [
+      {
+        "id": "s01",
+        "forcedOpus": false,
+        "ctx": {
+          "longNotional": 400,
+          "shortNotional": 400,
+          "profitLeg": "short"
+        },
+        "action": "hold",
+        "source": "disagree",
+        "model": "claude-opus-5-5",
+        "flagged": true,
+        "latencyMs": 6814,
+        "jevMs": 749,
+        "calls": [
+          {
+            "model": "claude-sonnet-5-5",
+            "ms": 3152
+          },
+          {
+            "model": "claude-opus-5-5",
+            "ms": 2913
+          }
+        ],
+        "tableAction": "close_both",
+        "undecided": [
+          "hedgeNeeded",
+          "fundingMaterial",
+          "nearLiquidation",
+          "inProfit",
+          "volatile"
+        ],
+        "factors": {
+          "hedgeNeeded": {
+            "p": 0.46,
+            "decidedBy": "claude"
+          },
+          "fundingMaterial": {
+            "p": 0.17,
+            "decidedBy": "claude"
+          },
+          "nearLiquidation": {
+            "p": 0.23,
+            "decidedBy": "claude"
+          },
+          "inProfit": {
+            "p": 0.74,
+            "decidedBy": "claude"
+          },
+          "volatile": {
+            "p": 0.78,
+            "decidedBy": "claude"
+          }
+        },
+        "rationale": "Neither leg is near liquidation (long far, short comfortable at 3x-6x maintenance), funding is neutral, and the small combined profit barely clears fees, so the classifier's undecided questions resolve to no urgent risk. With price falling, volatility elevated and reserve margin thin, the full hedge is still needed to protect the long, and taking profit on the short or reducing it would leave the long exposed, so keeping both legs is the safest choice. (Claude: hold; factor table: close_both; took the less risky.)",
+        "error": null
+      },
+      {
+        "id": "s11",
+        "forcedOpus": false,
+        "ctx": {
+          "longNotional": 400,
+          "shortNotional": 480,
+          "profitLeg": "short"
+        },
+        "action": "hold",
+        "source": "claude",
+        "model": "claude-sonnet-5-5",
+        "flagged": false,
+        "latencyMs": 2679,
+        "jevMs": 409,
+        "calls": [
+          {
+            "model": "claude-sonnet-5-5",
+            "ms": 2270
+          }
+        ],
+        "tableAction": "hold",
+        "undecided": [
+          "hedgeNeeded",
+          "fundingMaterial",
+          "nearLiquidation",
+          "inProfit",
+          "volatile"
+        ],
+        "factors": {
+          "hedgeNeeded": {
+            "p": 0.51,
+            "decidedBy": "claude"
+          },
+          "fundingMaterial": {
+            "p": 0.2,
+            "decidedBy": "claude"
+          },
+          "nearLiquidation": {
+            "p": 0.41,
+            "decidedBy": "claude"
+          },
+          "inProfit": {
+            "p": 0.19,
+            "decidedBy": "claude"
+          },
+          "volatile": {
+            "p": 0.16,
+            "decidedBy": "claude"
+          }
+        },
+        "rationale": "The long leg's liquidation distance (1.5x-3x maintenance margin) is close but not critical, and with ample reserve margin, calm volatility and funding earned on the hedge, the over-hedged short already shields the long from the falling price. Closing the short (take_profit) would expose the close-to-liquidation long, and adding more hedge or closing both is unnecessary, so keep both legs and monitor the long's margin.",
+        "error": null
+      },
+      {
+        "id": "s21",
+        "forcedOpus": false,
+        "ctx": {
+          "longNotional": 400,
+          "shortNotional": 400,
+          "profitLeg": "short"
+        },
+        "action": "close_both",
+        "source": "claude",
+        "model": "claude-sonnet-5-5",
+        "flagged": false,
+        "latencyMs": 2810,
+        "jevMs": 435,
+        "calls": [
+          {
+            "model": "claude-sonnet-5-5",
+            "ms": 2375
+          }
+        ],
+        "tableAction": "close_both",
+        "undecided": [
+          "hedgeNeeded",
+          "fundingMaterial",
+          "nearLiquidation",
+          "inProfit",
+          "volatile"
+        ],
+        "factors": {
+          "hedgeNeeded": {
+            "p": 0.47,
+            "decidedBy": "claude"
+          },
+          "fundingMaterial": {
+            "p": 0.16,
+            "decidedBy": "claude"
+          },
+          "nearLiquidation": {
+            "p": 0.84,
+            "decidedBy": "claude"
+          },
+          "inProfit": {
+            "p": 0.88,
+            "decidedBy": "claude"
+          },
+          "volatile": {
+            "p": 0.83,
+            "decidedBy": "claude"
+          }
+        },
+        "rationale": "The short leg is only 1.5x to 3x maintenance margin from liquidation with extreme volatility and no reserve margin to top it up, so liquidation risk outweighs keeping the hedge. Combined PnL is a large profit and funding is neutral, so closing both locks in gains and preserves capital, whereas taking profit on the short would leave the long unhedged in extreme volatility.",
+        "error": null
+      },
+      {
+        "id": "s31",
+        "forcedOpus": false,
+        "ctx": {
+          "longNotional": 400,
+          "shortNotional": 200,
+          "profitLeg": "short"
+        },
+        "action": "close_both",
+        "source": "disagree",
+        "model": "claude-opus-5-5",
+        "flagged": true,
+        "latencyMs": 9025,
+        "jevMs": 428,
+        "calls": [
+          {
+            "model": "claude-sonnet-5-5",
+            "ms": 2162
+          },
+          {
+            "model": "claude-opus-5-5",
+            "ms": 6435
+          }
+        ],
+        "tableAction": "take_profit",
+        "undecided": [
+          "hedgeNeeded",
+          "fundingMaterial",
+          "nearLiquidation",
+          "volatile"
+        ],
+        "factors": {
+          "hedgeNeeded": {
+            "p": 0.52,
+            "decidedBy": "claude"
+          },
+          "fundingMaterial": {
+            "p": 0.18,
+            "decidedBy": "claude"
+          },
+          "nearLiquidation": {
+            "p": 0.13,
+            "decidedBy": "claude"
+          },
+          "inProfit": {
+            "p": 0.9,
+            "decidedBy": "jev"
+          },
+          "volatile": {
+            "p": 0.23,
+            "decidedBy": "claude"
+          }
+        },
+        "rationale": "Neither leg is near liquidation (long comfortable, short far), volatility is normal and the small funding cost is immaterial, but combined PnL is a large profit beyond fees while reserve margin is thin. The facts also conflict, since the short is reported in profit while price is rising, so closing both legs locks in the gain and protects capital rather than leaving the long unhedged or holding on uncertain data. (Claude: close_both; factor table: take_profit; took the less risky.)",
+        "error": null
+      },
+      {
+        "id": "s41",
+        "forcedOpus": true,
+        "ctx": {
+          "longNotional": 5000,
+          "shortNotional": 2500,
+          "profitLeg": "short"
+        },
+        "action": "close_both",
+        "source": "claude",
+        "model": "claude-opus-5-5",
+        "flagged": false,
+        "latencyMs": 5823,
+        "jevMs": 411,
+        "calls": [
+          {
+            "model": "claude-opus-5-5",
+            "ms": 5412
+          }
+        ],
+        "tableAction": "close_both",
+        "undecided": [
+          "hedgeNeeded",
+          "fundingMaterial",
+          "inProfit",
+          "volatile"
+        ],
+        "factors": {
+          "hedgeNeeded": {
+            "p": 0.41,
+            "decidedBy": "claude"
+          },
+          "fundingMaterial": {
+            "p": 0.79,
+            "decidedBy": "claude"
+          },
+          "nearLiquidation": {
+            "p": 0.08,
+            "decidedBy": "jev"
+          },
+          "inProfit": {
+            "p": 0.74,
+            "decidedBy": "claude"
+          },
+          "volatile": {
+            "p": 0.19,
+            "decidedBy": "claude"
+          }
+        },
+        "rationale": "Both legs are far from liquidation and the market is calm, but the price is falling against a net-long book that is only half hedged, so the hedge is still needed. The hedge pays heavy funding and there is no reserve margin to grow it, so closing both legs locks in the large combined profit and removes the funding drain and downside exposure.",
+        "error": null
+      }
+    ]
+  },
+  "notes": []
+}
