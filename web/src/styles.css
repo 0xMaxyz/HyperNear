@@ -82,7 +82,7 @@ input[aria-invalid='true'] { border-color: var(--accent); }
 .tagline { font-size: 13px; }
 /* motif: a hypernear loop, a ring with a short lead */
 .mark { align-self: center; width: 14px; height: 14px; border: 3px solid var(--ink); border-radius: 50%; position: relative; margin-right: -4px; }
-.mark::after { content: ''; position: absolute; left: 8px; top: 8px; width: 12px; height: 3px; background: var(--ink); transform: rotate(35deg); transform-origin: left center; }
+.mark::after { content: ''; position: absolute; left: 8px; top: 2px; width: 12px; height: 3px; background: var(--ink); }
 .who { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .badge { padding: 4px 10px; border: 1px solid var(--ink); border-radius: 4px; font-size: 13px; font-weight: 650; }
 .addr { padding: 2px 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 3px; }
@@ -118,8 +118,8 @@ th.num { font-family: inherit; }
 .steps > li { display: grid; grid-template-columns: 1fr auto auto; gap: 8px 12px; align-items: center; padding: 14px 0; border-top: 1px solid var(--line); }
 .steps > li.stack { grid-template-columns: 1fr; }
 .steps .row { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
-.ok { color: var(--ok); font-weight: 650; }
-.todo { color: var(--muted); }
+.ok { color: var(--ok); font-weight: 650; white-space: nowrap; }
+.todo { color: var(--muted); white-space: nowrap; }
 .fields { display: grid; gap: 8px; }
 .fields.inline { grid-template-columns: 1fr 1fr; margin: 12px 0; }
 label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }

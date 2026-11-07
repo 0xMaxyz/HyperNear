@@ -37,7 +37,8 @@ const demo = async (page) => { await page.getByRole('button', { name: 'Explore r
   const { page, errors, ctx } = await open();
   await shot(page, '01-intro');
   check('intro renders with login and demo buttons', (await page.getByRole('button', { name: /Log in with/ }).count()) === 1 && (await page.getByRole('button', { name: 'Explore recorded data' }).count()) === 1);
-  await demo(page);
+  await page.getByRole('button', { name: 'Explore recorded data' }).click();
+  await page.getByText(/Cannot reach the agent/).first().waitFor({ timeout: 15000 }).catch(() => {});
   check('agent down shows an error state', await page.getByText(/Cannot reach the agent/).first().isVisible());
   await shot(page, '02-agent-down');
   check('no page errors (intro, agent down)', errors.length === 0, errors.join(' | '));
@@ -89,7 +90,7 @@ await withAgent('empty', async () => {
   page.on('pageerror', (e) => errors.push(e.message));
   await page.getByRole('button', { name: /Log in with/ }).click();
   await page.getByText('Continue with a wallet').click({ timeout: 15000 });
-  await page.getByText('MetaMask').first().click({ timeout: 15000 });
+  await page.locator('#headlessui-portal-root').getByText('MetaMask').first().click({ timeout: 15000 });
   await page.getByText(/Create legs/).first().waitFor({ timeout: 40000 });
   await page.waitForTimeout(1500);
   check('logged in with the wallet address', (await page.locator('.who .addr').innerText()).toLowerCase().startsWith(acct.address.toLowerCase().slice(0, 6)));

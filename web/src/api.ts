@@ -66,7 +66,7 @@ async function json(r: Response) {
 
 export async function getOwner(owner: Hex, signal?: AbortSignal): Promise<OwnerView> {
   try {
-    return (await json(await fetch(`${AGENT_URL}/owner/${owner}`, { signal }))) as unknown as OwnerView;
+    return (await json(await fetch(`${AGENT_URL}/owner/${owner}`, { signal: signal ?? AbortSignal.timeout(8000) }))) as unknown as OwnerView;
   } catch (e) {
     if (e instanceof ApiError || (e as Error).name === 'AbortError') throw e;
     throw new ApiError(`Cannot reach the agent at ${AGENT_URL}. Is it running, and is VITE_AGENT_URL right?`);
@@ -75,7 +75,7 @@ export async function getOwner(owner: Hex, signal?: AbortSignal): Promise<OwnerV
 
 export async function post(path: string, body: unknown): Promise<Record<string, unknown>> {
   try {
-    return await json(await fetch(`${AGENT_URL}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }));
+    return await json(await fetch(`${AGENT_URL}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(60_000) }));
   } catch (e) {
     if (e instanceof ApiError) throw e;
     throw new ApiError(`Cannot reach the agent at ${AGENT_URL}.`);

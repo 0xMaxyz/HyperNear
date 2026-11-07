@@ -1,8 +1,9 @@
 import type { AgentEvent, GuardRow, LegSnap, OwnerView, Position } from './api';
 
-const n = (s: string | number | null | undefined, dp = 2) =>
-  s === null || s === undefined || s === '' || Number.isNaN(Number(s)) ? 'n/a' : Number(s).toLocaleString('en-US', { maximumFractionDigits: dp });
-const usd = (s: string | number | null | undefined, dp = 2) => (n(s, dp) === 'n/a' ? 'n/a' : `$${n(s, dp)}`);
+const missing = (s: unknown) => s === null || s === undefined || s === '' || Number.isNaN(Number(s));
+const n = (s: string | number | null | undefined, dp = 2, min = 0) =>
+  missing(s) ? 'n/a' : (Number(s) || 0).toLocaleString('en-US', { minimumFractionDigits: min, maximumFractionDigits: dp });
+const usd = (s: string | number | null | undefined, dp = 2) => (missing(s) ? 'n/a' : `${Number(s) < 0 ? '-' : ''}$${n(Math.abs(Number(s)), dp, 2)}`);
 export const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
 function Addr({ a }: { a: string }) {
