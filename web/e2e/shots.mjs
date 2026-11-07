@@ -3,6 +3,7 @@
 // Output: screenshots/*.png and a PASS/FAIL line per check on stdout.
 import { chromium } from '@playwright/test';
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { installMockWallet } from './mock-wallet.mjs';
@@ -48,21 +49,35 @@ const demo = async (page, ms = 3500) => { await page.getByRole('button', { name:
   await ctx.close();
 }
 
-// 2. recorded data from the real dry-run agent: hedged fixture, with its scripted guard replay (about 22 s)
+// 2. recorded data from the real dry-run agent: hedged fixture, with its scripted replay: guard demo, then 5 recorded proposals (23 to 33 s after connect), then agents.revoked (about 35 s)
 await withAgent('hedged', async () => {
   const { page, errors, ctx } = await open();
-  await demo(page, 26000);
+  await demo(page, 42000);
   check('dry-run badge shown', await page.getByText('dry-run data').isVisible());
   check('legs table lists the three legs with roles', (await page.locator('tbody tr').count()) === 3 && (await page.getByText('reserve, source for the guard').count()) === 1);
   check('break-even card shows a price from the agent', /\$7\d,\d{3}/.test(await page.locator('.kv dd.big').first().innerText()), await page.locator('.kv dd.big').first().innerText());
-  check('guard replay reached the log', (await page.locator('.log li .tag', { hasText: 'guard.rebalance.posted' }).count()) >= 1);
+  const proposals = await page.locator('.log li .tag', { hasText: 'decision.proposed' }).count();
+  check('5 recorded proposals reached the log', proposals === 5, String(proposals));
+  check('decision panel shows action, source, model, five factors and a rationale', (await page.locator('section[aria-labelledby=dec-h] .big-action').count()) === 1 && (await page.locator('.probs li').count()) === 5 && (await page.locator('.rationale').count()) === 1 && (await page.locator('section[aria-labelledby=dec-h] dt', { hasText: 'Model' }).count()) === 1);
+  check('agents.revoked reached the log', (await page.locator('.log li', { hasText: 'trading keys revoked on Hyperliquid' }).count()) === 1);
+  check('Accept and Dismiss are disabled when only viewing', (await page.getByRole('button', { name: /Accept and sign/ }).isDisabled()) && (await page.getByRole('button', { name: 'Dismiss' }).isDisabled()));
+  await page.getByRole('button', { name: 'Ask for a proposal' }).click();
+  await page.waitForTimeout(2500);
+  check('Ask for a proposal adds a proposal to the log', (await page.locator('.log li .tag', { hasText: 'decision.proposed' }).count()) === 6);
+  check('guard replay reached the log, in words', (await page.locator('.log li', { hasText: 'rebalance posted to Hyperliquid' }).count()) >= 1);
   check('signing buttons are disabled when only viewing', await page.getByRole('button', { name: 'Open hedge' }).isDisabled());
   check('freeze copy mentions revoked trading keys', (await page.getByText(/revokes the agents' Hyperliquid trading keys/).count()) === 1);
   await shot(page, '03-hedged-light');
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(500);
   await shot(page, '04-hedged-mobile');
-  check('no horizontal overflow at 390px', await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+  const wide = await page.evaluate(() => {
+    const vw = window.innerWidth;
+    const rows = [...document.querySelectorAll('html, body, body *')].map((el) => ({ el, r: el.getBoundingClientRect(), sw: el.scrollWidth, cw: el.clientWidth }));
+    const out = rows.filter((x) => x.r.right > vw + 1 || x.sw > x.cw + 1).slice(5, 18).map((x) => `${x.el.tagName}.${x.el.className} right=${Math.round(x.r.right)} sw=${x.sw} cw=${x.cw}`);
+    return `innerWidth=${vw} docScroll=${document.documentElement.scrollWidth}; ${out.join(' ; ')}`;
+  });
+  check('no horizontal overflow at 390px', (await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)), wide);
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.waitForTimeout(500);
@@ -78,36 +93,25 @@ await withAgent('near-liquidation', async () => {
   await ctx.close();
 });
 
-// 3. decision proposal and freeze revocation: the agent does not emit these in dry-run yet, so the SSE body is injected
-//    here in the shape agreed with contract-dev. Everything else on the page is the real dry-run agent.
+// 2b. the real proposal from the live models (agent/results/decision-live.json: source disagree, flagged, claude-opus-5-5),
+//     fed to the page as one decision.proposed event, to check that a flagged disagreement reads clearly
 await withAgent('hedged', async () => {
+  const live = JSON.parse(readFileSync(new URL('../../agent/results/decision-live.json', import.meta.url), 'utf8')).proposed;
   const { page, ctx } = await open();
-  const owner = '0x2c7536e3605d9c16a7a3d7b1898e529396a65c23';
-  const now = Date.now();
-  const frames = [
-    { id: 1, at: now - 9000, type: 'guard.ok', data: { owner, legs: ['leg0:BTC', 'leg1:BTC'] } },
-    { id: 2, at: now - 5000, type: 'agents.revoked', data: { owner, legs: [0, 1, 2].map((leg) => ({ leg, name: `leash-leg${leg}`, ok: true })) } },
-    {
-      id: 3, at: now - 2000, type: 'decision.proposed',
-      data: { owner, id: 'd-1', action: 'reduce_hedge', coin: 'BTC', ratio: '0.25', source: 'less_risky_of_two', flagged: true, latencyMs: 2400,
-        factors: { hedgeNeeded: 0.62, fundingMaterial: 0.93, nearLiquidation: 0.04, inProfit: 0.11, volatile: 0.55 },
-        rationale: 'Funding on the short leg costs more than the hedge protects at the current distance to liquidation, so shrinking the hedge by a quarter is the smaller change.' },
-    },
-  ];
-  await page.route('**/events', (route) => route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream', 'access-control-allow-origin': '*' }, body: frames.map((e) => `id: ${e.id}\nevent: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join('') }));
+  const frame = { id: 1, at: Date.now() - 3000, type: 'decision.proposed', data: live };
+  await page.route('**/events', (route) => route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream', 'access-control-allow-origin': '*' }, body: `id: 1
+event: decision.proposed
+data: ${JSON.stringify(frame)}
+
+` }));
   await demo(page, 4000);
-  check('decision panel shows action, source, factors and rationale', (await page.locator("section[aria-labelledby=dec-h]").getByText("Jev and Claude disagreed").count()) === 1 && (await page.locator('.probs li').count()) === 5 && (await page.locator('.rationale').count()) === 1);
-  check('revoked event is in the log', (await page.locator('.log li', { hasText: 'trading keys revoked on Hyperliquid: 3 of 3' }).count()) === 1);
-  check('Accept is disabled when only viewing', await page.getByRole('button', { name: /Accept and sign/ }).isDisabled());
-  await page.getByRole('button', { name: 'Dismiss' }).click();
-  check('Dismiss clears the proposal', (await page.getByText(/No proposal waiting/).count()) === 1);
-  await page.reload();
-  await demo(page, 4000);
-  await shot(page, '07-decision-and-revoked');
+  const panel = page.locator('section[aria-labelledby=dec-h]');
+  check('live flagged disagreement: action, source, model and look-twice are shown', /hold/i.test(await panel.locator('.big-action').innerText()) && (await panel.getByText(/disagreed/).count()) === 1 && (await panel.getByText(live.model).count()) >= 1 && (await panel.getByText(/look twice/).count()) === 1);
+  await shot(page, '07-decision-live-flagged');
   await ctx.close();
 });
 
-// 4. real Privy login with a mock MetaMask; the owner is not in the fixtures, so legs are empty and hedge commands are
+// 3. real Privy login with a mock MetaMask; the owner is not in the fixtures, so legs are empty and hedge commands are
 //    refused after their signature is verified (an unverified signature would be a 401 "bad signature", not "opted")
 await withAgent('hedged', async () => {
   const wallet = privateKeyToAccount(generatePrivateKey());
@@ -128,6 +132,15 @@ await withAgent('hedged', async () => {
     check(`${name}: ${t.slice(0, 110)}`, expect.test(t));
   };
   await act('Create legs', /Registered legs 0 and 1 \(simulated/);
+  await page.locator('fieldset.mode label', { hasText: 'Off' }).click();
+  await page.locator('.notice').first().waitFor({ timeout: 20000 });
+  await page.waitForTimeout(800);
+  const modeNote = await page.locator('.notice').first().innerText();
+  check(`autonomy Off (signed command): ${modeNote.slice(0, 80)}`, /Autonomy set to off/.test(modeNote));
+  await page.locator('fieldset.mode label', { hasText: 'Auto' }).click();
+  await page.waitForTimeout(2500);
+  const autoNote = await page.locator('.notice').first().innerText();
+  check(`autonomy Auto is refused for an owner that has not opted in: ${autoNote.slice(0, 80)}`, /not opted/.test(autoNote));
   await act('Open hedge', /not opted/);
   await act('Close hedge', /not opted/);
   await shot(page, '09-signed-command-refused');

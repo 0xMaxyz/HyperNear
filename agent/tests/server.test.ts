@@ -322,6 +322,22 @@ describe('decision routes', () => {
     expect(o.decision).toMatchObject({ mode: 'propose', latest: { id: 'p-1', status: 'accepted' } });
   });
 
+  it('forceAction is refused unless HYPERNEAR_TEST=1; then the forced action is proposed with the models\' action recorded', async () => {
+    const { d } = withDecider();
+    d.relayer = new Relayer(d.client, new RateLimiter(10)); // three proposes in one minute
+    const base = await serve(d);
+    expect((await post(`${base}/decision/propose`, { owner: OWNER, forceAction: 'close_both' })).status).toBe(400);
+    process.env.HYPERNEAR_TEST = '1';
+    try {
+      expect((await post(`${base}/decision/propose`, { owner: OWNER, forceAction: 'yolo' })).status).toBe(400);
+      expect((await post(`${base}/decision/propose`, { owner: OWNER, forceAction: 'close_both' })).status).toBe(202);
+    } finally {
+      delete process.env.HYPERNEAR_TEST;
+    }
+    await new Promise((ok) => setTimeout(ok, 20));
+    expect(d.bus.since().find((e) => e.type === 'decision.proposed')?.data).toMatchObject({ action: 'close_both', forced: true, modelAction: 'reduce_hedge' });
+  });
+
   it('mode: owner-signed setDecisionMode; unsigned or unknown mode refused; 503 without model keys', async () => {
     const { d } = withDecider();
     const base = await serve(d);
