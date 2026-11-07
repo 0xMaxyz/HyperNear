@@ -144,7 +144,9 @@ label input, label select { color: var(--ink); }
   .steps > li > button { grid-column: 1 / -1; }
   .intro { margin: 24px auto; }
   /* legs table becomes one block per leg */
-  thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  /* overflow does not apply to table-header-group, so the headers become blocks before they are clipped */
+  thead { display: block; position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  thead tr, th { display: block; }
   table, tbody, tr, td { display: block; }
   tr { padding: 10px 0; border-bottom: 1px solid var(--line); }
   tr:last-child { border-bottom: 0; }
