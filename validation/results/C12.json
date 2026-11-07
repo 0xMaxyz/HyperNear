@@ -1,0 +1,45 @@
+{
+  "claim": "C12",
+  "title": "NEAR AI Cloud model supports OpenAI-style tool calls",
+  "status": "⚠️",
+  "at": "2026-11-07T13:15:48.059Z",
+  "network": "testnet",
+  "numbers": {
+    "modelsHttp": 200,
+    "chatHttp": 402
+  },
+  "refs": {
+    "models": [
+      "anthropic/claude-fable-5",
+      "anthropic/claude-fable-5-1",
+      "anthropic/claude-haiku-4-5",
+      "anthropic/claude-haiku-5-5",
+      "anthropic/claude-opus-4-6",
+      "anthropic/claude-opus-4-7",
+      "anthropic/claude-opus-4-8",
+      "anthropic/claude-opus-5",
+      "anthropic/claude-opus-5-5",
+      "anthropic/claude-sonnet-4-5",
+      "anthropic/claude-sonnet-4-6",
+      "anthropic/claude-sonnet-5",
+      "anthropic/claude-sonnet-5-5",
+      "black-forest-labs/FLUX.2-klein-4B",
+      "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+      "deepseek-ai/DeepSeek-V4.1-Flash-1017-abliterated",
+      "deepseek/deepseek-v3.2",
+      "deepseek/deepseek-v4.1-flash",
+      "deepseek/deepseek-v4.1-flash-1017",
+      "google/gemini-2.5-flash"
+    ],
+    "model": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+    "error": {
+      "message": "No spending limit configured. Please contact support to set up credits.",
+      "type": "no_limit_configured",
+      "param": null,
+      "code": null
+    }
+  },
+  "notes": [
+    "chat completion rejected (HTTP 402): likely credit/auth, tool-call support not tested"
+  ]
+}

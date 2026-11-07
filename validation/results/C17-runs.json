@@ -1,0 +1,1857 @@
+{
+  "model": "jev-1.14.0",
+  "jevTop": [
+    {
+      "id": "s01",
+      "top": "close_both",
+      "meanProb": 0.375,
+      "run0": "close_both",
+      "run1": "close_both"
+    },
+    {
+      "id": "s02",
+      "top": "hold",
+      "meanProb": 0.305,
+      "run0": "reduce_hedge",
+      "run1": "hold"
+    },
+    {
+      "id": "s03",
+      "top": "close_both",
+      "meanProb": 0.34,
+      "run0": "reduce_hedge",
+      "run1": "close_both"
+    },
+    {
+      "id": "s04",
+      "top": "close_both",
+      "meanProb": 0.925,
+      "run0": "close_both",
+      "run1": "close_both"
+    },
+    {
+      "id": "s05",
+      "top": "close_both",
+      "meanProb": 0.43,
+      "run0": "close_both",
+      "run1": "close_both"
+    },
+    {
+      "id": "s06",
+      "top": "close_both",
+      "meanProb": 0.635,
+      "run0": "close_both",
+      "run1": "close_both"
+    },
+    {
+      "id": "s07",
+      "top": "hold",
+      "meanProb": 0.98,
+      "run0": "hold",
+      "run1": "hold"
+    },
+    {
+      "id": "s08",
+      "top": "close_both",
+      "meanProb": 0.405,
+      "run0": "close_both",
+      "run1": "close_both"
+    },
+    {
+      "id": "s09",
+      "top": "close_both",
+      "meanProb": 0.46499999999999997,
+      "run0": "close_both",
+      "run1": "close_both"
+    },
+    {
+      "id": "s10",
+      "top": "close_both",
+      "meanProb": 0.6,
+      "run0": "close_both",
+      "run1": "close_both"
+    },
+    {
+      "id": "s11",
+      "top": "reduce_hedge",
+      "meanProb": 0.535,
+      "run0": "reduce_hedge",
+      "run1": "reduce_hedge"
+    },
+    {
+      "id": "s12",
+      "top": "hold",
+      "meanProb": 0.3,
+      "run0": "hold",
+      "run1": "reduce_hedge"
+    },
+    {
+      "id": "s13",
+      "top": "close_both",
+      "meanProb": 0.89,
+      "run0": "close_both",
+      "run1": "close_both"
+    },
+    {
+      "id": "s14",
+      "top": "close_both",
+      "meanProb": 0.6,
+      "run0": "close_both",
+      "run1": "close_both"
+    },
+    {
+      "id": "s15",
+      "top": "reduce_hedge",
+      "meanProb": 0.735,
+      "run0": "reduce_hedge",
+      "run1": "reduce_hedge"
+    },
+    {
+      "id": "s16",
+      "top": "add_hedge",
+      "meanProb": 0.32,
+      "run0": "close_both",
+      "run1": "add_hedge"
+    },
+    {
+      "id": "s17",
+      "top": "close_both",
+      "meanProb": 0.46499999999999997,
+      "run0": "close_both",
+      "run1": "close_both"
+    },
+    {
+      "id": "s18",
+      "top": "close_both",
+      "meanProb": 0.655,
+      "run0": "close_both",
+      "run1": "close_both"
+    },
+    {
+      "id": "s19",
+      "top": "hold",
+      "meanProb": 0.74,
+      "run0": "hold",
+      "run1": "hold"
+    },
+    {
+      "id": "s20",
+      "top": "close_both",
+      "meanProb": 0.69,
+      "run0": "close_both",
+      "run1": "close_both"
+    },
+    {
+      "id": "s21",
+      "top": "close_both",
+      "meanProb": 0.44,
+      "run0": "close_both",
+      "run1": "close_both"
+    },
+    {
+      "id": "s22",
+      "top": "hold",
+      "meanProb": 0.4,
+      "run0": "hold",
+      "run1": "hold"
+    },
+    {
+      "id": "s23",
+      "top": "close_both",
+      "meanProb": 0.655,
+      "run0": "close_both",
+      "run1": "close_both"
+    },
+    {
+      "id": "s24",
+      "top": "take_profit",
+      "meanProb": 0.35,
+      "run0": "close_both",
+      "run1": "take_profit"
+    },
+    {
+      "id": "s25",
+      "top": "close_both",
+      "meanProb": 0.84,
+      "run0": "close_both",
+      "run1": "close_both"
+    },
+    {
+      "id": "s26",
+      "top": "close_both",
+      "meanProb": 0.365,
+      "run0": "close_both",
+      "run1": "close_both"
+    },
+    {
+      "id": "s27",
+      "top": "hold",
+      "meanProb": 0.375,
+      "run0": "hold",
+      "run1": "hold"
+    },
+    {
+      "id": "s28",
+      "top": "close_both",
+      "meanProb": 0.44999999999999996,
+      "run0": "close_both",
+      "run1": "reduce_hedge"
+    },
+    {
+      "id": "s29",
+      "top": "close_both",
+      "meanProb": 0.515,
+      "run0": "close_both",
+      "run1": "close_both"
+    },
+    {
+      "id": "s30",
+      "top": "add_hedge",
+      "meanProb": 0.41000000000000003,
+      "run0": "add_hedge",
+      "run1": "add_hedge"
+    },
+    {
+      "id": "s31",
+      "top": "take_profit",
+      "meanProb": 0.33,
+      "run0": "take_profit",
+      "run1": "take_profit"
+    },
+    {
+      "id": "s32",
+      "top": "reduce_hedge",
+      "meanProb": 0.42000000000000004,
+      "run0": "reduce_hedge",
+      "run1": "add_hedge"
+    },
+    {
+      "id": "s33",
+      "top": "close_both",
+      "meanProb": 0.7949999999999999,
+      "run0": "close_both",
+      "run1": "close_both"
+    },
+    {
+      "id": "s34",
+      "top": "reduce_hedge",
+      "meanProb": 0.52,
+      "run0": "reduce_hedge",
+      "run1": "reduce_hedge"
+    },
+    {
+      "id": "s35",
+      "top": "close_both",
+      "meanProb": 0.52,
+      "run0": "close_both",
+      "run1": "close_both"
+    },
+    {
+      "id": "s36",
+      "top": "close_both",
+      "meanProb": 0.6499999999999999,
+      "run0": "close_both",
+      "run1": "close_both"
+    },
+    {
+      "id": "s37",
+      "top": "close_both",
+      "meanProb": 0.43999999999999995,
+      "run0": "close_both",
+      "run1": "close_both"
+    },
+    {
+      "id": "s38",
+      "top": "close_both",
+      "meanProb": 0.83,
+      "run0": "close_both",
+      "run1": "close_both"
+    },
+    {
+      "id": "s39",
+      "top": "reduce_hedge",
+      "meanProb": 0.67,
+      "run0": "reduce_hedge",
+      "run1": "reduce_hedge"
+    },
+    {
+      "id": "s40",
+      "top": "close_both",
+      "meanProb": 0.39,
+      "run0": "close_both",
+      "run1": "reduce_hedge"
+    },
+    {
+      "id": "s41",
+      "top": "close_both",
+      "meanProb": 0.44,
+      "run0": "close_both",
+      "run1": "close_both"
+    },
+    {
+      "id": "s42",
+      "top": "close_both",
+      "meanProb": 0.53,
+      "run0": "close_both",
+      "run1": "close_both"
+    },
+    {
+      "id": "s43",
+      "top": "close_both",
+      "meanProb": 0.44,
+      "run0": "close_both",
+      "run1": "close_both"
+    },
+    {
+      "id": "s44",
+      "top": "reduce_hedge",
+      "meanProb": 0.65,
+      "run0": "reduce_hedge",
+      "run1": "reduce_hedge"
+    },
+    {
+      "id": "s45",
+      "top": "hold",
+      "meanProb": 0.63,
+      "run0": "hold",
+      "run1": "hold"
+    },
+    {
+      "id": "s46",
+      "top": "close_both",
+      "meanProb": 0.495,
+      "run0": "close_both",
+      "run1": "close_both"
+    },
+    {
+      "id": "s47",
+      "top": "close_both",
+      "meanProb": 0.485,
+      "run0": "close_both",
+      "run1": "close_both"
+    },
+    {
+      "id": "s48",
+      "top": "add_hedge",
+      "meanProb": 0.3,
+      "run0": "add_hedge",
+      "run1": "add_hedge"
+    },
+    {
+      "id": "s49",
+      "top": "close_both",
+      "meanProb": 0.74,
+      "run0": "close_both",
+      "run1": "close_both"
+    },
+    {
+      "id": "s50",
+      "top": "close_both",
+      "meanProb": 0.38,
+      "run0": "close_both",
+      "run1": "close_both"
+    }
+  ],
+  "calls": [
+    {
+      "id": "s01",
+      "run": 0,
+      "order": [
+        "take_profit",
+        "reduce_hedge",
+        "close_both",
+        "hold",
+        "add_hedge"
+      ],
+      "choice": "close_both",
+      "topProb": 0.42,
+      "confidence": 0.27,
+      "ms": 762.3397459999999
+    },
+    {
+      "id": "s01",
+      "run": 1,
+      "order": [
+        "reduce_hedge",
+        "take_profit",
+        "hold",
+        "close_both",
+        "add_hedge"
+      ],
+      "choice": "close_both",
+      "topProb": 0.33,
+      "confidence": 0.16,
+      "ms": 733.793203
+    },
+    {
+      "id": "s02",
+      "run": 0,
+      "order": [
+        "reduce_hedge",
+        "take_profit",
+        "close_both",
+        "hold",
+        "add_hedge"
+      ],
+      "choice": "reduce_hedge",
+      "topProb": 0.3,
+      "confidence": 0.12,
+      "ms": 747.5649010000002
+    },
+    {
+      "id": "s02",
+      "run": 1,
+      "order": [
+        "add_hedge",
+        "reduce_hedge",
+        "hold",
+        "close_both",
+        "take_profit"
+      ],
+      "choice": "hold",
+      "topProb": 0.32,
+      "confidence": 0.15,
+      "ms": 721.0621809999998
+    },
+    {
+      "id": "s03",
+      "run": 0,
+      "order": [
+        "reduce_hedge",
+        "close_both",
+        "hold",
+        "take_profit",
+        "add_hedge"
+      ],
+      "choice": "reduce_hedge",
+      "topProb": 0.3,
+      "confidence": 0.12,
+      "ms": 730.4068620000003
+    },
+    {
+      "id": "s03",
+      "run": 1,
+      "order": [
+        "take_profit",
+        "add_hedge",
+        "close_both",
+        "hold",
+        "reduce_hedge"
+      ],
+      "choice": "close_both",
+      "topProb": 0.4,
+      "confidence": 0.25,
+      "ms": 704.3264650000001
+    },
+    {
+      "id": "s04",
+      "run": 0,
+      "order": [
+        "add_hedge",
+        "close_both",
+        "reduce_hedge",
+        "take_profit",
+        "hold"
+      ],
+      "choice": "close_both",
+      "topProb": 0.91,
+      "confidence": 0.89,
+      "ms": 693.0963279999996
+    },
+    {
+      "id": "s04",
+      "run": 1,
+      "order": [
+        "add_hedge",
+        "close_both",
+        "take_profit",
+        "reduce_hedge",
+        "hold"
+      ],
+      "choice": "close_both",
+      "topProb": 0.94,
+      "confidence": 0.92,
+      "ms": 712.8360190000003
+    },
+    {
+      "id": "s05",
+      "run": 0,
+      "order": [
+        "reduce_hedge",
+        "close_both",
+        "take_profit",
+        "add_hedge",
+        "hold"
+      ],
+      "choice": "close_both",
+      "topProb": 0.39,
+      "confidence": 0.24,
+      "ms": 737.0854120000004
+    },
+    {
+      "id": "s05",
+      "run": 1,
+      "order": [
+        "hold",
+        "close_both",
+        "take_profit",
+        "add_hedge",
+        "reduce_hedge"
+      ],
+      "choice": "close_both",
+      "topProb": 0.47,
+      "confidence": 0.34,
+      "ms": 712.3423290000001
+    },
+    {
+      "id": "s06",
+      "run": 0,
+      "order": [
+        "hold",
+        "add_hedge",
+        "close_both",
+        "take_profit",
+        "reduce_hedge"
+      ],
+      "choice": "close_both",
+      "topProb": 0.65,
+      "confidence": 0.56,
+      "ms": 718.1741170000005
+    },
+    {
+      "id": "s06",
+      "run": 1,
+      "order": [
+        "add_hedge",
+        "reduce_hedge",
+        "take_profit",
+        "hold",
+        "close_both"
+      ],
+      "choice": "close_both",
+      "topProb": 0.62,
+      "confidence": 0.52,
+      "ms": 708.0438049999993
+    },
+    {
+      "id": "s07",
+      "run": 0,
+      "order": [
+        "add_hedge",
+        "take_profit",
+        "hold",
+        "close_both",
+        "reduce_hedge"
+      ],
+      "choice": "hold",
+      "topProb": 0.98,
+      "confidence": 0.98,
+      "ms": 736.8912690000016
+    },
+    {
+      "id": "s07",
+      "run": 1,
+      "order": [
+        "take_profit",
+        "hold",
+        "add_hedge",
+        "close_both",
+        "reduce_hedge"
+      ],
+      "choice": "hold",
+      "topProb": 0.98,
+      "confidence": 0.98,
+      "ms": 716.7218790000006
+    },
+    {
+      "id": "s08",
+      "run": 0,
+      "order": [
+        "reduce_hedge",
+        "hold",
+        "add_hedge",
+        "take_profit",
+        "close_both"
+      ],
+      "choice": "close_both",
+      "topProb": 0.4,
+      "confidence": 0.25,
+      "ms": 714.1144409999997
+    },
+    {
+      "id": "s08",
+      "run": 1,
+      "order": [
+        "close_both",
+        "take_profit",
+        "reduce_hedge",
+        "hold",
+        "add_hedge"
+      ],
+      "choice": "close_both",
+      "topProb": 0.41,
+      "confidence": 0.26,
+      "ms": 714.5820560000011
+    },
+    {
+      "id": "s09",
+      "run": 0,
+      "order": [
+        "reduce_hedge",
+        "take_profit",
+        "close_both",
+        "hold",
+        "add_hedge"
+      ],
+      "choice": "close_both",
+      "topProb": 0.44,
+      "confidence": 0.3,
+      "ms": 712.2209380000004
+    },
+    {
+      "id": "s09",
+      "run": 1,
+      "order": [
+        "add_hedge",
+        "hold",
+        "take_profit",
+        "reduce_hedge",
+        "close_both"
+      ],
+      "choice": "close_both",
+      "topProb": 0.49,
+      "confidence": 0.36,
+      "ms": 693.588557000001
+    },
+    {
+      "id": "s10",
+      "run": 0,
+      "order": [
+        "take_profit",
+        "reduce_hedge",
+        "add_hedge",
+        "close_both",
+        "hold"
+      ],
+      "choice": "close_both",
+      "topProb": 0.6,
+      "confidence": 0.5,
+      "ms": 692.5518800000009
+    },
+    {
+      "id": "s10",
+      "run": 1,
+      "order": [
+        "reduce_hedge",
+        "hold",
+        "take_profit",
+        "close_both",
+        "add_hedge"
+      ],
+      "choice": "close_both",
+      "topProb": 0.6,
+      "confidence": 0.5,
+      "ms": 745.3553830000001
+    },
+    {
+      "id": "s11",
+      "run": 0,
+      "order": [
+        "add_hedge",
+        "take_profit",
+        "hold",
+        "close_both",
+        "reduce_hedge"
+      ],
+      "choice": "reduce_hedge",
+      "topProb": 0.55,
+      "confidence": 0.44,
+      "ms": 743.7411740000007
+    },
+    {
+      "id": "s11",
+      "run": 1,
+      "order": [
+        "close_both",
+        "reduce_hedge",
+        "take_profit",
+        "hold",
+        "add_hedge"
+      ],
+      "choice": "reduce_hedge",
+      "topProb": 0.52,
+      "confidence": 0.4,
+      "ms": 745.9527110000017
+    },
+    {
+      "id": "s12",
+      "run": 0,
+      "order": [
+        "reduce_hedge",
+        "add_hedge",
+        "close_both",
+        "take_profit",
+        "hold"
+      ],
+      "choice": "hold",
+      "topProb": 0.31,
+      "confidence": 0.14,
+      "ms": 702.5040649999974
+    },
+    {
+      "id": "s12",
+      "run": 1,
+      "order": [
+        "take_profit",
+        "reduce_hedge",
+        "hold",
+        "add_hedge",
+        "close_both"
+      ],
+      "choice": "reduce_hedge",
+      "topProb": 0.3,
+      "confidence": 0.12,
+      "ms": 728.8809419999998
+    },
+    {
+      "id": "s13",
+      "run": 0,
+      "order": [
+        "hold",
+        "take_profit",
+        "close_both",
+        "add_hedge",
+        "reduce_hedge"
+      ],
+      "choice": "close_both",
+      "topProb": 0.88,
+      "confidence": 0.85,
+      "ms": 705.4497310000006
+    },
+    {
+      "id": "s13",
+      "run": 1,
+      "order": [
+        "add_hedge",
+        "hold",
+        "close_both",
+        "take_profit",
+        "reduce_hedge"
+      ],
+      "choice": "close_both",
+      "topProb": 0.9,
+      "confidence": 0.87,
+      "ms": 700.2476889999998
+    },
+    {
+      "id": "s14",
+      "run": 0,
+      "order": [
+        "close_both",
+        "take_profit",
+        "add_hedge",
+        "hold",
+        "reduce_hedge"
+      ],
+      "choice": "close_both",
+      "topProb": 0.6,
+      "confidence": 0.5,
+      "ms": 736.1451669999988
+    },
+    {
+      "id": "s14",
+      "run": 1,
+      "order": [
+        "hold",
+        "close_both",
+        "add_hedge",
+        "take_profit",
+        "reduce_hedge"
+      ],
+      "choice": "close_both",
+      "topProb": 0.6,
+      "confidence": 0.5,
+      "ms": 745.5863060000011
+    },
+    {
+      "id": "s15",
+      "run": 0,
+      "order": [
+        "take_profit",
+        "reduce_hedge",
+        "add_hedge",
+        "hold",
+        "close_both"
+      ],
+      "choice": "reduce_hedge",
+      "topProb": 0.75,
+      "confidence": 0.69,
+      "ms": 726.6937440000002
+    },
+    {
+      "id": "s15",
+      "run": 1,
+      "order": [
+        "reduce_hedge",
+        "hold",
+        "close_both",
+        "add_hedge",
+        "take_profit"
+      ],
+      "choice": "reduce_hedge",
+      "topProb": 0.72,
+      "confidence": 0.65,
+      "ms": 704.4597919999978
+    },
+    {
+      "id": "s16",
+      "run": 0,
+      "order": [
+        "close_both",
+        "hold",
+        "reduce_hedge",
+        "take_profit",
+        "add_hedge"
+      ],
+      "choice": "close_both",
+      "topProb": 0.31,
+      "confidence": 0.14,
+      "ms": 720.9850920000026
+    },
+    {
+      "id": "s16",
+      "run": 1,
+      "order": [
+        "reduce_hedge",
+        "take_profit",
+        "hold",
+        "add_hedge",
+        "close_both"
+      ],
+      "choice": "add_hedge",
+      "topProb": 0.34,
+      "confidence": 0.18,
+      "ms": 715.1568120000011
+    },
+    {
+      "id": "s17",
+      "run": 0,
+      "order": [
+        "add_hedge",
+        "hold",
+        "close_both",
+        "take_profit",
+        "reduce_hedge"
+      ],
+      "choice": "close_both",
+      "topProb": 0.48,
+      "confidence": 0.35,
+      "ms": 716.1209119999985
+    },
+    {
+      "id": "s17",
+      "run": 1,
+      "order": [
+        "close_both",
+        "reduce_hedge",
+        "hold",
+        "take_profit",
+        "add_hedge"
+      ],
+      "choice": "close_both",
+      "topProb": 0.45,
+      "confidence": 0.31,
+      "ms": 689.0964639999984
+    },
+    {
+      "id": "s18",
+      "run": 0,
+      "order": [
+        "take_profit",
+        "close_both",
+        "add_hedge",
+        "reduce_hedge",
+        "hold"
+      ],
+      "choice": "close_both",
+      "topProb": 0.67,
+      "confidence": 0.59,
+      "ms": 715.8553670000001
+    },
+    {
+      "id": "s18",
+      "run": 1,
+      "order": [
+        "close_both",
+        "reduce_hedge",
+        "hold",
+        "add_hedge",
+        "take_profit"
+      ],
+      "choice": "close_both",
+      "topProb": 0.64,
+      "confidence": 0.55,
+      "ms": 761.5803129999986
+    },
+    {
+      "id": "s19",
+      "run": 0,
+      "order": [
+        "take_profit",
+        "close_both",
+        "hold",
+        "add_hedge",
+        "reduce_hedge"
+      ],
+      "choice": "hold",
+      "topProb": 0.76,
+      "confidence": 0.7,
+      "ms": 707.6569980000022
+    },
+    {
+      "id": "s19",
+      "run": 1,
+      "order": [
+        "reduce_hedge",
+        "close_both",
+        "hold",
+        "take_profit",
+        "add_hedge"
+      ],
+      "choice": "hold",
+      "topProb": 0.72,
+      "confidence": 0.65,
+      "ms": 754.8040760000004
+    },
+    {
+      "id": "s20",
+      "run": 0,
+      "order": [
+        "reduce_hedge",
+        "take_profit",
+        "close_both",
+        "add_hedge",
+        "hold"
+      ],
+      "choice": "close_both",
+      "topProb": 0.67,
+      "confidence": 0.59,
+      "ms": 773.3315269999985
+    },
+    {
+      "id": "s20",
+      "run": 1,
+      "order": [
+        "reduce_hedge",
+        "close_both",
+        "hold",
+        "take_profit",
+        "add_hedge"
+      ],
+      "choice": "close_both",
+      "topProb": 0.71,
+      "confidence": 0.64,
+      "ms": 723.7848889999987
+    },
+    {
+      "id": "s21",
+      "run": 0,
+      "order": [
+        "hold",
+        "add_hedge",
+        "close_both",
+        "reduce_hedge",
+        "take_profit"
+      ],
+      "choice": "close_both",
+      "topProb": 0.43,
+      "confidence": 0.29,
+      "ms": 707.4565240000011
+    },
+    {
+      "id": "s21",
+      "run": 1,
+      "order": [
+        "hold",
+        "take_profit",
+        "reduce_hedge",
+        "close_both",
+        "add_hedge"
+      ],
+      "choice": "close_both",
+      "topProb": 0.45,
+      "confidence": 0.31,
+      "ms": 796.8380089999991
+    },
+    {
+      "id": "s22",
+      "run": 0,
+      "order": [
+        "reduce_hedge",
+        "hold",
+        "add_hedge",
+        "close_both",
+        "take_profit"
+      ],
+      "choice": "hold",
+      "topProb": 0.41,
+      "confidence": 0.26,
+      "ms": 725.507322999998
+    },
+    {
+      "id": "s22",
+      "run": 1,
+      "order": [
+        "reduce_hedge",
+        "close_both",
+        "add_hedge",
+        "hold",
+        "take_profit"
+      ],
+      "choice": "hold",
+      "topProb": 0.39,
+      "confidence": 0.24,
+      "ms": 696.3434070000003
+    },
+    {
+      "id": "s23",
+      "run": 0,
+      "order": [
+        "close_both",
+        "take_profit",
+        "reduce_hedge",
+        "add_hedge",
+        "hold"
+      ],
+      "choice": "close_both",
+      "topProb": 0.61,
+      "confidence": 0.51,
+      "ms": 726.498727000002
+    },
+    {
+      "id": "s23",
+      "run": 1,
+      "order": [
+        "take_profit",
+        "reduce_hedge",
+        "close_both",
+        "add_hedge",
+        "hold"
+      ],
+      "choice": "close_both",
+      "topProb": 0.7,
+      "confidence": 0.62,
+      "ms": 733.3821460000036
+    },
+    {
+      "id": "s24",
+      "run": 0,
+      "order": [
+        "take_profit",
+        "reduce_hedge",
+        "close_both",
+        "hold",
+        "add_hedge"
+      ],
+      "choice": "close_both",
+      "topProb": 0.38,
+      "confidence": 0.22,
+      "ms": 695.5059509999992
+    },
+    {
+      "id": "s24",
+      "run": 1,
+      "order": [
+        "close_both",
+        "add_hedge",
+        "hold",
+        "reduce_hedge",
+        "take_profit"
+      ],
+      "choice": "take_profit",
+      "topProb": 0.37,
+      "confidence": 0.21,
+      "ms": 719.140922999999
+    },
+    {
+      "id": "s25",
+      "run": 0,
+      "order": [
+        "take_profit",
+        "hold",
+        "add_hedge",
+        "reduce_hedge",
+        "close_both"
+      ],
+      "choice": "close_both",
+      "topProb": 0.83,
+      "confidence": 0.79,
+      "ms": 722.3170360000004
+    },
+    {
+      "id": "s25",
+      "run": 1,
+      "order": [
+        "take_profit",
+        "add_hedge",
+        "close_both",
+        "hold",
+        "reduce_hedge"
+      ],
+      "choice": "close_both",
+      "topProb": 0.85,
+      "confidence": 0.81,
+      "ms": 711.4132580000005
+    },
+    {
+      "id": "s26",
+      "run": 0,
+      "order": [
+        "reduce_hedge",
+        "add_hedge",
+        "close_both",
+        "take_profit",
+        "hold"
+      ],
+      "choice": "close_both",
+      "topProb": 0.38,
+      "confidence": 0.22,
+      "ms": 723.0059180000026
+    },
+    {
+      "id": "s26",
+      "run": 1,
+      "order": [
+        "add_hedge",
+        "reduce_hedge",
+        "take_profit",
+        "hold",
+        "close_both"
+      ],
+      "choice": "close_both",
+      "topProb": 0.35,
+      "confidence": 0.19,
+      "ms": 761.6843130000052
+    },
+    {
+      "id": "s27",
+      "run": 0,
+      "order": [
+        "reduce_hedge",
+        "close_both",
+        "take_profit",
+        "add_hedge",
+        "hold"
+      ],
+      "choice": "hold",
+      "topProb": 0.41,
+      "confidence": 0.26,
+      "ms": 470.25387999999657
+    },
+    {
+      "id": "s27",
+      "run": 1,
+      "order": [
+        "take_profit",
+        "add_hedge",
+        "hold",
+        "reduce_hedge",
+        "close_both"
+      ],
+      "choice": "hold",
+      "topProb": 0.34,
+      "confidence": 0.18,
+      "ms": 468.030571999996
+    },
+    {
+      "id": "s28",
+      "run": 0,
+      "order": [
+        "hold",
+        "close_both",
+        "take_profit",
+        "add_hedge",
+        "reduce_hedge"
+      ],
+      "choice": "close_both",
+      "topProb": 0.47,
+      "confidence": 0.34,
+      "ms": 470.8626000000004
+    },
+    {
+      "id": "s28",
+      "run": 1,
+      "order": [
+        "add_hedge",
+        "take_profit",
+        "reduce_hedge",
+        "close_both",
+        "hold"
+      ],
+      "choice": "reduce_hedge",
+      "topProb": 0.45,
+      "confidence": 0.31,
+      "ms": 477.486487999995
+    },
+    {
+      "id": "s29",
+      "run": 0,
+      "order": [
+        "reduce_hedge",
+        "close_both",
+        "take_profit",
+        "hold",
+        "add_hedge"
+      ],
+      "choice": "close_both",
+      "topProb": 0.47,
+      "confidence": 0.34,
+      "ms": 504.39744000000064
+    },
+    {
+      "id": "s29",
+      "run": 1,
+      "order": [
+        "close_both",
+        "hold",
+        "add_hedge",
+        "take_profit",
+        "reduce_hedge"
+      ],
+      "choice": "close_both",
+      "topProb": 0.56,
+      "confidence": 0.45,
+      "ms": 443.26660499999707
+    },
+    {
+      "id": "s30",
+      "run": 0,
+      "order": [
+        "take_profit",
+        "add_hedge",
+        "hold",
+        "reduce_hedge",
+        "close_both"
+      ],
+      "choice": "add_hedge",
+      "topProb": 0.51,
+      "confidence": 0.39,
+      "ms": 442.2012570000006
+    },
+    {
+      "id": "s30",
+      "run": 1,
+      "order": [
+        "reduce_hedge",
+        "take_profit",
+        "add_hedge",
+        "hold",
+        "close_both"
+      ],
+      "choice": "add_hedge",
+      "topProb": 0.31,
+      "confidence": 0.14,
+      "ms": 459.9874309999941
+    },
+    {
+      "id": "s31",
+      "run": 0,
+      "order": [
+        "hold",
+        "close_both",
+        "add_hedge",
+        "take_profit",
+        "reduce_hedge"
+      ],
+      "choice": "take_profit",
+      "topProb": 0.34,
+      "confidence": 0.18,
+      "ms": 452.91688799999974
+    },
+    {
+      "id": "s31",
+      "run": 1,
+      "order": [
+        "close_both",
+        "reduce_hedge",
+        "take_profit",
+        "hold",
+        "add_hedge"
+      ],
+      "choice": "take_profit",
+      "topProb": 0.32,
+      "confidence": 0.15,
+      "ms": 492.3209449999995
+    },
+    {
+      "id": "s32",
+      "run": 0,
+      "order": [
+        "take_profit",
+        "reduce_hedge",
+        "add_hedge",
+        "hold",
+        "close_both"
+      ],
+      "choice": "reduce_hedge",
+      "topProb": 0.55,
+      "confidence": 0.44,
+      "ms": 466.959010999999
+    },
+    {
+      "id": "s32",
+      "run": 1,
+      "order": [
+        "reduce_hedge",
+        "hold",
+        "add_hedge",
+        "close_both",
+        "take_profit"
+      ],
+      "choice": "add_hedge",
+      "topProb": 0.41,
+      "confidence": 0.26,
+      "ms": 451.78513999999996
+    },
+    {
+      "id": "s33",
+      "run": 0,
+      "order": [
+        "take_profit",
+        "reduce_hedge",
+        "add_hedge",
+        "close_both",
+        "hold"
+      ],
+      "choice": "close_both",
+      "topProb": 0.84,
+      "confidence": 0.8,
+      "ms": 472.10839799999667
+    },
+    {
+      "id": "s33",
+      "run": 1,
+      "order": [
+        "reduce_hedge",
+        "close_both",
+        "add_hedge",
+        "take_profit",
+        "hold"
+      ],
+      "choice": "close_both",
+      "topProb": 0.75,
+      "confidence": 0.69,
+      "ms": 462.1052919999929
+    },
+    {
+      "id": "s34",
+      "run": 0,
+      "order": [
+        "reduce_hedge",
+        "hold",
+        "add_hedge",
+        "close_both",
+        "take_profit"
+      ],
+      "choice": "reduce_hedge",
+      "topProb": 0.53,
+      "confidence": 0.41,
+      "ms": 485.2607910000006
+    },
+    {
+      "id": "s34",
+      "run": 1,
+      "order": [
+        "reduce_hedge",
+        "add_hedge",
+        "hold",
+        "take_profit",
+        "close_both"
+      ],
+      "choice": "reduce_hedge",
+      "topProb": 0.51,
+      "confidence": 0.39,
+      "ms": 450.9038189999992
+    },
+    {
+      "id": "s35",
+      "run": 0,
+      "order": [
+        "hold",
+        "take_profit",
+        "reduce_hedge",
+        "close_both",
+        "add_hedge"
+      ],
+      "choice": "close_both",
+      "topProb": 0.53,
+      "confidence": 0.41,
+      "ms": 470.7939359999946
+    },
+    {
+      "id": "s35",
+      "run": 1,
+      "order": [
+        "take_profit",
+        "reduce_hedge",
+        "hold",
+        "close_both",
+        "add_hedge"
+      ],
+      "choice": "close_both",
+      "topProb": 0.51,
+      "confidence": 0.39,
+      "ms": 502.151343000005
+    },
+    {
+      "id": "s36",
+      "run": 0,
+      "order": [
+        "take_profit",
+        "reduce_hedge",
+        "close_both",
+        "hold",
+        "add_hedge"
+      ],
+      "choice": "close_both",
+      "topProb": 0.72,
+      "confidence": 0.65,
+      "ms": 475.6828189999942
+    },
+    {
+      "id": "s36",
+      "run": 1,
+      "order": [
+        "take_profit",
+        "reduce_hedge",
+        "add_hedge",
+        "hold",
+        "close_both"
+      ],
+      "choice": "close_both",
+      "topProb": 0.58,
+      "confidence": 0.47,
+      "ms": 489.34705199999735
+    },
+    {
+      "id": "s37",
+      "run": 0,
+      "order": [
+        "close_both",
+        "hold",
+        "reduce_hedge",
+        "take_profit",
+        "add_hedge"
+      ],
+      "choice": "close_both",
+      "topProb": 0.41,
+      "confidence": 0.26,
+      "ms": 498.1841140000033
+    },
+    {
+      "id": "s37",
+      "run": 1,
+      "order": [
+        "take_profit",
+        "close_both",
+        "add_hedge",
+        "reduce_hedge",
+        "hold"
+      ],
+      "choice": "close_both",
+      "topProb": 0.47,
+      "confidence": 0.34,
+      "ms": 563.8130569999994
+    },
+    {
+      "id": "s38",
+      "run": 0,
+      "order": [
+        "take_profit",
+        "add_hedge",
+        "reduce_hedge",
+        "hold",
+        "close_both"
+      ],
+      "choice": "close_both",
+      "topProb": 0.84,
+      "confidence": 0.8,
+      "ms": 479.38680300000124
+    },
+    {
+      "id": "s38",
+      "run": 1,
+      "order": [
+        "close_both",
+        "hold",
+        "add_hedge",
+        "take_profit",
+        "reduce_hedge"
+      ],
+      "choice": "close_both",
+      "topProb": 0.82,
+      "confidence": 0.77,
+      "ms": 465.50710999999865
+    },
+    {
+      "id": "s39",
+      "run": 0,
+      "order": [
+        "close_both",
+        "add_hedge",
+        "take_profit",
+        "hold",
+        "reduce_hedge"
+      ],
+      "choice": "reduce_hedge",
+      "topProb": 0.67,
+      "confidence": 0.59,
+      "ms": 10441.048242999997
+    },
+    {
+      "id": "s39",
+      "run": 1,
+      "order": [
+        "hold",
+        "take_profit",
+        "add_hedge",
+        "close_both",
+        "reduce_hedge"
+      ],
+      "choice": "reduce_hedge",
+      "topProb": 0.67,
+      "confidence": 0.59,
+      "ms": 343.3827569999994
+    },
+    {
+      "id": "s40",
+      "run": 0,
+      "order": [
+        "close_both",
+        "take_profit",
+        "reduce_hedge",
+        "add_hedge",
+        "hold"
+      ],
+      "choice": "close_both",
+      "topProb": 0.44,
+      "confidence": 0.3,
+      "ms": 472.41244699999515
+    },
+    {
+      "id": "s40",
+      "run": 1,
+      "order": [
+        "close_both",
+        "hold",
+        "take_profit",
+        "reduce_hedge",
+        "add_hedge"
+      ],
+      "choice": "reduce_hedge",
+      "topProb": 0.37,
+      "confidence": 0.21,
+      "ms": 434.3635299999951
+    },
+    {
+      "id": "s41",
+      "run": 0,
+      "order": [
+        "hold",
+        "reduce_hedge",
+        "add_hedge",
+        "close_both",
+        "take_profit"
+      ],
+      "choice": "close_both",
+      "topProb": 0.46,
+      "confidence": 0.32,
+      "ms": 454.3535009999978
+    },
+    {
+      "id": "s41",
+      "run": 1,
+      "order": [
+        "hold",
+        "reduce_hedge",
+        "close_both",
+        "take_profit",
+        "add_hedge"
+      ],
+      "choice": "close_both",
+      "topProb": 0.42,
+      "confidence": 0.27,
+      "ms": 475.73587899999984
+    },
+    {
+      "id": "s42",
+      "run": 0,
+      "order": [
+        "hold",
+        "reduce_hedge",
+        "take_profit",
+        "close_both",
+        "add_hedge"
+      ],
+      "choice": "close_both",
+      "topProb": 0.49,
+      "confidence": 0.36,
+      "ms": 512.9166350000014
+    },
+    {
+      "id": "s42",
+      "run": 1,
+      "order": [
+        "hold",
+        "close_both",
+        "add_hedge",
+        "take_profit",
+        "reduce_hedge"
+      ],
+      "choice": "close_both",
+      "topProb": 0.57,
+      "confidence": 0.46,
+      "ms": 469.84634200000437
+    },
+    {
+      "id": "s43",
+      "run": 0,
+      "order": [
+        "add_hedge",
+        "hold",
+        "take_profit",
+        "close_both",
+        "reduce_hedge"
+      ],
+      "choice": "close_both",
+      "topProb": 0.42,
+      "confidence": 0.27,
+      "ms": 469.9796920000008
+    },
+    {
+      "id": "s43",
+      "run": 1,
+      "order": [
+        "take_profit",
+        "close_both",
+        "reduce_hedge",
+        "add_hedge",
+        "hold"
+      ],
+      "choice": "close_both",
+      "topProb": 0.46,
+      "confidence": 0.32,
+      "ms": 481.20082399999956
+    },
+    {
+      "id": "s44",
+      "run": 0,
+      "order": [
+        "take_profit",
+        "reduce_hedge",
+        "add_hedge",
+        "close_both",
+        "hold"
+      ],
+      "choice": "reduce_hedge",
+      "topProb": 0.67,
+      "confidence": 0.59,
+      "ms": 483.04910799999925
+    },
+    {
+      "id": "s44",
+      "run": 1,
+      "order": [
+        "add_hedge",
+        "hold",
+        "close_both",
+        "reduce_hedge",
+        "take_profit"
+      ],
+      "choice": "reduce_hedge",
+      "topProb": 0.63,
+      "confidence": 0.54,
+      "ms": 472.28433100000257
+    },
+    {
+      "id": "s45",
+      "run": 0,
+      "order": [
+        "add_hedge",
+        "close_both",
+        "reduce_hedge",
+        "hold",
+        "take_profit"
+      ],
+      "choice": "hold",
+      "topProb": 0.59,
+      "confidence": 0.49,
+      "ms": 518.9624750000075
+    },
+    {
+      "id": "s45",
+      "run": 1,
+      "order": [
+        "close_both",
+        "reduce_hedge",
+        "add_hedge",
+        "take_profit",
+        "hold"
+      ],
+      "choice": "hold",
+      "topProb": 0.67,
+      "confidence": 0.59,
+      "ms": 473.68268500000704
+    },
+    {
+      "id": "s46",
+      "run": 0,
+      "order": [
+        "close_both",
+        "take_profit",
+        "reduce_hedge",
+        "hold",
+        "add_hedge"
+      ],
+      "choice": "close_both",
+      "topProb": 0.52,
+      "confidence": 0.4,
+      "ms": 471.37652000000526
+    },
+    {
+      "id": "s46",
+      "run": 1,
+      "order": [
+        "hold",
+        "close_both",
+        "add_hedge",
+        "take_profit",
+        "reduce_hedge"
+      ],
+      "choice": "close_both",
+      "topProb": 0.47,
+      "confidence": 0.34,
+      "ms": 460.8316519999935
+    },
+    {
+      "id": "s47",
+      "run": 0,
+      "order": [
+        "hold",
+        "reduce_hedge",
+        "add_hedge",
+        "take_profit",
+        "close_both"
+      ],
+      "choice": "close_both",
+      "topProb": 0.41,
+      "confidence": 0.26,
+      "ms": 492.7440199999983
+    },
+    {
+      "id": "s47",
+      "run": 1,
+      "order": [
+        "add_hedge",
+        "take_profit",
+        "reduce_hedge",
+        "hold",
+        "close_both"
+      ],
+      "choice": "close_both",
+      "topProb": 0.56,
+      "confidence": 0.45,
+      "ms": 483.20991100001265
+    },
+    {
+      "id": "s48",
+      "run": 0,
+      "order": [
+        "take_profit",
+        "close_both",
+        "hold",
+        "reduce_hedge",
+        "add_hedge"
+      ],
+      "choice": "add_hedge",
+      "topProb": 0.3,
+      "confidence": 0.12,
+      "ms": 515.3681559999968
+    },
+    {
+      "id": "s48",
+      "run": 1,
+      "order": [
+        "reduce_hedge",
+        "close_both",
+        "add_hedge",
+        "take_profit",
+        "hold"
+      ],
+      "choice": "add_hedge",
+      "topProb": 0.3,
+      "confidence": 0.12,
+      "ms": 476.97850499999186
+    },
+    {
+      "id": "s49",
+      "run": 0,
+      "order": [
+        "add_hedge",
+        "close_both",
+        "take_profit",
+        "hold",
+        "reduce_hedge"
+      ],
+      "choice": "close_both",
+      "topProb": 0.73,
+      "confidence": 0.66,
+      "ms": 449.198264000006
+    },
+    {
+      "id": "s49",
+      "run": 1,
+      "order": [
+        "take_profit",
+        "add_hedge",
+        "close_both",
+        "hold",
+        "reduce_hedge"
+      ],
+      "choice": "close_both",
+      "topProb": 0.75,
+      "confidence": 0.69,
+      "ms": 468.4844749999902
+    },
+    {
+      "id": "s50",
+      "run": 0,
+      "order": [
+        "hold",
+        "reduce_hedge",
+        "take_profit",
+        "add_hedge",
+        "close_both"
+      ],
+      "choice": "close_both",
+      "topProb": 0.41,
+      "confidence": 0.26,
+      "ms": 482.5042899999971
+    },
+    {
+      "id": "s50",
+      "run": 1,
+      "order": [
+        "hold",
+        "reduce_hedge",
+        "add_hedge",
+        "take_profit",
+        "close_both"
+      ],
+      "choice": "close_both",
+      "topProb": 0.35,
+      "confidence": 0.19,
+      "ms": 451.57916799999657
+    }
+  ]
+}

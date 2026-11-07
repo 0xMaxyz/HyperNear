@@ -1,0 +1,67 @@
+{
+  "claim": "C17",
+  "title": "Jev choice call: latency, shuffle stability, confidence",
+  "status": "⚠️",
+  "at": "2026-11-07T13:39:46.781Z",
+  "network": "testnet",
+  "numbers": {
+    "errors": 0,
+    "attempts": 101,
+    "failedAttempts": 1,
+    "attemptFailureRate": 0.009900990099009901,
+    "successAttemptP50Ms": 693,
+    "successAttemptP95Ms": 755,
+    "calls": 100,
+    "latencyWithRetriesP50Ms": 693,
+    "latencyWithRetriesP95Ms": 762,
+    "latencyWithRetriesMaxMs": 10441,
+    "statesComplete": 50,
+    "flipRate": 0.16,
+    "shareTopProbAtLeast090": 0.05,
+    "shareStatesBothRunsAgreeAnd090": 0.04,
+    "shareChosenWasListedFirst": 0.16,
+    "confidenceMean": 0.4241000000000001
+  },
+  "refs": {
+    "model": "jev-1.14.0",
+    "responseShape": {
+      "responseKeys": [
+        "model",
+        "answers",
+        "usage"
+      ],
+      "answerKeys": [
+        "type",
+        "choice",
+        "confidence",
+        "probabilities"
+      ],
+      "model": "jev-1.14.0",
+      "usage": {
+        "input_tokens": 512,
+        "output_tokens": 63
+      },
+      "sample": {
+        "choice": "close_both",
+        "confidence": 0.27,
+        "probabilities": {
+          "take_profit": 0.1,
+          "reduce_hedge": 0.14,
+          "close_both": 0.42,
+          "hold": 0.21,
+          "add_hedge": 0.13
+        }
+      }
+    },
+    "choiceTally": {
+      "close_both": 63,
+      "reduce_hedge": 16,
+      "hold": 12,
+      "add_hedge": 6,
+      "take_profit": 3
+    }
+  },
+  "notes": [
+    "top answer flips under shuffling on 8/50 states (> 10%)"
+  ]
+}
