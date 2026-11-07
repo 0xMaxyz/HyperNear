@@ -52,7 +52,7 @@ function Page() {
     if (w.walletClientType === 'privy') {
       add(
         await check('B useSignTypedData (Privy hook)', owner, td, async () => {
-          const { signature } = await signTypedData({ domain: td.domain, types: td.types as never, primaryType: td.primaryType, message: td.message }, { address: w.address });
+          const { signature } = await signTypedData({ domain: td.domain as never, types: td.types as never, primaryType: td.primaryType, message: td.message }, { address: w.address });
           return signature as Hex;
         })
       );
@@ -63,7 +63,7 @@ function Page() {
   async function selfTest() {
     const acct = privateKeyToAccount(generatePrivateKey());
     const td = typedDataFor(acct.address.toLowerCase() as Hex);
-    add(await check('self-test local key', acct.address, td, () => acct.signTypedData({ domain: td.domain, types: td.types, primaryType: td.primaryType, message: td.message } as never)));
+    add(await check('self-test local key', acct.address, td, () => acct.signTypedData({ domain: td.domain as never, types: td.types, primaryType: td.primaryType, message: td.message } as never)));
   }
 
   return (
