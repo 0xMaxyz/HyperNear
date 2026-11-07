@@ -71,8 +71,13 @@ await withAgent('hedged', async () => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(500);
   await shot(page, '04-hedged-mobile');
-  const wide = await page.evaluate(() => [...document.querySelectorAll('body *')].filter((el) => el.getBoundingClientRect().right > window.innerWidth + 1).slice(0, 4).map((el) => el.tagName + '.' + el.className));
-  check('no horizontal overflow at 390px', (await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)), wide.join(' ; '));
+  const wide = await page.evaluate(() => {
+    const vw = window.innerWidth;
+    const rows = [...document.querySelectorAll('html, body, body *')].map((el) => ({ el, r: el.getBoundingClientRect(), sw: el.scrollWidth, cw: el.clientWidth }));
+    const out = rows.filter((x) => x.r.right > vw + 1 || x.sw > x.cw + 1).slice(0, 6).map((x) => `${x.el.tagName}.${x.el.className} right=${Math.round(x.r.right)} sw=${x.sw} cw=${x.cw}`);
+    return `innerWidth=${vw} docScroll=${document.documentElement.scrollWidth}; ${out.join(' ; ')}`;
+  });
+  check('no horizontal overflow at 390px', (await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)), wide);
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.waitForTimeout(500);
