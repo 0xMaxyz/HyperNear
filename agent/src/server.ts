@@ -19,7 +19,7 @@ import { GuardLoop } from './guardLoop.ts';
 import { HedgeRefused, Hedger } from './hedge.ts';
 import { guardInputs, Legs, type OwnerSnapshot } from './legs.ts';
 import { breakevens, readPnlData, type LegPnlData } from './pnl.ts';
-import { HttpError, RateLimiter, Relayer } from './relayer.ts';
+import { hlPoster, HttpError, RateLimiter, Relayer } from './relayer.ts';
 
 export interface Deps {
   config: AgentConfig;
@@ -172,7 +172,7 @@ export function buildDeps(config: AgentConfig): Deps {
     config, client, legs, bus, guardConfig, guardLoop, annualVol: config.guard.annualVol,
     replay: new ReplayCache(),
     hedger: new Hedger(legs, config.policy, bus),
-    relayer: new Relayer(client, new RateLimiter(config.relayPerMinute)),
+    relayer: new Relayer(client, new RateLimiter(config.relayPerMinute), hlPoster(config.network), bus),
   };
 }
 

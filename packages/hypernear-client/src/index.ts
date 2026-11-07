@@ -4,6 +4,7 @@ export * from './commands';
 export { hlPayloadDigest } from './hlDigest';
 export { DEFAULT_RPC, nearAccount, nearApiBackend, type CallOptions, type NearBackend } from './near';
 export {
+  exchangeBody,
   HyperNearClient,
   legPath,
   MPC_CONTRACT,
@@ -12,6 +13,8 @@ export {
   type HyperNearClientOptions,
   type HyperNearConfig,
   type OwnerState,
+  type Revoked,
+  type AgentSlot,
   type SignOut,
 } from './client';
 export {

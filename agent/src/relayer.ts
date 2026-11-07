@@ -2,7 +2,24 @@
 // The signature is the authentication; this layer only validates shape, rate-limits per IP, and refuses owners
 // with no registered leg (register_leg itself is the exception: anyone may register, the address comes from MPC).
 import type { Hex } from 'viem';
-import { HyperNearClient, HyperNearError, HyperNearRelayRefusedError, signOutToHex, type OwnerIntent } from '@hypernear/client';
+import { exchangeBody, HyperNearClient, HyperNearError, HyperNearRelayRefusedError, signOutToHex, type OwnerIntent, type Revoked, type SignOut } from '@hypernear/client';
+import { HL_API_URLS } from '@perps-platform/core';
+import type { EventBus } from './events.ts';
+
+/** POSTs a contract-signed action to HL /exchange; returns HL's JSON (status ok|err), never throws on status err. */
+export type HlPoster = (body: ReturnType<typeof exchangeBody>) => Promise<unknown>;
+
+export function hlPoster(network: 'testnet' | 'mainnet'): HlPoster {
+  return async (body) => {
+    const r = await fetch(`${HL_API_URLS[network]}/exchange`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const text = await r.text();
+    try {
+      return JSON.parse(text);
+    } catch {
+      return { status: 'err', response: `HTTP ${r.status}: ${text.slice(0, 200)}` };
+    }
+  };
+}
 
 /** Fixed-window counter per key (IP). shortcut: in-memory, one process; move to a shared store if the relayer scales out. */
 export class RateLimiter {
@@ -64,9 +81,28 @@ export function parseRelayBody(b: unknown): RelayBody {
 export class Relayer {
   readonly client: HyperNearClient;
   readonly limiter: RateLimiter;
-  constructor(client: HyperNearClient, limiter: RateLimiter) {
+  readonly post?: HlPoster;
+  readonly bus?: EventBus;
+  /** post + bus: after a freeze, the revoking approveAgent actions go to HL at once and to /events. */
+  constructor(client: HyperNearClient, limiter: RateLimiter, post?: HlPoster, bus?: EventBus) {
     this.client = client;
     this.limiter = limiter;
+    this.post = post;
+    this.bus = bus;
+  }
+
+  /** Posts every revocation of a freeze to HL; emits 'agents.revoked' with one entry per leg/name. */
+  async postRevocations(owner: Hex, revoked: Revoked[]) {
+    const chain = (await this.client.getConfig()).hl_mainnet ? 'Mainnet' : 'Testnet';
+    const legs = await Promise.all(
+      revoked.map(async (r) => {
+        if (!r.signature) return { leg: r.leg, name: r.name, burn: r.burn_address, ok: false, hl: 'MPC sign failed' };
+        const hl = this.post ? await this.post(exchangeBody(r.signature, chain)).catch((e) => ({ status: 'err', response: String(e) })) : 'not posted';
+        return { leg: r.leg, name: r.name, burn: r.burn_address, ok: (hl as { status?: string })?.status === 'ok', hl };
+      })
+    );
+    this.bus?.emit('agents.revoked', { owner, legs });
+    return legs;
   }
 
   async relay(ip: string, raw: unknown) {
@@ -78,7 +114,10 @@ export class Relayer {
         return { kind: 'registerLeg', leg: b.intent.leg, address: await this.client.registerLeg(owner, b.intent.leg) };
       }
       const { txHash, value } = await this.client.relaySubmit({ owner, nonce: b.nonce!, intent: b.intent }, b.sig as Hex);
-      return { kind: 'ownerExecute', txHash, result: value, hlSignature: value ? signOutToHex(value) : null };
+      if (Array.isArray(value)) {
+        return { kind: 'freeze', txHash, revoked: await this.postRevocations(owner, value) };
+      }
+      return { kind: 'ownerExecute', txHash, result: value, hlSignature: value ? signOutToHex(value as SignOut) : null };
     } catch (e) {
       if (e instanceof HyperNearRelayRefusedError) throw new HttpError(403, e.message);
       if (e instanceof HyperNearError) throw new HttpError(422, e.message);

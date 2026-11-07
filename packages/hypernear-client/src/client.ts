@@ -39,6 +39,30 @@ export interface SignOut {
   action: Record<string, unknown> | null;
 }
 
+/** One agent name a freeze re-pointed to a keyless burn address (signature null if that MPC sign failed). */
+export interface Revoked {
+  leg: number;
+  name: string;
+  burn_address: Hex;
+  signature: SignOut | null;
+}
+
+/** Agent names approved through the contract for an owner (what a freeze revokes). */
+export interface AgentSlot {
+  leg: number;
+  name: string;
+}
+
+/** The HL /exchange body for a contract-signed user action (SignOut.action), ready to POST. */
+export function exchangeBody(out: SignOut, hyperliquidChain: 'Mainnet' | 'Testnet') {
+  if (!out.action) throw new HyperNearError('SignOut has no action to post');
+  const { type, ...fields } = out.action as { type: string } & Record<string, unknown>;
+  const action: Record<string, unknown> = { type, signatureChainId: '0x66eee', hyperliquidChain, ...fields };
+  if (type === 'approveAgent' && !action.agentName) delete action.agentName; // HL's unnamed agent (signed as "")
+  const nonce = (fields.time ?? fields.nonce) as number;
+  return { action, nonce, signature: { r: `0x${out.big_r.slice(2)}`, s: `0x${out.s}`, v: 27 + out.recovery_id } };
+}
+
 export interface HyperNearClientOptions {
   contractId: string;
   network?: 'testnet' | 'mainnet';
@@ -89,6 +113,10 @@ export class HyperNearClient {
     return (await this.getOwner(owner))?.nonce ?? 0;
   }
 
+  async getAgentSlots(owner: string): Promise<AgentSlot[]> {
+    return (await this.#view<AgentSlot[]>('get_agent_slots', { owner: owner.toLowerCase() })) ?? [];
+  }
+
   async getLeg(owner: string, leg: number): Promise<Hex | null> {
     return (await this.#view<Hex | null>('get_leg', { owner: owner.toLowerCase(), leg })) ?? null;
   }
@@ -127,9 +155,14 @@ export class HyperNearClient {
   }
 
   /** Raw `owner_execute`; prefer relaySubmit (checks) or NearMasterSigner (maps HL payloads). */
+  /**
+   * Returns a SignOut for HL actions, a Revoked[] for freeze {frozen: true} (post each with `exchangeBody`), else null.
+   * 300 TGas: a freeze signs one approveAgent per tracked agent name in the same transaction.
+   */
   async ownerExecute(args: { owner: Hex; nonce: number; intent: OwnerIntent; signature: Hex }) {
-    return this.backend.call<SignOut | null>(this.contractId, 'owner_execute', { ...args, owner: args.owner.toLowerCase() }, {
+    return this.backend.call<SignOut | Revoked[] | null>(this.contractId, 'owner_execute', { ...args, owner: args.owner.toLowerCase() }, {
       deposit: OWNER_EXECUTE_DEPOSIT,
+      gasTgas: 300,
     });
   }
 
