@@ -1,15 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-export const ACTIONS = {
-  hold: 'keep both legs as they are',
-  close_both: 'close both legs now and take the combined result',
-  reduce_hedge: 'shrink the short leg so the hedge covers less of the long leg',
-  add_hedge: 'grow the short leg so the hedge covers more of the long leg',
-  take_profit: 'close the leg that is in profit and keep the other open',
-} as const;
-export type Action = keyof typeof ACTIONS;
-export const ACTION_IDS = Object.keys(ACTIONS) as Action[];
+export { ACTIONS, ACTION_IDS, type Action } from '../../agent/src/decide';
 
 export interface DecideState {
   id: string;

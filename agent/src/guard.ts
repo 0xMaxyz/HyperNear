@@ -9,8 +9,8 @@ import { liquidationDistancePercent } from '@perps-platform/core';
  * guard fire early enough for a fast market.
  */
 export interface GuardConfig {
-  /** p95 of the whole rebalance (NEAR sign + callback + HL). Measured: 12.8 s NEAR-side, 15.8 s end-to-end sign step. */
-  latencyP95Sec: number;
+  /** p95 of the whole rebalance (NEAR sign + callback + HL post + state read). Measured live (C6): p50 7.75 s, p95 8.78 s; the older sign-only step took 15.8 s. */
+    latencyP95Sec: number;
   /** Safety multiple on the latency horizon. */
   k: number;
   /** Quantile of the move: how many sigmas count as "plausible". */
@@ -19,7 +19,7 @@ export interface GuardConfig {
   marginFloorMultiple: number;
 }
 
-export const DEFAULT_GUARD_CONFIG: GuardConfig = { latencyP95Sec: 15.8, k: 2, z: 3, marginFloorMultiple: 2 };
+export const DEFAULT_GUARD_CONFIG: GuardConfig = { latencyP95Sec: 9, k: 2, z: 3, marginFloorMultiple: 2 };
 
 export interface GuardLegInput {
   id: string;

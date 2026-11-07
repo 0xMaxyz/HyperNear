@@ -10,8 +10,8 @@ describe('guard (fixture driven)', () => {
     });
   }
 
-  it('plausible move for 60% vol over 2 x 15.8 s at 3 sigma is about 0.18%', () => {
-    expect(plausibleMove(0.6, DEFAULT_GUARD_CONFIG)).toBeCloseTo(0.0018, 4);
+  it('plausible move for 60% vol over 2 x 9 s at 3 sigma is about 0.136%', () => {
+    expect(plausibleMove(0.6, DEFAULT_GUARD_CONFIG)).toBeCloseTo(0.00136, 4);
   });
 
   it('evaluateGuard keeps leg order and flags only the weak leg', () => {
