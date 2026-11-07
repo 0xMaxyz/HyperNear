@@ -25,7 +25,7 @@ import { GuardLoop } from './guardLoop.ts';
 import { HedgeRefused, Hedger } from './hedge.ts';
 import { guardInputs, Legs, pendingApprovals, type OwnerSnapshot } from './legs.ts';
 import { claudeEscalator } from './claude.ts';
-import { proposeAction } from './decide.ts';
+import { ACTION_IDS, proposeAction, type Action } from './decide.ts';
 import { Decider, DECISION_MODES, DecisionModes, proposalEvent, type DecisionMode } from './decisions.ts';
 import { jevAsk } from './jev.ts';
 import { breakevens, openTime, readPnlData, type LegPnlData } from './pnl.ts';
@@ -151,10 +151,14 @@ export function handler(d: Deps) {
       if (req.method === 'POST' && url.pathname === '/decision/propose') {
         if (!d.relayer.limiter.allow(req.socket.remoteAddress ?? 'unknown')) throw new HttpError(429, 'rate limited');
         if (!d.decider || (!d.dryRun && !d.config.decide.live)) throw new HttpError(503, 'decision layer off (TYPESAFE_API_KEY and ANTHROPIC_API_KEY not set)');
-        const owner = ownerOf(((await readJson(req)) as { owner?: unknown })?.owner);
+        const body = (await readJson(req)) as { owner?: unknown; forceAction?: unknown };
+        const owner = ownerOf(body?.owner);
+        // test-only override for live checks of the execution path; refused unless the process runs with HYPERNEAR_TEST=1
+        const force = body?.forceAction;
+        if (force !== undefined && (process.env.HYPERNEAR_TEST !== '1' || !ACTION_IDS.includes(force as Action))) throw new HttpError(400, 'forceAction is test-only (HYPERNEAR_TEST=1) and must be a decision action');
         const p = await d.decider.prepare(owner);
         if ('skipped' in p) throw new HttpError(409, p.skipped);
-        void d.decider.run(p.input).catch((e) => console.error('proposal failed:', (e as Error).message));
+        void d.decider.run(p.input, force as Action | undefined).catch((e) => console.error('proposal failed:', (e as Error).message));
         return reply(202, { owner, coin: p.input.coin, queued: true });
       }
       if (req.method === 'POST' && url.pathname === '/decision/mode') {
