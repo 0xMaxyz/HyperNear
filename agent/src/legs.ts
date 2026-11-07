@@ -74,6 +74,7 @@ export class AgentKeyStore {
 export interface LegState {
   leg: number;
   address: Hex;
+  /** null only in old fixtures: the live snapshot creates the key */
   agent: { address: Hex; name: string; approvedAt?: number } | null;
   clearinghouse: HlClearinghouseState;
   spotUsdc: number;
@@ -118,7 +119,8 @@ export class Legs {
           this.hl.spotClearinghouseState({ user: address }),
         ]);
         const spotUsdc = Number(spot.balances.find((b) => b.coin === 'USDC')?.total ?? 0);
-        return { leg, address, agent: this.keys.get(o, leg) ?? null, clearinghouse, spotUsdc };
+        // ensure: the owner signs an approveAgent naming this key, so it must exist before the UI asks for that signature
+        return { leg, address, agent: this.keys.ensure(o, leg), clearinghouse, spotUsdc };
       })
     );
     return { owner: o, at: Date.now(), legs, market };
@@ -155,6 +157,13 @@ export class Legs {
   tradingClient(owner: Hex, leg: number): HlClient {
     return hlClient(this.network, { agent: this.keys.signer(owner, leg) });
   }
+}
+
+/** approveAgent intents the owner still has to sign (one per leg whose key HL has not approved), fields exactly as signed. */
+export function pendingApprovals(s: OwnerSnapshot, now = Date.now()) {
+  return s.legs
+    .filter((l) => l.agent && !l.agent.approvedAt)
+    .map((l) => ({ type: 'approveAgent' as const, leg: l.leg, agent: l.agent!.address, agentName: l.agent!.name, hlNonce: now }));
 }
 
 /** Guard inputs (ts-dev's guard.ts) for every open position of the owner's legs. */

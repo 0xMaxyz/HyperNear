@@ -84,6 +84,52 @@ export function planCloseHedge(s: OwnerSnapshot, coin: string, policy: OrderPoli
   return orders.length ? { ok: true, orders } : { ok: false, reason: `no ${coin} position on legs 0/1` };
 }
 
+export type DecisionPlan = { ok: true; orders: PlannedOrder[] } | { ok: false; reason: string };
+
+/**
+ * Orders for an accepted decision (decide.ts Action), checked against the same order policy as the hedge routes.
+ * leg0 holds the long, leg1 the short (facts.ts only proposes for that layout). One add/reduce step is
+ * `step` x the larger leg's size (decide.ts stepFraction, default 0.25).
+ */
+export function planDecision(s: OwnerSnapshot, action: string, coin: string, policy: OrderPolicy, step = 0.25): DecisionPlan {
+  if (action === 'hold') return { ok: true, orders: [] };
+  if (action === 'close_both') return planCloseHedge(s, coin, policy);
+  if (!policy.allowedCoins.includes(coin)) return { ok: false, reason: `coin ${coin} not allowed (${policy.allowedCoins.join(',')})` };
+  const m = marketOf(s, coin);
+  if (!m) return { ok: false, reason: `no market data for ${coin}` };
+  const l0 = legOf(s, 0);
+  const l1 = legOf(s, 1);
+  const p0 = l0 && position(l0.clearinghouse, coin);
+  const p1 = l1 && position(l1.clearinghouse, coin);
+  const s0 = Number(p0?.szi ?? 0);
+  const s1 = Number(p1?.szi ?? 0);
+  if (!p0 || !p1 || !(s0 > 0 && s1 < 0)) return { ok: false, reason: `no open ${coin} hedge (leg0 long, leg1 short)` };
+  const order = (leg: number, isBuy: boolean, sz: number, reduceOnly: boolean, wholeLeg = false): DecisionPlan => {
+    const size = floorSize(sz, m.szDecimals);
+    const notionalUsd = cents(Number(size) * m.mid);
+    // closing a whole leg is not held to the minimum (as in planCloseHedge)
+    if (Number(size) <= 0 || (!wholeLeg && notionalUsd < HL_MIN_NOTIONAL_USD)) return { ok: false, reason: `order notional $${notionalUsd.toFixed(2)} below HL minimum $${HL_MIN_NOTIONAL_USD}` };
+    if (!reduceOnly && notionalUsd > policy.maxNotionalUsd) return { ok: false, reason: `order notional $${notionalUsd.toFixed(2)} above policy max $${policy.maxNotionalUsd}` };
+    return { ok: true, orders: [{ leg, coin, asset: m.asset, isBuy, size, price: ioc(m.mid, isBuy, policy.slippage, m.szDecimals), reduceOnly, notionalUsd }] };
+  };
+  const stepSz = step * Math.max(s0, -s1);
+  switch (action) {
+    case 'reduce_hedge':
+      return order(1, true, Math.min(stepSz, -s1), true);
+    case 'add_hedge':
+      if (p1.leverage.value > policy.maxLeverage) return { ok: false, reason: `leg1 leverage ${p1.leverage.value}x above policy max ${policy.maxLeverage}x` };
+      return order(1, false, stepSz, false);
+    case 'take_profit': {
+      const u0 = Number(p0.unrealizedPnl);
+      const u1 = Number(p1.unrealizedPnl);
+      if (u0 <= 0 && u1 <= 0) return { ok: false, reason: 'neither leg is in profit' };
+      return u0 >= u1 ? order(0, false, s0, true, true) : order(1, true, -s1, true, true);
+    }
+    default:
+      return { ok: false, reason: `unknown action ${action}` };
+  }
+}
+
 export class HedgeRefused extends Error {}
 
 /** First order status of an HL order response: the fill, or the error HL returned. */
@@ -126,15 +172,20 @@ export class Hedger {
       this.bus?.emit('hedge', { owner, op: 'close', coin, refused: plan.reason });
       throw new HedgeRefused(plan.reason);
     }
+    return { plan, results: await this.runOrders(owner, 'close', coin, plan.orders) };
+  }
+
+  /** IOC orders in sequence with each leg's agent key; stops at the first rejected order. */
+  async runOrders(owner: Hex, op: string, coin: string, orders: PlannedOrder[]) {
     const results = [];
-    for (const o of plan.orders) {
+    for (const o of orders) {
       const res = await this.legs
         .tradingClient(owner, o.leg)
-        .limitOrderOpen({ asset: o.asset, isBuy: o.isBuy, price: o.price, size: o.size, tif: 'Ioc', reduceOnly: true });
+        .limitOrderOpen({ asset: o.asset, isBuy: o.isBuy, price: o.price, size: o.size, tif: 'Ioc', reduceOnly: o.reduceOnly });
       const fill = fillOf(res);
-      this.bus?.emit('hedge', { owner, op: 'close', coin, order: o, fill });
+      this.bus?.emit('hedge', { owner, op, coin, order: o, fill });
       results.push({ order: o, result: res, fill });
     }
-    return { plan, results };
+    return results;
   }
 }

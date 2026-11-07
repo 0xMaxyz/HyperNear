@@ -105,19 +105,32 @@ export class Relayer {
     return legs;
   }
 
+  /** Posts the contract-signed approveAgent to HL; emits 'agents.approved'. HL errors (e.g. an unfunded leg:
+   * "Must deposit before performing actions") come back as ok: false with HL's text, never as a throw. */
+  async postApproval(owner: Hex, intent: Extract<OwnerIntent, { type: 'approveAgent' }>, out: SignOut) {
+    const chain = (await this.client.getConfig()).hl_mainnet ? 'Mainnet' : 'Testnet';
+    const hl = this.post ? await this.post(exchangeBody(out, chain)).catch((e) => ({ status: 'err', response: String(e) })) : 'not posted';
+    const r = { leg: intent.leg, agent: intent.agent.toLowerCase() as Hex, agentName: intent.agentName ?? '', ok: (hl as { status?: string })?.status === 'ok', hl };
+    this.bus?.emit('agents.approved', { owner, ...r });
+    return r;
+  }
+
   async relay(ip: string, raw: unknown) {
     if (!this.limiter.allow(ip)) throw new HttpError(429, 'rate limited');
     const b = parseRelayBody(raw);
     const owner = b.owner as Hex;
     try {
       if (b.intent.type === 'registerLeg') {
-        return { kind: 'registerLeg', leg: b.intent.leg, address: await this.client.registerLeg(owner, b.intent.leg) };
+        return { kind: 'registerLeg' as const, leg: b.intent.leg, address: await this.client.registerLeg(owner, b.intent.leg) };
       }
       const { txHash, value } = await this.client.relaySubmit({ owner, nonce: b.nonce!, intent: b.intent }, b.sig as Hex);
       if (Array.isArray(value)) {
-        return { kind: 'freeze', txHash, revoked: await this.postRevocations(owner, value) };
+        return { kind: 'freeze' as const, owner, txHash, revoked: await this.postRevocations(owner, value) };
       }
-      return { kind: 'ownerExecute', txHash, result: value, hlSignature: value ? signOutToHex(value as SignOut) : null };
+      if (b.intent.type === 'approveAgent' && value) {
+        return { kind: 'approveAgent' as const, owner, txHash, hlSignature: signOutToHex(value), ...(await this.postApproval(owner, b.intent, value)) };
+      }
+      return { kind: 'ownerExecute' as const, txHash, result: value, hlSignature: value ? signOutToHex(value as SignOut) : null };
     } catch (e) {
       if (e instanceof HyperNearRelayRefusedError) throw new HttpError(403, e.message);
       if (e instanceof HyperNearError) throw new HttpError(422, e.message);

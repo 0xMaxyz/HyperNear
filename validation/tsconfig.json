@@ -2,6 +2,7 @@
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "paths": { "@perps-platform/core": ["../packages/core/src/index.ts"] },
     "types": ["node"]
   },

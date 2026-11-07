@@ -3,11 +3,16 @@
 import { recoverTypedDataAddress, type Hex } from 'viem';
 import { hypernearDomain, type ChainTag, type OwnerIntentTypedData } from './intents';
 
-export type CommandAction = 'openHedge' | 'closeHedge';
+/** The decision layer's actions (agent/src/decide.ts ACTIONS); accepting a proposal signs one of these. */
+export type DecisionAction = 'hold' | 'close_both' | 'reduce_hedge' | 'add_hedge' | 'take_profit';
+
+/** setDecisionMode: the mode ('off' | 'propose' | 'auto') goes in `coin`, ratio "0". */
+export type CommandAction = 'openHedge' | 'closeHedge' | DecisionAction | 'setDecisionMode';
 
 export interface Command {
   owner: Hex;
   action: CommandAction;
+  /** coin, or the mode for setDecisionMode */
   coin: string;
   /** decimal string ("0.5"); "0" when the action takes none (closeHedge) */
   ratio: string;

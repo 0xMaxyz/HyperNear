@@ -1,5 +1,6 @@
 // --dry-run for judges: no keys, no network. Replays recorded testnet snapshots (agent/fixtures/*.json) and
 // prints what openHedge(BTC, 0.5), closeHedge(BTC) and the margin guard would do.
+import { randomUUID } from 'node:crypto';
 import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,10 +9,12 @@ import { HyperNearClient, type NearBackend } from '@hypernear/client';
 import { ReplayCache } from './commands.ts';
 import { loadConfig, type OrderPolicy } from './config.ts';
 import { EventBus } from './events.ts';
+import { DECISION_EVENTS, type Proposal } from './decide.ts';
+import { Decider, DecisionModes, proposalEvent } from './decisions.ts';
 import { DEFAULT_GUARD_CONFIG, evaluateGuard } from './guard.ts';
 import { HedgeRefused, Hedger, planCloseHedge, planOpenHedge, type ClosePlan, type OpenPlan } from './hedge.ts';
 import { guardInputs, Legs, type OwnerSnapshot } from './legs.ts';
-import { parseRelayBody, RateLimiter, Relayer } from './relayer.ts';
+import { HttpError, parseRelayBody, RateLimiter, Relayer } from './relayer.ts';
 import type { Deps } from './server.ts';
 import { position } from './market.ts';
 
@@ -78,6 +81,26 @@ export const GUARD_DEMO = new URL('../results/guard-demo.json', import.meta.url)
 /** The contract the fixtures came from; commands are verified against its domain, as on testnet. */
 export const DRY_CONTRACT_ID = 'leash-spike-1107.testnet';
 const DRY_AGENT = 'agent.dry-run';
+/** The recorded freeze (agents.revoked) and the recorded live proposals (C18b: Jev factors -> Claude). */
+export const FREEZE_LIVE = new URL('../results/freeze-live.json', import.meta.url);
+export const C18B = new URL('../../validation/results/C18b.json', import.meta.url);
+
+/** C18b's recorded proposals as proposeAction output (ids dry-s01..). */
+export function recordedProposals(): Proposal[] {
+  const rows = (JSON.parse(readFileSync(C18B, 'utf8')) as { refs: { rows: Record<string, any>[] } }).refs.rows;
+  return rows.map((r) => ({
+    id: `dry-${r.id}`,
+    action: r.action,
+    source: r.source,
+    factors: r.factors,
+    rationale: r.rationale,
+    latencyMs: r.latencyMs,
+    model: r.model,
+    flagged: r.flagged,
+    ...(r.error ? { error: r.error } : {}),
+    trace: { jevMs: r.jevMs, calls: r.calls, tableAction: r.tableAction },
+  }));
+}
 
 export function buildDryRunDeps(fixtureName = 'hedged', opts: { replayStartMs?: number; replaySpeed?: number } = {}): Deps {
   const fixtures = loadFixtures();
@@ -101,16 +124,44 @@ export function buildDryRunDeps(fixtureName = 'hedged', opts: { replayStartMs?: 
     },
   };
   const client = new HyperNearClient({ contractId: DRY_CONTRACT_ID, backend });
-  const legs = new Legs({ client, dataDir: mkdtempSync(join(tmpdir(), 'hypernear-dry-')), network: 'testnet', coins: config.policy.allowedCoins });
+  const dataDir = mkdtempSync(join(tmpdir(), 'hypernear-dry-'));
+  const legs = new Legs({ client, dataDir, network: 'testnet', coins: config.policy.allowedCoins });
   legs.snapshot = async (owner) => ({ ...snap, owner: owner.toLowerCase() as Hex, at: Date.now(), legs: owner.toLowerCase() === snap.owner ? snap.legs : [] });
   const bus = new EventBus();
   const recorded = JSON.parse(readFileSync(GUARD_DEMO, 'utf8')) as { timeline: { t: number; event: string; detail?: Record<string, unknown> }[] };
+  const revoked = (JSON.parse(readFileSync(FREEZE_LIVE, 'utf8')) as { events: { type: string; data: Record<string, unknown> }[] }).events;
+  const proposals = recordedProposals();
+  // the agent account the fixture policy names, so /owner's config.agentAccount passes the opt-in check (no key: nothing signs here)
+  const dryConfig = { ...config, contractId: DRY_CONTRACT_ID, nearAgent: { accountId: DRY_AGENT, secretKey: '' } };
+  const decider = new Decider({
+    legs,
+    bus,
+    policy: config.policy,
+    annualVol: config.guard.annualVol,
+    modes: new DecisionModes(dataDir),
+    // POST /decision/propose cycles through the recorded proposals (no model calls in the dry run)
+    propose: async () => ({ ...proposals[nextProposal++ % proposals.length]!, id: `dry-${randomUUID()}` }),
+    async execute(owner, action, coin, orders) {
+      bus.emit('hedge', { owner, op: action, coin, simulated: true, orders });
+      return { simulatedFills: orders.map((o) => ({ leg: o.leg, oid: 0, totalSz: o.size, avgPx: String(snap.market.mids[coin]) })) };
+    },
+    checkOwner: async (owner) => {
+      const st = policyOf(owner);
+      if (st?.agent !== DRY_AGENT) throw new HttpError(403, 'owner has not opted this agent in (setPolicy)');
+    },
+    owners: () => [snap.owner],
+    ttlMs: Number.POSITIVE_INFINITY,
+  });
+  let nextProposal = 0;
+  const replayedProposals = proposals.map((proposal) => ({ proposal, owner: snap.owner, coin: 'BTC', at: Date.now(), status: 'open' as const, recorded: true }));
+  for (const r of replayedProposals) decider.remember(r, true);
 
   return {
-    config: { ...config, contractId: DRY_CONTRACT_ID },
+    config: dryConfig,
     client,
     legs,
     bus,
+    decider,
     replay: new ReplayCache(),
     guardConfig: DEFAULT_GUARD_CONFIG,
     hedger: new Hedger(legs, config.policy, bus),
@@ -135,8 +186,15 @@ export function buildDryRunDeps(fixtureName = 'hedged', opts: { replayStartMs?: 
         const start = opts.replayStartMs ?? 2000;
         const t0 = recorded.timeline[0]?.t ?? 0;
         let id = 1_000_000;
-        const timers = recorded.timeline.map((x) =>
-          setTimeout(() => write({ id: id++, type: x.event, at: Date.now(), data: { ...x.detail, owner: snap.owner, recordedOffsetMs: x.t, dryRun: true } }), start + (x.t - t0) / speed)
+        const tEnd = recorded.timeline.at(-1)?.t ?? t0;
+        // guard demo, then the recorded decision proposals (C18b), then the recorded freeze revocation, 2 s apart
+        const script = [
+          ...recorded.timeline.map((x) => ({ t: x.t, type: x.event, data: { ...x.detail, owner: snap.owner, recordedOffsetMs: x.t } })),
+          ...replayedProposals.map((r, i) => ({ t: tEnd + 2000 * (i + 1), type: DECISION_EVENTS.proposed, data: proposalEvent(r) })),
+          ...revoked.map((e, i) => ({ t: tEnd + 2000 * (replayedProposals.length + i + 1), type: e.type, data: { ...e.data, recorded: true } })),
+        ];
+        const timers = script.map((x) =>
+          setTimeout(() => write({ id: id++, type: x.type, at: Date.now(), data: { ...x.data, dryRun: true } }), start + (x.t - t0) / speed)
         );
         return () => timers.forEach(clearTimeout);
       },

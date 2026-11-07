@@ -1,0 +1,30 @@
+{
+  "at": "2026-11-07T15:35:43.509Z",
+  "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+  "contractId": "leash-spike-1107.testnet",
+  "leg": 2,
+  "leg2": "0x2a32c77d9b5e3e0ed8780e9fc5def0aa629c62ab",
+  "agent": "0x16f116f749ddaf7f72da815b7269a5e0ec916b01",
+  "intent": {
+    "type": "approveAgent",
+    "leg": 2,
+    "agent": "0x16f116f749ddaf7f72da815b7269a5e0ec916b01",
+    "agentName": "leash-leg2",
+    "hlNonce": 1794065733493
+  },
+  "txHash": "3U1SN327ippX2G8orqZrXCzr6LeSUGBC3wRAPAPNYaQb",
+  "hl": {
+    "status": "ok",
+    "response": {
+      "type": "default"
+    }
+  },
+  "hlListsAgent": true,
+  "msRelayAndPost": 7874,
+  "config": {
+    "contractId": "leash-spike-1107.testnet",
+    "chainTag": "near-testnet",
+    "agentAccount": null,
+    "hlNetwork": "testnet"
+  }
+}
