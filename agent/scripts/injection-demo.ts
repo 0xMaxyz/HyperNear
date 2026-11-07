@@ -86,8 +86,8 @@ async function rebalanceTool(args: Record<string, unknown>) {
     // near-api-js throws on a failed execution; pull the transaction hash out of the error
     const x = e as any;
     const txHash = txHashOf(x);
-    const panic = String(x?.message ?? e).replace(/^.*?(Smart contract panicked:[^
-]*).*$/s, '$1');
+    const msg = String(x?.message ?? e);
+    const panic = msg.match(/Smart contract panicked: [^\n"]*/)?.[0] ?? msg.slice(0, 300);
     errorShapes.push({ name: x?.name, keys: Object.keys(x ?? {}), txHash });
     chainRejections.push({ method: 'rebalance', txHash, panic });
     throw new Error(`contract rejected rebalance (NEAR tx ${txHash}): ${panic}`);
