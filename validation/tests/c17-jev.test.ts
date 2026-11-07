@@ -30,14 +30,19 @@ describe.skipIf(!live)('C17: Jev decide fixtures', () => {
       const w0 = performance.now();
       await client.systemOne({ state: { warmup: 'yes' }, questions: { d: choice('Pick one', { a: 'first', b: 'second' }) }, model: MODEL });
       r.numbers.coldStartMs = Math.round(performance.now() - w0);
-      const timed = new TypeSafeClient({ timeout: 30_000, maxRetries: 0 });
+      const timed = new TypeSafeClient({ timeout: 60_000, maxRetries: 0 });
+      let consecutiveErrors = 0;
       const errors: string[] = [];
       const states = loadStates();
       const calls: Call[] = [];
       let shape: unknown;
 
-      for (const [si, s] of states.entries()) {
+      outer: for (const [si, s] of states.entries()) {
         for (const run of [0, 1]) {
+          if (consecutiveErrors >= 6) {
+            errors.push('aborted after 6 consecutive failures');
+            break outer;
+          }
           const order = shuffled(ACTION_IDS, si * 2 + run + 1);
           const options = Object.fromEntries(order.map((a) => [a, ACTIONS[a]]));
           const t0 = performance.now();
@@ -50,8 +55,10 @@ describe.skipIf(!live)('C17: Jev decide fixtures', () => {
             });
           } catch (e) {
             errors.push(`${s.id}#${run}: ${e instanceof Error ? e.message : String(e)} after ${Math.round(performance.now() - t0)}ms`);
+            consecutiveErrors++;
             continue;
           }
+          consecutiveErrors = 0;
           const ms = performance.now() - t0;
           const a = res.answers.decision;
           const probs = a.probabilities as Record<string, number>;
