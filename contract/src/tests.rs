@@ -700,11 +700,11 @@ fn freeze_without_agents_and_unfreeze_sign_nothing() {
     o.exec(&mut c, 0, OwnerIntent::Freeze { frozen: true });
     assert!(signed().is_empty());
     o.exec(&mut c, 1, OwnerIntent::Freeze { frozen: false });
-    let mut c2 = contract();
-    o.exec(&mut c2, 0, approve_named(0, "leash-leg0", 50));
-    o.exec(&mut c2, 1, OwnerIntent::Freeze { frozen: true });
+    let o2 = owner(2); // (the mocked storage is shared between contract instances: use another owner)
+    o2.exec(&mut c, 0, approve_named(0, "leash-leg0", 50));
+    o2.exec(&mut c, 1, OwnerIntent::Freeze { frozen: true });
     ctx(RELAYER, T0);
-    o.exec(&mut c2, 2, OwnerIntent::Freeze { frozen: false });
+    o2.exec(&mut c, 2, OwnerIntent::Freeze { frozen: false });
     assert!(signed().is_empty(), "unfreezing re-approves nothing");
 }
 
