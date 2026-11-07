@@ -84,7 +84,7 @@ function deps(o: { owner?: Record<string, unknown> | null; legs?: Record<number,
   legs.snapshot = async () => snap(ch({ accountValue: 10, maint: 6, positions: [{ coin: 'BTC', szi: '0.0003', liq: '99000' }] }));
   const bus = new EventBus();
   const hedger = new Hedger(legs, config.policy, bus);
-  const d: Deps = { config, client, legs, hedger, bus, relayer: new Relayer(client, new RateLimiter(2)), replay: new ReplayCache(), guardConfig: DEFAULT_GUARD_CONFIG };
+  const d: Deps = { config, client, legs, hedger, bus, relayer: new Relayer(client, new RateLimiter(2)), replay: new ReplayCache(), guardConfig: DEFAULT_GUARD_CONFIG, pnlData: async () => [] };
   return { d, calls };
 }
 
