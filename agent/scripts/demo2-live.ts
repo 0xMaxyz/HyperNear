@@ -5,7 +5,7 @@
 // THE RESERVE LEG 2 through the contract's rebalance (NEAR agent key), limited by the strategy's topUpCapPerDay ($5). A second
 // stress is then refused by the guard (budget used), and a direct rebalance above the contract's daily cap is refused by the
 // contract. Leg 3 only ever receives money from leg 2, never from a lab wallet (a lab wallet funds the legs once, before).
-// Demo thresholds: the guard floor is 6x maintenance (not the default 2x) and the top-up target is 10x, because a 20x leg cannot
+// Demo thresholds: the guard floor is 10x maintenance (not the default 2x) and the top-up target is 15x, because a 20x leg cannot
 // get near 2x without 40x; this is said in the result file. Keys (never printed): ~/.near-credentials/testnet/*.json,
 // HYPERNEAR_DATA_DIR/agent-keys.json, lab wallet file (index 3 only), TYPESAFE_API_KEY / ANTHROPIC_API_KEY for the decision proposal.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -32,8 +32,8 @@ const LAB_INDEX = 3; // lab wallets 1-10 only
 const TICK_MS = 5000;
 const SLICES = 9;
 const TOP_UP_CAP = 5; // the strategy's topUpCapPerDay (USD)
-const FLOOR = 6;
-const TARGET = 10;
+const FLOOR = 10;
+const TARGET = 15;
 
 const keyOf = (id: string) => JSON.parse(readFileSync(`${homedir()}/.near-credentials/testnet/${id}.json`, 'utf8')).private_key as string;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -197,7 +197,7 @@ try {
   const txs = timeline.filter((e) => e.type === 'guard.rebalance.signed').map((e) => (e.data as { txHash?: string }).txHash);
   const result = {
     at: new Date(t0).toISOString(), ok, owner: ow, strategy: spec, reserveLeg: RESERVE, botLeg: LEG,
-    thresholds: { guardFloorMultiple: FLOOR, topUpTargetMultiple: TARGET, why: 'a 20x leg cannot get near the default 2x floor without 40x; the demo raises the floor so a 20x leg is "stressed"', operatorMaxLeverage: policy.maxLeverage },
+    thresholds: { guardFloorMultiple: FLOOR, topUpTargetMultiple: TARGET, why: 'HL keeps about 10% of the notional as non-withdrawable margin, so a 20x leg whose spare margin is withdrawn sits near 8x maintenance, never near the default 2x; the demo raises the floor so that state counts as stressed', operatorMaxLeverage: policy.maxLeverage },
     funding, before, position: position0, stress1, stress2, topUpTxs: txs,
     strategyBudget: { topUpCapPerDayUsd: TOP_UP_CAP, leftAfterUsd: manager.topUpLeft(ow, LEG) },
     contractCapRefusal: contractRefusal,
