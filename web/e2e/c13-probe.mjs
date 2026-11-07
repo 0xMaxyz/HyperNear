@@ -4,6 +4,7 @@ import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 
 const url = process.env.C13_URL ?? 'http://localhost:5173/c13.html';
 const mock = process.argv.includes('--mock-wallet');
+const email = process.argv.includes('--email'); // Privy dashboard test account: test-NNNN@privy.io, one-time code 123456
 const acct = privateKeyToAccount(generatePrivateKey());
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 900, height: 900 } });
@@ -54,6 +55,23 @@ console.log('self-test:', (await page.locator('#c13-out').innerText()).trim());
 await page.getByRole('button', { name: /Log in with Privy/ }).click({ timeout: 20000 }).catch((e) => log.push(`login button: ${e.message.slice(0, 120)}`));
 await page.waitForTimeout(4000);
 await page.screenshot({ path: 'test-results/c13-login.png' });
+if (email) {
+  const addr = `test-${Math.floor(1000 + Math.random() * 9000)}@privy.io`;
+  await page.getByPlaceholder('your@email.com').fill(addr);
+  await page.getByRole('button', { name: 'Submit' }).click();
+  await page.waitForTimeout(3000);
+  await page.screenshot({ path: 'test-results/c13-otp.png' });
+  await page.locator('input').first().click();
+  await page.keyboard.type('123456', { delay: 100 });
+  await page.waitForTimeout(12000);
+  await page.screenshot({ path: 'test-results/c13-after-email.png' });
+  for (const b of await page.getByRole('button', { name: /Sign sample intent/ }).all()) {
+    await b.click();
+    await page.waitForTimeout(6000);
+  }
+  console.log('email result:
+' + (await page.locator('#c13-out').innerText()));
+}
 if (mock) {
   await page.getByText('Continue with a wallet').click({ timeout: 10000 }).catch((e) => log.push(`click wallet: ${e.message.slice(0, 120)}`));
   await page.waitForTimeout(2000);
