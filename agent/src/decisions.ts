@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import type { Hex } from 'viem';
 import type { Command } from '@hypernear/client';
 import type { OrderPolicy } from './config.ts';
-import { DECISION_EVENTS, type Proposal } from './decide.ts';
+import { DECISION_EVENTS, type Action, type Proposal } from './decide.ts';
 import type { EventBus } from './events.ts';
 import { decisionInput, type DecisionInput } from './facts.ts';
 import { HedgeRefused, planDecision, type PlannedOrder } from './hedge.ts';
@@ -42,6 +42,8 @@ export interface ProposalRecord {
   at: number;
   status: 'open' | 'accepted' | 'rejected' | 'expired';
   recorded?: boolean;
+  /** HYPERNEAR_TEST=1 only: the action was forced; modelAction is what the models proposed */
+  forced?: { modelAction: string };
 }
 
 /** The decision.proposed payload (flat; agreed with web-dev). */
@@ -58,6 +60,7 @@ export const proposalEvent = (r: ProposalRecord) => ({
   model: r.proposal.model,
   ...(r.proposal.error ? { error: r.proposal.error } : {}),
   ...(r.recorded ? { recorded: true } : {}),
+  ...(r.forced ? { forced: true, modelAction: r.forced.modelAction } : {}),
 });
 
 export interface DeciderDeps {
@@ -138,12 +141,15 @@ export class Decider {
   }
 
   /** The slow part: proposeAction, decision.proposed, and in auto mode the execution. */
-  async run(input: DecisionInput): Promise<ProposalRecord | undefined> {
+  /** forceAction: test only (the server accepts it only with HYPERNEAR_TEST=1); the models still run and are recorded. */
+  async run(input: DecisionInput, forceAction?: Action): Promise<ProposalRecord | undefined> {
     if (this.#busy.has(input.owner)) return undefined;
     this.#busy.add(input.owner);
     try {
-      const proposal = await this.d.propose(input);
-      const r: ProposalRecord = { proposal, owner: input.owner, coin: input.coin, at: this.#now(), status: 'open' };
+      const modelProposal = await this.d.propose(input);
+      const forced = forceAction && forceAction !== modelProposal.action ? { modelAction: modelProposal.action } : undefined;
+      const proposal = forced ? { ...modelProposal, action: forceAction!, rationale: `TEST forceAction ${forceAction} (models: ${modelProposal.action}). ${modelProposal.rationale}` } : modelProposal;
+      const r: ProposalRecord = { proposal, owner: input.owner, coin: input.coin, at: this.#now(), status: 'open', ...(forced ? { forced } : {}) };
       this.remember(r);
       this.d.bus.emit(DECISION_EVENTS.proposed, proposalEvent(r));
       // auto: same policy checks as a signed accept; flagged (disagreement, degraded) and hold stay open for the owner

@@ -1,0 +1,15 @@
+owner 0x2c7536e3605d9c16a7a3d7b1898e529396a65c23; agent fcagent.leash-spike-1107.testnet; guard floor 2.5x maintenance
+  leg0 [long] 0xfc5f38a75535cc6a864bb5ba14d9c7f29eecacac  account $14.57
+  leg1 [hedge] 0x8056c4fa3aad69cf04c2ade906c58489e76c9986  account $1.46
+  leg2 [reserve] 0x2a32c77d9b5e3e0ed8780e9fc5def0aa629c62ab  account $8.18
+hedged: leg0 [long] 0.0004 BTC, leg1 [hedge] -0.0002 BTC at 3x (hedge oid 64765391870); leg1 [hedge] margin ratio 75.8x
+  [15:53:27.951] guard.ok 
+stress 1: $12.80 moved perp -> spot on leg1 (owner intent, 11682 ms); leg1 margin ratio 8.08x: HL keeps ~10% of notional, so transfers alone cannot get near liquidation
+stress 2: leg1 sells 0.00056 BTC more at 40x (~$42), t0 for the timeline
+  [15:53:41.743] guard.trigger leg1:BTC margin_floor -> rebalance
+  [15:53:41.743] guard.rebalance.start leg2 [reserve] -> leg1 [hedge]  $2.08
+  [15:53:50.544] guard.rebalance.signed rebalance tx 3QhL3pxz4gLzH8ppDRuATggqjbJBjuXyGqVgK1nSxBXw
+  leg1 margin ratio 2.10x (account $1.510, maintenance $0.718)
+  [15:53:51.978] guard.rebalance.posted 
+  [15:53:53.502] guard.ok 
+timeline (ms after stress): detected +1541, rebalance start +1541, NEAR signed +10342 (tx 3QhL3pxz4gLzH8ppDRuATggqjbJBjuXyGqVgK1nSxBXw), HL accepted +11776, recovered +13300; moved $2.08; leg1 margin ratio now 5.0x
