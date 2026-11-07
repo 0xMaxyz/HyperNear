@@ -79,7 +79,11 @@ const held = { proposals: [], revoked: [] };
       else if (e.type === 'agents.revoked') held.revoked.push(e);
       else if (/^(guard\.|stress\.)/.test(e.type)) continue; // the guard timeline is the labeled live run, played by the guard scene
       else if (/^strategy\./.test(e.type) && e.data.recorded) continue; // recorded strategy events come from the result files
-      else for (const w of clients) w(frame(e)); // simulated starts, decision.accepted, commands: forwarded at once
+      else {
+        // the dry run emits strategy.started before it stores the spec, so its leg is missing; the drafted spec is on leg 3
+        if (e.type === 'strategy.started' && e.data.leg === undefined) e.data.leg = 3;
+        for (const w of clients) w(frame(e)); // simulated starts, decision.accepted, commands: forwarded at once
+      }
     }
   }
 })().catch((e) => console.error('upstream events', e));
