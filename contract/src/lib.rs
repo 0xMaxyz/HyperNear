@@ -1,0 +1,406 @@
+//! leash: Hyperliquid accounts whose keys are NEAR Chain Signatures held by this contract.
+//!
+//! Leg i of an owner (an EVM address) is the MPC key derived for (this contract, "{owner}/leg{i}").
+//! The owner acts through EIP-712 intents (auth.rs) that anyone may relay; the owner's agent (a NEAR
+//! account) may only move USDC between that owner's registered legs, under a daily cap and a cooldown.
+//! The contract limits where funds can go, not whether a trade loses them.
+
+use near_sdk::env::{self, keccak256_array};
+use near_sdk::serde_json::json;
+use near_sdk::store::LookupMap;
+use near_sdk::{
+    log, near, require, AccountId, BorshStorageKey, CurveType, Gas, NearToken, PanicOnDefault, Promise, PromiseError,
+    PromiseOrValue, PublicKey,
+};
+
+pub mod auth;
+pub mod eip712;
+use auth::OwnerIntent;
+use eip712::{parse_addr, parse_usd, HlAction};
+
+/// MPC `sign` requires >= 15 TGas prepaid (v1.signer-prod.testnet config, 2026-11-07); 7 of it funds its resume callback.
+const MPC_SIGN_GAS: Gas = Gas::from_tgas(50);
+const ON_SIGNED_GAS: Gas = Gas::from_tgas(10);
+const MPC_VIEW_GAS: Gas = Gas::from_tgas(10);
+const ON_LEG_GAS: Gas = Gas::from_tgas(10);
+/// near/mpc `SIGN_DEPOSIT_YOCTONEAR`; any excess is refunded. Paid from this contract's balance.
+const MPC_SIGN_DEPOSIT: NearToken = NearToken::from_yoctonear(1);
+/// Domain 0 = secp256k1 (legacy ECDSA domain).
+const MPC_ECDSA_DOMAIN: u64 = 0;
+const DAY_NS: u64 = 86_400 * 1_000_000_000;
+/// Covers the two leg records (~270 bytes, 0.0027 NEAR); the callback refunds the rest.
+/// shortcut: the callback cannot fail cleanly once the MPC answered, so this must stay above the real cost.
+pub const REGISTER_LEG_DEPOSIT: NearToken = NearToken::from_millinear(5);
+
+/// Requires `attached` to cover the storage added since `before`; refunds the excess to `payer`.
+fn charge_storage(before: u64, attached: NearToken, payer: &AccountId) {
+    let added = env::storage_usage().saturating_sub(before);
+    let cost = env::storage_byte_cost().saturating_mul(added as u128);
+    require!(attached >= cost, format!("attach at least {} yoctoNEAR for storage", cost.as_yoctonear()));
+    let refund = attached.saturating_sub(cost);
+    if !refund.is_zero() {
+        Promise::new(payer.clone()).transfer(refund).detach();
+    }
+}
+
+#[near(serializers = [borsh])]
+#[derive(BorshStorageKey)]
+enum Key {
+    Owners,
+    Legs,
+    LegOwner,
+}
+
+#[near(serializers = [borsh, json])]
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct OwnerState {
+    /// Next intent nonce.
+    pub nonce: u64,
+    pub frozen: bool,
+    pub agent: Option<AccountId>,
+    /// micro-USD per UTC day, for `rebalance`.
+    pub daily_cap: u64,
+    pub cooldown_sec: u64,
+    pub day: u64,
+    pub spent_today: u64,
+    pub last_rebalance_ns: u64,
+}
+
+#[near(contract_state)]
+#[derive(PanicOnDefault)]
+pub struct Leash {
+    admin: AccountId,
+    mpc_contract: AccountId,
+    hl_mainnet: bool,
+    /// owner (0x lowercase) -> state
+    owners: LookupMap<String, OwnerState>,
+    /// leg path "{owner}/leg{i}" -> leg EVM address (0x lowercase)
+    legs: LookupMap<String, String>,
+    /// leg EVM address -> owner
+    leg_owner: LookupMap<String, String>,
+}
+
+/// State layout of the D1 spike deployment, read once by `migrate`.
+#[near(serializers = [borsh])]
+struct LeashV0 {
+    admin: AccountId,
+    mpc_contract: AccountId,
+    hl_mainnet: bool,
+}
+
+/// Wire shape of near/mpc `SignatureResponse::Secp256k1` (the `scheme` tag is ignored).
+#[near(serializers = [json])]
+pub struct MpcAffinePoint {
+    pub affine_point: String,
+}
+#[near(serializers = [json])]
+pub struct MpcScalar {
+    pub scalar: String,
+}
+#[near(serializers = [json])]
+pub struct MpcSignature {
+    pub big_r: MpcAffinePoint,
+    pub s: MpcScalar,
+    pub recovery_id: u8,
+}
+
+/// big_r is the 33-byte compressed point (r = big_r[1..]), all hex without 0x.
+/// `action` is the HL action that was signed (post it with hyperliquidChain + signatureChainId 0x66eee).
+#[near(serializers = [json])]
+pub struct SignOut {
+    pub payload: String,
+    pub big_r: String,
+    pub s: String,
+    pub recovery_id: u8,
+    pub action: Option<HlAction>,
+}
+
+#[cfg(feature = "spike")]
+fn parse_hex<const N: usize>(s: &str, what: &str) -> [u8; N] {
+    hex::decode(s.trim_start_matches("0x"))
+        .ok()
+        .and_then(|v| v.try_into().ok())
+        .unwrap_or_else(|| env::panic_str(&format!("{what}: expected {N} hex bytes")))
+}
+
+pub fn leg_path(owner: &str, leg: u32) -> String {
+    format!("{owner}/leg{leg}")
+}
+
+#[near]
+impl Leash {
+    #[init]
+    pub fn new(admin: AccountId, mpc_contract: AccountId, hl_mainnet: bool) -> Self {
+        Self::from_parts(admin, mpc_contract, hl_mainnet)
+    }
+
+    /// One-off upgrade from the D1 spike layout; keeps the account id, so derived addresses stay.
+    #[private]
+    #[init(ignore_state)]
+    pub fn migrate() -> Self {
+        let old: LeashV0 = env::state_read().unwrap_or_else(|| env::panic_str("no state"));
+        Self::from_parts(old.admin, old.mpc_contract, old.hl_mainnet)
+    }
+
+    // ---- owner (anyone may relay; the EIP-712 signature is the authentication) ----
+
+    /// Runs a signed owner intent. HL actions return the MPC signature (SignOut); the others return null.
+    /// The nonce is consumed here, before any MPC promise, so a failed sign burns it.
+    /// The caller pays any storage this adds (first intent of an owner, setting an agent); excess is refunded.
+    #[payable]
+    pub fn owner_execute(
+        &mut self,
+        owner: String,
+        nonce: u64,
+        intent: OwnerIntent,
+        signature: String,
+    ) -> PromiseOrValue<Option<SignOut>> {
+        let storage_before = env::storage_usage();
+        let owner_b = parse_addr(&owner);
+        let digest = auth::intent_digest(self.domain(), &owner_b, nonce, &intent);
+        require!(auth::recover_signer(&digest, &signature) == owner_b, "signature does not match owner");
+        let mut st = self.owners.get(&owner).cloned().unwrap_or_default();
+        require!(nonce == st.nonce, "bad nonce");
+        st.nonce += 1;
+        require!(
+            !st.frozen || matches!(intent, OwnerIntent::Withdraw { .. } | OwnerIntent::Freeze { .. }),
+            "frozen"
+        );
+        let to_sign = match intent {
+            OwnerIntent::ApproveAgent { leg, agent, agent_name, hl_nonce } => {
+                Some((leg, HlAction::ApproveAgent { agent_address: agent, agent_name, nonce: hl_nonce }))
+            }
+            OwnerIntent::Withdraw { leg, amount, hl_time } => {
+                Some((leg, HlAction::Withdraw { destination: owner.clone(), amount, time: hl_time }))
+            }
+            OwnerIntent::UsdClassTransfer { leg, amount, to_perp, hl_nonce } => {
+                Some((leg, HlAction::UsdClassTransfer { amount, to_perp, nonce: hl_nonce }))
+            }
+            OwnerIntent::SetPolicy { agent, daily_cap, cooldown_sec } => {
+                if agent.is_empty() {
+                    st.agent = None;
+                } else {
+                    st.agent = Some(agent.parse().unwrap_or_else(|_| env::panic_str("bad agent account id")));
+                    st.daily_cap = parse_usd(&daily_cap);
+                }
+                st.cooldown_sec = cooldown_sec;
+                None
+            }
+            OwnerIntent::Freeze { frozen } => {
+                st.frozen = frozen;
+                None
+            }
+        };
+        self.owners.insert(owner.clone(), st);
+        self.owners.flush();
+        charge_storage(storage_before, env::attached_deposit(), &env::predecessor_account_id());
+        match to_sign {
+            Some((leg, action)) => PromiseOrValue::Promise(self.sign_hl(leg_path(&owner, leg), action)),
+            None => PromiseOrValue::Value(None),
+        }
+    }
+
+    /// Anyone: records the EVM address of `owner`'s leg, read from the MPC contract (not trusted from the caller).
+    /// Attach >= REGISTER_LEG_DEPOSIT for storage; the callback refunds what the entries did not use
+    /// (all of it if the MPC view fails).
+    #[payable]
+    pub fn register_leg(&mut self, owner: String, leg: u32) -> Promise {
+        parse_addr(&owner);
+        let deposit = env::attached_deposit();
+        require!(deposit >= REGISTER_LEG_DEPOSIT, format!("attach {REGISTER_LEG_DEPOSIT} for storage"));
+        let path = leg_path(&owner, leg);
+        require!(!self.legs.contains_key(&path), "leg already registered");
+        let args = json!({ "path": path, "predecessor": env::current_account_id(), "domain_id": MPC_ECDSA_DOMAIN });
+        Promise::new(self.mpc_contract.clone())
+            .function_call("derived_public_key", args.to_string().into_bytes(), NearToken::from_yoctonear(0), MPC_VIEW_GAS)
+            .then(Self::ext(env::current_account_id()).with_static_gas(ON_LEG_GAS).on_leg_derived(
+                owner,
+                path,
+                env::predecessor_account_id(),
+                deposit,
+            ))
+    }
+
+    /// Returns the leg address, or null (deposit refunded) if the MPC view failed.
+    #[private]
+    pub fn on_leg_derived(
+        &mut self,
+        owner: String,
+        path: String,
+        payer: AccountId,
+        deposit: NearToken,
+        #[callback_result] res: Result<String, PromiseError>,
+    ) -> Option<String> {
+        let Some(pk) = res.ok().and_then(|s| s.parse::<PublicKey>().ok()) else {
+            log!("derived_public_key failed; refunding");
+            Promise::new(payer).transfer(deposit).detach();
+            return None;
+        };
+        require!(pk.curve_type() == CurveType::SECP256K1, "derived key is not secp256k1");
+        let addr = format!("0x{}", hex::encode(&keccak256_array(&pk.as_bytes()[1..])[12..]));
+        let storage_before = env::storage_usage();
+        self.legs.insert(path, addr.clone());
+        self.leg_owner.insert(addr.clone(), owner);
+        self.legs.flush();
+        self.leg_owner.flush();
+        charge_storage(storage_before, deposit, &payer);
+        Some(addr)
+    }
+
+    // ---- agent (authenticated by predecessor == the owner's policy agent) ----
+
+    /// Spot -> perp only (`to_perp` must be true): it adds margin, which is the guard's job.
+    /// Perp -> spot stays owner-only.
+    pub fn agent_usd_class_transfer(
+        &mut self,
+        owner: String,
+        leg: u32,
+        amount: String,
+        to_perp: bool,
+        hl_nonce: u64,
+    ) -> Promise {
+        self.agent_state(&owner);
+        require!(to_perp, "agent may only move spot to perp");
+        self.sign_hl(leg_path(&owner, leg), HlAction::UsdClassTransfer { amount, to_perp, nonce: hl_nonce })
+    }
+
+    /// usdSend from one of `owner`'s legs to another registered leg of the same owner, within cap and cooldown.
+    pub fn rebalance(&mut self, owner: String, from_leg: u32, to_address: String, amount: String, hl_time: u64) -> Promise {
+        let mut st = self.agent_state(&owner);
+        require!(
+            self.leg_owner.get(&to_address) == Some(&owner),
+            "destination is not a registered leg of this owner"
+        );
+        require!(self.legs.get(&leg_path(&owner, from_leg)) != Some(&to_address), "source equals destination");
+        let amt = parse_usd(&amount);
+        let now = env::block_timestamp();
+        require!(
+            st.last_rebalance_ns == 0 || now >= st.last_rebalance_ns.saturating_add(st.cooldown_sec.saturating_mul(1_000_000_000)),
+            "cooldown"
+        );
+        let day = now / DAY_NS;
+        if day != st.day {
+            st.day = day;
+            st.spent_today = 0;
+        }
+        require!(st.spent_today.saturating_add(amt) <= st.daily_cap, "daily cap exceeded");
+        st.spent_today += amt;
+        st.last_rebalance_ns = now;
+        self.owners.insert(owner.clone(), st);
+        self.sign_hl(leg_path(&owner, from_leg), HlAction::UsdSend { destination: to_address, amount, time: hl_time })
+    }
+
+    // ---- callbacks and views ----
+
+    #[private]
+    pub fn on_signed(
+        &self,
+        payload: String,
+        action: Option<HlAction>,
+        #[callback_result] res: Result<MpcSignature, PromiseError>,
+    ) -> SignOut {
+        let sig = res.unwrap_or_else(|_| env::panic_str("MPC sign failed"));
+        SignOut { payload, big_r: sig.big_r.affine_point, s: sig.s.scalar, recovery_id: sig.recovery_id, action }
+    }
+
+    /// EIP-712 digest (hex) of `action` for this contract's HL chain.
+    pub fn hl_digest(&self, action: HlAction) -> String {
+        hex::encode(action.digest(self.hl_chain()))
+    }
+
+    /// EIP-712 digest (hex) the owner must sign for `intent`.
+    pub fn owner_intent_digest(&self, owner: String, nonce: u64, intent: OwnerIntent) -> String {
+        hex::encode(auth::intent_digest(self.domain(), &parse_addr(&owner), nonce, &intent))
+    }
+
+    pub fn get_owner(&self, owner: String) -> Option<OwnerState> {
+        self.owners.get(&owner).cloned()
+    }
+
+    pub fn get_leg(&self, owner: String, leg: u32) -> Option<String> {
+        self.legs.get(&leg_path(&owner, leg)).cloned()
+    }
+
+    pub fn get_config(&self) -> near_sdk::serde_json::Value {
+        json!({ "admin": self.admin, "mpc_contract": self.mpc_contract, "hl_mainnet": self.hl_mainnet,
+                "chain_tag": self.chain_tag() })
+    }
+}
+
+impl Leash {
+    fn from_parts(admin: AccountId, mpc_contract: AccountId, hl_mainnet: bool) -> Self {
+        Self {
+            admin,
+            mpc_contract,
+            hl_mainnet,
+            owners: LookupMap::new(Key::Owners),
+            legs: LookupMap::new(Key::Legs),
+            leg_owner: LookupMap::new(Key::LegOwner),
+        }
+    }
+
+    fn hl_chain(&self) -> &'static str {
+        if self.hl_mainnet { "Mainnet" } else { "Testnet" }
+    }
+
+    fn chain_tag(&self) -> &'static str {
+        if self.hl_mainnet { "near-mainnet" } else { "near-testnet" }
+    }
+
+    fn domain(&self) -> [u8; 32] {
+        auth::domain_separator(self.chain_tag(), env::current_account_id().as_str())
+    }
+
+    #[cfg(feature = "spike")]
+    fn assert_admin(&self) {
+        let caller = env::predecessor_account_id();
+        require!(caller == self.admin || caller == env::current_account_id(), "admin only");
+    }
+
+    fn agent_state(&self, owner: &str) -> OwnerState {
+        let st = self.owners.get(owner).cloned().unwrap_or_else(|| env::panic_str("unknown owner"));
+        require!(st.agent.as_ref() == Some(&env::predecessor_account_id()), "not this owner's agent");
+        require!(!st.frozen, "frozen");
+        st
+    }
+
+    fn sign_hl(&self, path: String, action: HlAction) -> Promise {
+        let digest = action.digest(self.hl_chain());
+        self.mpc_sign(path, digest, Some(action))
+    }
+
+    fn mpc_sign(&self, path: String, payload: [u8; 32], action: Option<HlAction>) -> Promise {
+        let payload_hex = hex::encode(payload);
+        let args = json!({ "request": {
+            "path": path,
+            "payload_v2": { "Ecdsa": payload_hex },
+            "domain_id": MPC_ECDSA_DOMAIN,
+        }});
+        Promise::new(self.mpc_contract.clone())
+            .function_call("sign".to_string(), args.to_string().into_bytes(), MPC_SIGN_DEPOSIT, MPC_SIGN_GAS)
+            .then(
+                Self::ext(env::current_account_id())
+                    .with_static_gas(ON_SIGNED_GAS)
+                    .on_signed(payload_hex, action),
+            )
+    }
+}
+
+/// SPIKE ONLY (claims C1-C3), compiled only with `--features spike` (testnet). A default build (mainnet)
+/// does not contain them: they sign for any path, owners' legs included.
+#[cfg(feature = "spike")]
+#[near]
+impl Leash {
+    pub fn sign_raw(&mut self, path: String, payload: String) -> Promise {
+        self.assert_admin();
+        self.mpc_sign(path, parse_hex::<32>(&payload, "payload"), None)
+    }
+
+    pub fn admin_sign_hl(&mut self, path: String, action: HlAction) -> Promise {
+        self.assert_admin();
+        self.sign_hl(path, action)
+    }
+}
+
+#[cfg(test)]
+mod tests;

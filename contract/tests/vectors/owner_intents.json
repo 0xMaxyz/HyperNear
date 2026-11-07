@@ -1,0 +1,76 @@
+{
+  "generator": "viem 2.57.16 hashTypedData+signTypedData",
+  "chainTag": "near-testnet",
+  "contractId": "leash-spike-1107.testnet",
+  "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+  "domainSeparator": "0x3e97f2e52288297ea0d952be20bd74a33c1a9f59d8ea0649d76379edabf62d35",
+  "cases": [
+    {
+      "nonce": 0,
+      "intent": {
+        "type": "approveAgent",
+        "leg": 0,
+        "agent": "0x7bfcce9237bb278b0e166f11955a90595fa9c2c6",
+        "agentName": "leash-leg0",
+        "hlNonce": 1794050000000
+      },
+      "digest": "0x958fcd5372d4e74e7252ef0cb9cebd03f9a9937eaca7970748c99c6d6c9f1ebe",
+      "signature": "0xb7866a4bd9735d845f516ee471e3d1b92031abde9b2489c0d5375a18c458bbb37114ff2ff7370fe8f94f9674802e172dbd698a1820dfa6eae19dc6760842f78d1c"
+    },
+    {
+      "nonce": 1,
+      "intent": {
+        "type": "approveAgent",
+        "leg": 3,
+        "agent": "0x7bfcce9237bb278b0e166f11955a90595fa9c2c6",
+        "agentName": "",
+        "hlNonce": 1794050000001
+      },
+      "digest": "0xe9e4eb6df3cf250088bec92eaeec941600945bac342fc6f07961b21cbf1e0510",
+      "signature": "0xbaa9ab5604388b34514937a7af2176b9fada7392becf50c9189671d40d0930475583ead789f8087009e7217658035dde5864b4f3b5728df4216d97e4c0cd9d8c1c"
+    },
+    {
+      "nonce": 2,
+      "intent": {
+        "type": "withdraw",
+        "leg": 1,
+        "amount": "2.5",
+        "hlTime": 1794050000002
+      },
+      "digest": "0x07414cb303f63573300eff3725e84177a51d8068412618109c872ad9388431fd",
+      "signature": "0x539cf48b5c1d60139038b80b81615d7b704c3caa705b472d9ceb451a8bb6b92475bf939b9f5bf512f1fd9ad8dead15ce9e8b3d973fdc92e559b2a3bcd656d37d1b"
+    },
+    {
+      "nonce": 3,
+      "intent": {
+        "type": "usdClassTransfer",
+        "leg": 0,
+        "amount": "1",
+        "toPerp": false,
+        "hlNonce": 1794050000003
+      },
+      "digest": "0xd48d1193c2b8f389760603532c3763ffd1e02f0f706aee65c3d0bedd873885ba",
+      "signature": "0xf18bf06dc159fe1c715c7ebae50ce450f3007a402162a5890ec7eb9796cee7d91f3a9029bc47dc82b40e3ceabede3cf145acd914e9c12620ebb7a30e0f9453201b"
+    },
+    {
+      "nonce": 4,
+      "intent": {
+        "type": "setPolicy",
+        "agent": "agent.leash.testnet",
+        "dailyCap": "100",
+        "cooldownSec": 600
+      },
+      "digest": "0xcbfc6fe8b2d0715ab7bcdbba17abc05cc67dcfcfa379551740ef8cd90fd9337a",
+      "signature": "0x3cbbc5cb2a31d639d46901845bf5d5f7edac63c6f7a21016ef0e8372e14b55a124547224426972cb7d2b71a7dc6f889a13aeafa456cd47306ad1ae8b2bb748101c"
+    },
+    {
+      "nonce": 5,
+      "intent": {
+        "type": "freeze",
+        "frozen": true
+      },
+      "digest": "0x330ca894620ec7dfa5cb0b2ca5a8b590aa3d6e1a313dd05876f141885e747bef",
+      "signature": "0xdd1b4c4f2ecb7372eb6d22007baa9298d5f665dc8cf06cd354c7bf3cffe283bd394d34f34afe9c7f5f5cb42c090d00033791b4cc6fc7f1ecc87b45e522a5e5f31b"
+    }
+  ]
+}

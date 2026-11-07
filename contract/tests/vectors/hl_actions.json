@@ -1,0 +1,96 @@
+{
+  "generator": "viem 2.57.16 hashDomain+hashStruct",
+  "domainSeparator": "0xfeb1393ca4412a4ca577bd51d04f0a77033514c602f4d0a11490fb95f7428df6",
+  "cases": [
+    {
+      "hyperliquidChain": "Testnet",
+      "action": {
+        "type": "approveAgent",
+        "agentAddress": "0x0000000000000000000000000000000000000001",
+        "agentName": "",
+        "nonce": 0
+      },
+      "digest": "0xa1cb5ee20ffdde5b2bc00e7947c721b0ca234e3eb326e2dc91b73749e34ef4df"
+    },
+    {
+      "hyperliquidChain": "Testnet",
+      "action": {
+        "type": "approveAgent",
+        "agentAddress": "0x8ba1f109551bd432803012645ac136ddd64dba72",
+        "agentName": "leash-leg0",
+        "nonce": 1794050000000
+      },
+      "digest": "0x6132fcbe173716b233bd1ea269ea9e65809f627fa25e10c43866451b1f1beb86"
+    },
+    {
+      "hyperliquidChain": "Mainnet",
+      "action": {
+        "type": "approveAgent",
+        "agentAddress": "0xffffffffffffffffffffffffffffffffffffffff",
+        "agentName": "a much longer agent name ✓",
+        "nonce": 1794050000001
+      },
+      "digest": "0xcddc0e5d39f16902b7431ddbabe31feaa8e9cd56dc3a8ce5dcb764016bf0e7a4"
+    },
+    {
+      "hyperliquidChain": "Testnet",
+      "action": {
+        "type": "usdSend",
+        "destination": "0x8ba1f109551bd432803012645ac136ddd64dba72",
+        "amount": "1",
+        "time": 1794050000002
+      },
+      "digest": "0x2fe3ef5014b6482533eb6e00cba544e0739247d8af355fecd1ec6e3784d29c52"
+    },
+    {
+      "hyperliquidChain": "Mainnet",
+      "action": {
+        "type": "usdSend",
+        "destination": "0x0000000000000000000000000000000000000001",
+        "amount": "12.345678",
+        "time": 1794050000003
+      },
+      "digest": "0x391b93769ca240a00620557309cc4668ce5f4b0a9a8393de318874d2b3121bd4"
+    },
+    {
+      "hyperliquidChain": "Testnet",
+      "action": {
+        "type": "withdraw3",
+        "destination": "0x8ba1f109551bd432803012645ac136ddd64dba72",
+        "amount": "2.5",
+        "time": 1794050000004
+      },
+      "digest": "0x68e29508ee99a24f2575cad6e30b46da7d7f9c3b3bb9ca3a59583663a59a4583"
+    },
+    {
+      "hyperliquidChain": "Mainnet",
+      "action": {
+        "type": "withdraw3",
+        "destination": "0x8ba1f109551bd432803012645ac136ddd64dba72",
+        "amount": "1000000",
+        "time": 1794050000005
+      },
+      "digest": "0x0f84afd1f2ebff4f801d6ac3a6df0c1e5378627f4cfabc97fbc6d51136b98793"
+    },
+    {
+      "hyperliquidChain": "Testnet",
+      "action": {
+        "type": "usdClassTransfer",
+        "amount": "3",
+        "toPerp": true,
+        "nonce": 1794050000006
+      },
+      "digest": "0xad0f62e3507dc9585651b203449796d3275db0f38182178a741884e77f361f6f"
+    },
+    {
+      "hyperliquidChain": "Mainnet",
+      "action": {
+        "type": "usdClassTransfer",
+        "amount": "0.5",
+        "toPerp": false,
+        "nonce": 1794050000007
+      },
+      "digest": "0xf3c2598d2153a173f9bca5d4d0ba20719d206ccce41b05f17e04f7ae478f2b97"
+    }
+  ]
+}
