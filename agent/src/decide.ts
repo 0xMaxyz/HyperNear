@@ -267,3 +267,160 @@ export async function decideByFactors(facts: Facts, deps: FactorDeps, gate: Fact
     return { action: 'hold', source: 'fallback_hold', flagged: true, probs, undecided, jevError, escalationError: msg(e) };
   }
 }
+
+// ------------------------------------------------------ proposeAction
+
+/** Event names are fixed: web and contract code against them. */
+export const DECISION_EVENTS = {
+  proposed: 'decision.proposed',
+  accepted: 'decision.accepted',
+  rejected: 'decision.rejected',
+} as const;
+
+export const SONNET_MODEL = 'claude-sonnet-5-5';
+export const OPUS_MODEL = 'claude-opus-5-5';
+export const JEV_MODEL = 'jev-1.14.0';
+/** Notional (long + short, USD) above which the first escalation goes to Opus. */
+export const DEFAULT_ESCALATE_OPUS_NOTIONAL = 1000;
+
+const COMPACT_KEYS: Record<string, string> = {
+  hedgeCoverage: 'cover',
+  longLegLiquidationDistance: 'longLiq',
+  shortLegLiquidationDistance: 'shortLiq',
+  combinedPnl: 'pnl',
+  fundingOnHedge: 'funding',
+  volatility: 'vol',
+  trend: 'trend',
+  hedgeAge: 'age',
+  reserveMargin: 'reserve',
+};
+
+/** Same buckets, shorter keys and values (text before the colon): keeps Jev request bodies small (see top of file). */
+export function compactFacts(facts: Facts): Facts {
+  return Object.fromEntries(Object.entries(facts).map(([k, v]) => [COMPACT_KEYS[k] ?? k, v.split(':')[0]!]));
+}
+
+export interface OwnerState {
+  /** Bucketed facts (see Facts). */
+  facts: Facts;
+}
+
+export interface ProposeClients {
+  /** Jev, one request with all factor questions in the given order. */
+  ask(facts: Facts, order: FactorKey[]): Promise<FactorProbs>;
+  /** Claude with structured output; `probs` is null when Jev failed. */
+  escalate(model: string, facts: Facts, probs: FactorProbs | null, undecided: FactorKey[], ctx: DecideContext): Promise<Escalation>;
+  shuffle?(xs: FactorKey[]): FactorKey[];
+  now?(): number;
+  newId?(): string;
+}
+
+export interface ProposeOptions {
+  gate?: FactorGate;
+  escalateOpusNotional?: number;
+}
+
+export type FactorDecidedBy = 'jev' | 'claude';
+
+export interface Proposal {
+  id: string;
+  action: Action;
+  /** jev: all factors decisive, table decided. claude: Claude decided (agreeing with the table or Jev was down).
+   *  disagree: Claude and the table differ; the less risky of the two was taken. */
+  source: 'jev' | 'claude' | 'disagree';
+  factors: Record<FactorKey, { p: number | null; decidedBy: FactorDecidedBy }>;
+  rationale: string;
+  latencyMs: number;
+  /** Model that produced the final action ('jev-1.14.0' when Jev decided alone). */
+  model: string;
+  /** True when a person should look twice (disagreement, Jev down, or a failed escalation). */
+  flagged: boolean;
+  error?: string;
+  trace: { jevMs: number | null; calls: Array<{ model: string; ms: number }>; tableAction: Action | null };
+}
+
+/**
+ * Pure proposal for the owner's decision feed (propose mode: nothing is executed here).
+ * Jev answers the yes/no factors; decisive ones (p >= 0.90 or <= 0.10) stay with Jev. If any factor is
+ * undecided, Claude gets the facts plus Jev's numbers: Sonnet, or Opus when the notional is above
+ * `escalateOpusNotional`. If Sonnet's answer differs from the table's, Opus is asked as well and wins.
+ * A remaining disagreement with the table takes the less risky action (state-derived ranking).
+ */
+export async function proposeAction(
+  ownerState: OwnerState,
+  ctx: DecideContext,
+  clients: ProposeClients,
+  opts: ProposeOptions = {},
+): Promise<Proposal> {
+  const now = clients.now ?? Date.now;
+  const start = now();
+  const gate = opts.gate ?? DEFAULT_FACTOR_GATE;
+  const opusAbove = opts.escalateOpusNotional ?? DEFAULT_ESCALATE_OPUS_NOTIONAL;
+  const order = (clients.shuffle ?? fisherYates)(FACTOR_KEYS);
+  const trace: Proposal['trace'] = { jevMs: null, calls: [], tableAction: null };
+  const id = (clients.newId ?? (() => crypto.randomUUID()))();
+
+  let probs: FactorProbs | null = null;
+  let error: string | undefined;
+  const j0 = now();
+  try {
+    probs = await clients.ask(ownerState.facts, order);
+  } catch (e) {
+    error = `jev: ${msg(e)}`;
+  }
+  trace.jevMs = now() - j0;
+
+  const gated = probs ? gateFactors(probs, gate) : null;
+  const undecided = gated ? FACTOR_KEYS.filter((k) => gated[k] === null) : [...FACTOR_KEYS];
+  const factors = Object.fromEntries(
+    FACTOR_KEYS.map((k) => [k, { p: probs ? probs[k] : null, decidedBy: gated && gated[k] !== null ? 'jev' : 'claude' }]),
+  ) as Proposal['factors'];
+  if (probs) trace.tableAction = actionFromFactors(Object.fromEntries(FACTOR_KEYS.map((k) => [k, probs![k] >= 0.5])) as FactorBools);
+
+  const done = (p: Omit<Proposal, 'id' | 'factors' | 'latencyMs' | 'trace'>): Proposal => ({
+    id,
+    factors,
+    latencyMs: now() - start,
+    trace,
+    ...p,
+  });
+
+  if (probs && undecided.length === 0) {
+    return done({ action: trace.tableAction!, source: 'jev', rationale: 'All factors decisive; action from the factor table.', model: JEV_MODEL, flagged: false });
+  }
+
+  const notional = ctx.longNotional + ctx.shortNotional;
+  const ask = async (model: string): Promise<Escalation> => {
+    const c0 = now();
+    try {
+      return await clients.escalate(model, ownerState.facts, probs, undecided, ctx);
+    } finally {
+      trace.calls.push({ model, ms: now() - c0 });
+    }
+  };
+
+  let model = notional > opusAbove ? OPUS_MODEL : SONNET_MODEL;
+  let esc: Escalation;
+  try {
+    esc = await ask(model);
+    if (model === SONNET_MODEL && trace.tableAction && esc.action !== trace.tableAction) {
+      model = OPUS_MODEL; // Sonnet disagrees with the table: Opus settles it
+      esc = await ask(model);
+    }
+  } catch (e) {
+    return done({ action: 'hold', source: 'claude', rationale: 'Escalation failed; holding.', model, flagged: true, error: [error, `claude: ${msg(e)}`].filter(Boolean).join('; ') });
+  }
+
+  const table = trace.tableAction;
+  if (table && esc.action !== table) {
+    return done({
+      action: lessRisky(esc.action, table, ctx),
+      source: 'disagree',
+      rationale: `${esc.rationale} (Claude: ${esc.action}; factor table: ${table}; took the less risky.)`,
+      model,
+      flagged: true,
+      error,
+    });
+  }
+  return done({ action: esc.action, source: 'claude', rationale: esc.rationale, model, flagged: !probs, error });
+}

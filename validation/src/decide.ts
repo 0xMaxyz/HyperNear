@@ -36,19 +36,4 @@ export function percentile(xs: number[], p: number): number {
 }
 
 
-const COMPACT_KEYS: Record<string, string> = {
-  hedgeCoverage: 'cover',
-  longLegLiquidationDistance: 'longLiq',
-  shortLegLiquidationDistance: 'shortLiq',
-  combinedPnl: 'pnl',
-  fundingOnHedge: 'funding',
-  volatility: 'vol',
-  trend: 'trend',
-  hedgeAge: 'age',
-  reserveMargin: 'reserve',
-};
-
-/** Same buckets, shorter keys and values (text before the colon): keeps Jev request bodies small. */
-export function compactFacts(facts: Record<string, string>): Record<string, string> {
-  return Object.fromEntries(Object.entries(facts).map(([k, v]) => [COMPACT_KEYS[k] ?? k, v.split(':')[0]!]));
-}
+export { compactFacts } from '../../agent/src/decide';
