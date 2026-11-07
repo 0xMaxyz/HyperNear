@@ -6,6 +6,6 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   plugins: [react()],
   resolve: { alias: { '@hypernear/client': fileURLToPath(new URL('../packages/hypernear-client/src/intents.ts', import.meta.url)) } },
-  server: { host: '127.0.0.1', port: 5173, strictPort: true, fs: { allow: ['..'] } },
+  server: { host: 'localhost', port: 5173, strictPort: true, fs: { allow: ['..'] } },
   build: { rollupOptions: { input: { main: 'index.html', c13: 'c13.html' } } },
 });

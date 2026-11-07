@@ -2,7 +2,7 @@
 import { chromium } from '@playwright/test';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 
-const url = process.env.C13_URL ?? 'http://127.0.0.1:5173/c13.html';
+const url = process.env.C13_URL ?? 'http://localhost:5173/c13.html';
 const mock = process.argv.includes('--mock-wallet');
 const acct = privateKeyToAccount(generatePrivateKey());
 const browser = await chromium.launch();
