@@ -25,7 +25,11 @@ interface Call {
 describe.skipIf(!live)('C17: Jev decide fixtures', () => {
   it('50 states x 2 shuffled orders', async () => {
     await runClaim('C17', 'C17', 'Jev choice call: latency, shuffle stability, confidence', async (r) => {
-      const client = new TypeSafeClient();
+      // the first call to a pinned model can take over a minute (cold start, measured 78 s), so warm up with a long timeout
+      const client = new TypeSafeClient({ timeout: 180_000 });
+      const w0 = performance.now();
+      await client.systemOne({ state: { warmup: 'yes' }, questions: { d: choice('Pick one', { a: 'first', b: 'second' }) }, model: MODEL });
+      r.numbers.coldStartMs = Math.round(performance.now() - w0);
       const states = loadStates();
       const calls: Call[] = [];
       let shape: unknown;
