@@ -72,11 +72,13 @@ export function planRebalance(
   const sources = s.legs
     .filter((l) => !stressedLegs.includes(l.leg))
     .filter((l) => budget === undefined || l.leg === cfg.reserveLeg)
+    // a leg with any strategy budget (a running strategy) is never drained to top up another leg
+    .filter((l) => budgetLeftUsd?.(l.leg) === undefined)
     .map((l) => ({ leg: l.leg, address: l.address, ...legRatio(s, l.leg) }))
     .filter((l) => l.withdrawable > 0)
     .sort((a, b) => b.ratio - a.ratio || b.withdrawable - a.withdrawable);
   const src = sources[0];
-  if (!src) return blocked(budget === undefined ? 'no other leg has withdrawable USDC' : `reserve leg ${cfg.reserveLeg} has no withdrawable USDC`);
+  if (!src) return blocked(budget === undefined ? 'no other leg without a strategy has withdrawable USDC' : `reserve leg ${cfg.reserveLeg} has no withdrawable USDC`);
   if (budget !== undefined && budget < cfg.minUsd) return blocked(`strategy top-up budget used (leg ${stressed}: $${budget.toFixed(2)} left today)`);
   const st = legRatio(s, stressed);
   const needed = Math.max(cfg.targetMultiple * st.maint - st.accountValue, cfg.minUsd);
