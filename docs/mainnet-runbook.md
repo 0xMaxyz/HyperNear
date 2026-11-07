@@ -59,8 +59,11 @@ quotes from 2026-11-07. HL fees are Hyperliquid mainnet base rates.
    - leg0 opens BTC long ~$24 at 3x (its agent key, HL only);
    - `POST /hedge/open` with an owner-signed Command, ratio 0.5 -> leg1 short ~$12 at 3x (HL minimum $10 per order);
    - `POST /hedge/close` -> reduce-only on both legs; both positions 0. Fees ~$0.03.
-   *Abort point: close positions any time with `/hedge/close`, or the owner freezes (`freeze` intent: contract-signed actions
-   except withdraw stop; HL API wallets already approved can still trade until closed or replaced).*
+   *Abort point: close positions any time with `/hedge/close`, or the owner freezes. `freeze` = halt every contract-signed
+   action except withdraw AND revoke HL trading keys: in the same NEAR tx the contract MPC-signs approveAgent(keyless burn
+   address) for every agent name it approved, and the relayer posts them, so the old API wallets are refused by HL.
+   Orders already resting stay on the book until cancelled. Unfreezing re-approves nothing; approve fresh agents.*
+   Optional for the video: freeze, then show the agent's next order refused (agent/tests/freeze.live.test.ts).
 
 8. **MAINNET: withdraw to the owner.** Owner `withdraw` intent per leg (`withdraw3`, destination = owner, enforced by the
    contract): HL fee 1 USDC each, arrives on Arbitrum. Optional for the video: a withdraw to another address is refused by
@@ -82,5 +85,5 @@ quotes from 2026-11-07. HL fees are Hyperliquid mainnet base rates.
 | init wrong | key still there: redeploy (state: delete and recreate the account) |
 | 1Click stuck | `/v0/status` shows REFUNDED -> funds back at `--refund-to` |
 | HL rejects an action | contract signature is still valid for that nonce only; retry with a fresh nonce (owner re-signs) |
-| guard or agent misbehaves | owner `freeze` (one intent): rebalances and other contract-signed actions stop, withdraw still works; stop the agent process to stop its HL orders |
+| guard or agent misbehaves | owner `freeze` (one intent, ~0.02 NEAR gas for 3 legs): contract-signed actions stop except withdraw, and the HL agent wallets are revoked (their next order is refused); cancel resting orders after re-approving a fresh agent |
 | after lock | only owner withdraws and the agent's capped moves remain; plan a new deployment if needed |

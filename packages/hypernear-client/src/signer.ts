@@ -127,7 +127,7 @@ export class NearMasterSigner implements HlAsyncSigner {
     const cfg = await client.getConfig();
     const mapped = mapHlPayload(payload, { mode, owner: this.#owner, leg, hlChain: cfg.hl_mainnet ? 'Mainnet' : 'Testnet' });
     const owner = this.#owner;
-    let r: { txHash: string; value: SignOut | null };
+    let r: { txHash: string; value: unknown };
     let method: string;
     if (mapped.kind === 'rebalance') {
       method = 'rebalance';
@@ -143,7 +143,7 @@ export class NearMasterSigner implements HlAsyncSigner {
       r = await client.ownerExecute({ owner, nonce, intent: mapped.intent, signature });
     }
     this.#o.onNearTx?.({ method, txHash: r.txHash });
-    const out = r.value;
+    const out = r.value as SignOut | null; // never a Revoked[]: the signer does not send freeze
     if (!out) throw new HyperNearMpcSignError(`MPC sign failed for ${payload.primaryType} (leg ${leg})`);
     const want = hlPayloadDigest(payload as never).slice(2);
     if (out.payload !== want) throw new HyperNearDigestMismatchError(`contract signed ${out.payload}, payload hashes to ${want}`);

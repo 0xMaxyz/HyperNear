@@ -49,11 +49,12 @@ export class AgentKeyStore {
     if (!a) throw new Error(`no agent key for ${owner} leg ${leg}`);
     return agentKeySigner(a.key);
   }
-  /** Returns the existing key's address, or creates and saves one first (saved before HL ever sees it). */
-  ensure(owner: string, leg: number): { address: Hex; name: string; approvedAt?: number } {
+  /** Returns the existing key's address, or creates and saves one first (saved before HL ever sees it).
+   * rotate: always a fresh key (a revoked key is never approved again). */
+  ensure(owner: string, leg: number, rotate = false): { address: Hex; name: string; approvedAt?: number } {
     const s = this.#read();
     const o = (s[owner.toLowerCase()] ??= {});
-    if (!o[String(leg)]) {
+    if (!o[String(leg)] || rotate) {
       const key = generatePrivateKey();
       o[String(leg)] = { address: privateKeyToAccount(key).address.toLowerCase() as Hex, key, name: `leash-leg${leg}` };
       this.#write(s);
@@ -128,18 +129,20 @@ export class Legs {
    * approves it through the contract (owner-mode NearMasterSigner; the owner signs an approveAgent intent).
    * Skips legs whose agent HL already lists.
    */
-  async approveAgents(owner: Hex, legs: number[], signOwnerIntent: (td: OwnerIntentTypedData) => Promise<Hex>) {
+  async approveAgents(owner: Hex, legs: number[], signOwnerIntent: (td: OwnerIntentTypedData) => Promise<Hex>, opts: { rotate?: boolean } = {}) {
     const o = owner.toLowerCase() as Hex;
     const out: { leg: number; agent: Hex; approved: 'already' | 'now' }[] = [];
     for (const leg of legs) {
       const address = await this.client.getLeg(o, leg);
       if (!address) throw new Error(`leg ${leg} of ${o} is not registered`);
-      const agent = this.keys.ensure(o, leg);
-      const listed = (await this.hl.extraAgents({ user: address })).some((a) => a.address.toLowerCase() === agent.address);
-      if (listed) {
-        out.push({ leg, agent: agent.address, approved: 'already' });
+      const agents = await this.hl.extraAgents({ user: address });
+      const prev = this.keys.get(o, leg);
+      if (prev && !opts.rotate && agents.some((a) => a.address.toLowerCase() === prev.address)) {
+        out.push({ leg, agent: prev.address, approved: 'already' });
         continue;
       }
+      // a stored key HL no longer lists was revoked (freeze): never approve it again, rotate
+      const agent = this.keys.ensure(o, leg, Boolean(opts.rotate || prev));
       const master = await NearMasterSigner.create({ client: this.client, owner: o, leg, mode: 'owner', signOwnerIntent, legAddress: address });
       await hlClient(this.network, { master }).approveAgent({ agentAddress: agent.address, agentName: agent.name });
       this.keys.markApproved(o, leg);

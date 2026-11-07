@@ -636,3 +636,118 @@ fn sign_raw_rejects_short_payload() {
         let _ = c.sign_raw("test/leg0".into(), "11".repeat(31));
     });
 }
+
+// ---- freeze revokes the HL agents approved through the contract ----
+
+fn approve_named(leg: u32, name: &str, agent_seed: u8) -> OwnerIntent {
+    OwnerIntent::ApproveAgent { leg, agent: owner(agent_seed).addr, agent_name: name.into(), hl_nonce: 7 }
+}
+
+#[test]
+fn approve_agent_records_each_name_once_and_caps_the_list() {
+    let mut c = contract();
+    let o = owner(1);
+    o.exec(&mut c, 0, approve_named(0, "leash-leg0", 50));
+    o.exec(&mut c, 1, approve_named(0, "leash-leg0", 51)); // same name re-pointed: still one slot
+    o.exec(&mut c, 2, approve_named(1, "leash-leg1", 52));
+    assert_eq!(
+        c.get_agent_slots(o.addr.clone()),
+        vec![AgentSlot { leg: 0, name: "leash-leg0".into() }, AgentSlot { leg: 1, name: "leash-leg1".into() }]
+    );
+    for i in 2..MAX_TRACKED_AGENTS as u64 {
+        o.exec(&mut c, i + 1, approve_named(1, &format!("n{i}"), 53));
+    }
+    expect_panic("too many agent names", || o.exec(&mut c, MAX_TRACKED_AGENTS as u64 + 1, approve_named(2, "one-more", 54)));
+}
+
+#[test]
+fn freeze_signs_approve_agent_to_a_burn_address_for_every_tracked_name() {
+    let mut c = contract();
+    let o = owner(1);
+    o.exec(&mut c, 0, approve_named(0, "leash-leg0", 50));
+    o.exec(&mut c, 1, approve_named(1, "leash-leg1", 51));
+    o.exec(&mut c, 2, approve_named(2, "leash-leg2", 52));
+    ctx(RELAYER, T0);
+    o.exec(&mut c, 3, OwnerIntent::Freeze { frozen: true });
+    assert!(c.get_owner(o.addr.clone()).unwrap().frozen);
+    let want: Vec<(String, String)> = (0..3)
+        .map(|leg| {
+            let path = leg_path(&o.addr, leg);
+            let action = HlAction::ApproveAgent { agent_address: burn_address(&path), agent_name: format!("leash-leg{leg}"), nonce: T0 * 1000 + leg as u64 };
+            (path, hl(action))
+        })
+        .collect();
+    assert_eq!(signed(), want);
+    // burn addresses differ per leg (HL refuses one agent address on two masters)
+    let burns: std::collections::BTreeSet<_> = (0..3).map(|l| burn_address(&leg_path(&o.addr, l))).collect();
+    assert_eq!(burns.len(), 3);
+    let cb: Vec<Value> = get_created_receipts()
+        .iter()
+        .flat_map(|r| r.actions.iter())
+        .filter_map(|a| match a {
+            MockAction::FunctionCallWeight { method_name, args, .. } if method_name == b"on_revoked" => Some(serde_json::from_slice(args).unwrap()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(cb.len(), 1, "one joined callback");
+    assert_eq!(cb[0]["slots"].as_array().unwrap().len(), 3);
+}
+
+#[test]
+fn freeze_without_agents_and_unfreeze_sign_nothing() {
+    let mut c = contract();
+    let o = owner(1);
+    o.exec(&mut c, 0, OwnerIntent::Freeze { frozen: true });
+    assert!(signed().is_empty());
+    o.exec(&mut c, 1, OwnerIntent::Freeze { frozen: false });
+    let o2 = owner(2); // (the mocked storage is shared between contract instances: use another owner)
+    o2.exec(&mut c, 0, approve_named(0, "leash-leg0", 50));
+    o2.exec(&mut c, 1, OwnerIntent::Freeze { frozen: true });
+    ctx(RELAYER, T0);
+    o2.exec(&mut c, 2, OwnerIntent::Freeze { frozen: false });
+    assert!(signed().is_empty(), "unfreezing re-approves nothing");
+}
+
+#[test]
+fn freeze_needs_gas_for_every_revocation() {
+    let mut c = contract();
+    let o = owner(1);
+    for i in 0..MAX_TRACKED_AGENTS as u64 {
+        o.exec(&mut c, i, approve_named((i % 3) as u32, &format!("n{i}"), 50 + i as u8));
+    }
+    let mut b = VMContextBuilder::new();
+    b.current_account_id(CONTRACT.parse().unwrap())
+        .predecessor_account_id(RELAYER.parse().unwrap())
+        .block_timestamp(T0 * 1_000_000_000)
+        .attached_deposit(RELAYER_DEPOSIT)
+        .prepaid_gas(Gas::from_tgas(100));
+    testing_env!(b.build());
+    expect_panic("attach more gas", || o.exec(&mut c, MAX_TRACKED_AGENTS as u64, OwnerIntent::Freeze { frozen: true }));
+}
+
+#[test]
+fn on_revoked_returns_one_entry_per_agent_with_or_without_signature() {
+    let mut c = contract();
+    let o = owner(1);
+    let slot = |leg: u32| AgentSlot { leg, name: format!("leash-leg{leg}") };
+    let act = |leg: u32| HlAction::ApproveAgent { agent_address: burn_address(&leg_path(&o.addr, leg)), agent_name: format!("leash-leg{leg}"), nonce: 1 };
+    let ok = serde_json::to_vec(&serde_json::json!({ "scheme": "Secp256k1", "big_r": { "affine_point": format!("02{}", "11".repeat(32)) }, "s": { "scalar": "22".repeat(32) }, "recovery_id": 1 })).unwrap();
+    let mut b = VMContextBuilder::new();
+    b.current_account_id(CONTRACT.parse().unwrap()).predecessor_account_id(CONTRACT.parse().unwrap());
+    testing_env!(
+        b.build(),
+        near_sdk::test_vm_config(),
+        near_sdk::RuntimeFeesConfig::test(),
+        Default::default(),
+        vec![near_sdk::PromiseResult::Successful(ok), near_sdk::PromiseResult::Failed]
+    );
+    let out = c.on_revoked(vec![
+        (slot(0), burn_address(&leg_path(&o.addr, 0)), "aa".into(), act(0)),
+        (slot(1), burn_address(&leg_path(&o.addr, 1)), "bb".into(), act(1)),
+    ]);
+    assert_eq!(out.len(), 2);
+    assert_eq!((out[0].leg, out[0].signature.as_ref().map(|s| s.recovery_id)), (0, Some(1)));
+    assert_eq!(out[0].signature.as_ref().unwrap().action, Some(act(0)));
+    assert!(out[1].signature.is_none());
+    let _ = &mut c;
+}

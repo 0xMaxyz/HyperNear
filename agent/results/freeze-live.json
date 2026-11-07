@@ -1,0 +1,121 @@
+{
+  "at": "2026-11-07T14:09:36.284Z",
+  "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+  "contractId": "leash-spike-1107.testnet",
+  "agentsBefore": [
+    {
+      "leg": 0,
+      "agent": "0x704a5e0250674f141463a334725ccbddbc2b8180",
+      "approved": "now"
+    },
+    {
+      "leg": 1,
+      "agent": "0x30ab92d329c2fc000048af03b6aeb4d1898b77e1",
+      "approved": "now"
+    },
+    {
+      "leg": 2,
+      "agent": "0xf4125910e427c9b0a567dcfc1d7c72e41d6a91fb",
+      "approved": "now"
+    }
+  ],
+  "restingOid": 64760105271,
+  "freezeTx": "24aTEXc2H2KpADmML9HtXBeckd2NysVcwPBjt1vFv9HK",
+  "revoked": [
+    {
+      "leg": 0,
+      "name": "leash-leg0",
+      "burn": "0xe4846cc0bfeac14423f93d89a1885b121d6e7988",
+      "ok": true,
+      "hl": {
+        "status": "ok",
+        "response": {
+          "type": "default"
+        }
+      }
+    },
+    {
+      "leg": 1,
+      "name": "leash-leg1",
+      "burn": "0x900cdf93cb278961dea5a91dd10703c48d79c273",
+      "ok": true,
+      "hl": {
+        "status": "ok",
+        "response": {
+          "type": "default"
+        }
+      }
+    },
+    {
+      "leg": 2,
+      "name": "leash-leg2",
+      "burn": "0xfddb7af68397cabe6cdb61f2151db8d743aa4ebc",
+      "ok": true,
+      "hl": {
+        "status": "ok",
+        "response": {
+          "type": "default"
+        }
+      }
+    }
+  ],
+  "leg0AgentsAfterFreeze": [
+    {
+      "name": "leash-leg0",
+      "address": "0xe4846cc0bfeac14423f93d89a1885b121d6e7988",
+      "validUntil": 1801836583817
+    }
+  ],
+  "oldAgentRefused": "the exchange rejected the relayed action: Must deposit before performing actions. User: 0xfc5f38a75535cc6a864bb5ba14d9c7f29eecacac",
+  "restingOrderStillOpenAfterFreeze": true,
+  "ms": {
+    "freezeNearAndHlPost": 8209,
+    "refusedAfterFreezeStart": 8900
+  },
+  "events": [
+    {
+      "type": "agents.revoked",
+      "data": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "legs": [
+          {
+            "leg": 0,
+            "name": "leash-leg0",
+            "burn": "0xe4846cc0bfeac14423f93d89a1885b121d6e7988",
+            "ok": true,
+            "hl": {
+              "status": "ok",
+              "response": {
+                "type": "default"
+              }
+            }
+          },
+          {
+            "leg": 1,
+            "name": "leash-leg1",
+            "burn": "0x900cdf93cb278961dea5a91dd10703c48d79c273",
+            "ok": true,
+            "hl": {
+              "status": "ok",
+              "response": {
+                "type": "default"
+              }
+            }
+          },
+          {
+            "leg": 2,
+            "name": "leash-leg2",
+            "burn": "0xfddb7af68397cabe6cdb61f2151db8d743aa4ebc",
+            "ok": true,
+            "hl": {
+              "status": "ok",
+              "response": {
+                "type": "default"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -21,6 +21,11 @@ use eip712::{parse_addr, parse_usd, HlAction};
 /// MPC `sign` requires >= 15 TGas prepaid (v1.signer-prod.testnet config, 2026-11-07); 7 of it funds its resume callback.
 const MPC_SIGN_GAS: Gas = Gas::from_tgas(50);
 const ON_SIGNED_GAS: Gas = Gas::from_tgas(10);
+/// Per-agent MPC sign inside a freeze batch (measured: a whole sign tx burns ~12 TGas; MPC needs >= 15 prepaid).
+const REVOKE_SIGN_GAS: Gas = Gas::from_tgas(20);
+const ON_REVOKED_GAS: Gas = Gas::from_tgas(15);
+/// Agent names tracked per owner. Bounds a freeze to one transaction: 8 x 20 + 15 TGas < 300 TGas.
+pub const MAX_TRACKED_AGENTS: usize = 8;
 const MPC_VIEW_GAS: Gas = Gas::from_tgas(10);
 const ON_LEG_GAS: Gas = Gas::from_tgas(10);
 /// near/mpc `SIGN_DEPOSIT_YOCTONEAR`; any excess is refunded. Paid from this contract's balance.
@@ -49,6 +54,36 @@ enum Key {
     Owners,
     Legs,
     LegOwner,
+    AgentNames,
+}
+
+/// An HL agent name approved through the contract on one of the owner's legs (freeze re-points it to a burn address).
+#[near(serializers = [borsh, json])]
+#[derive(Clone, Debug, PartialEq)]
+pub struct AgentSlot {
+    pub leg: u32,
+    pub name: String,
+}
+
+/// One revocation of a freeze: the approveAgent(burn) the relayer posts to HL, or null if the MPC sign failed.
+#[near(serializers = [json])]
+pub struct Revoked {
+    pub leg: u32,
+    pub name: String,
+    pub burn_address: String,
+    pub signature: Option<SignOut>,
+}
+
+/// A keyless address per leg path: keccak256("leash-burn:" + path)[12..]. Per leg, because HL refuses an agent
+/// address that another master already uses ("Extra agent already used", C4).
+pub fn burn_address(path: &str) -> String {
+    format!("0x{}", hex::encode(&keccak256_array(format!("leash-burn:{path}").as_bytes())[12..]))
+}
+
+/// owner -> agent names approved through the contract. Kept outside the root struct so the deployed state layout
+/// does not change (no migration); hence the explicit flush() after writes.
+fn agent_slots() -> LookupMap<String, Vec<AgentSlot>> {
+    LookupMap::new(Key::AgentNames)
 }
 
 #[near(serializers = [borsh, json])]
@@ -166,7 +201,7 @@ impl Leash {
         nonce: u64,
         intent: OwnerIntent,
         signature: String,
-    ) -> PromiseOrValue<Option<SignOut>> {
+    ) -> PromiseOrValue<near_sdk::serde_json::Value> {
         let storage_before = env::storage_usage();
         let owner_b = parse_addr(&owner);
         let digest = auth::intent_digest(self.domain(), &owner_b, nonce, &intent);
@@ -178,8 +213,17 @@ impl Leash {
             !st.frozen || matches!(intent, OwnerIntent::Withdraw { .. } | OwnerIntent::Freeze { .. }),
             "frozen"
         );
+        let mut revoke = false;
         let to_sign = match intent {
             OwnerIntent::ApproveAgent { leg, agent, agent_name, hl_nonce } => {
+                let mut slots = agent_slots();
+                let list = slots.entry(owner.clone()).or_default();
+                let slot = AgentSlot { leg, name: agent_name.clone() };
+                if !list.contains(&slot) {
+                    require!(list.len() < MAX_TRACKED_AGENTS, "too many agent names for one owner (freeze must fit one tx)");
+                    list.push(slot);
+                }
+                slots.flush();
                 Some((leg, HlAction::ApproveAgent { agent_address: agent, agent_name, nonce: hl_nonce }))
             }
             OwnerIntent::Withdraw { leg, amount, hl_time } => {
@@ -200,16 +244,52 @@ impl Leash {
             }
             OwnerIntent::Freeze { frozen } => {
                 st.frozen = frozen;
+                revoke = frozen; // unfreezing approves nothing: the owner approves fresh agents
                 None
             }
         };
         self.owners.insert(owner.clone(), st);
         self.owners.flush();
         charge_storage(storage_before, env::attached_deposit(), &env::predecessor_account_id());
+        if revoke {
+            if let Some(p) = self.revoke_agents(&owner) {
+                return PromiseOrValue::Promise(p);
+            }
+        }
         match to_sign {
             Some((leg, action)) => PromiseOrValue::Promise(self.sign_hl(leg_path(&owner, leg), action)),
-            None => PromiseOrValue::Value(None),
+            None => PromiseOrValue::Value(near_sdk::serde_json::Value::Null),
         }
+    }
+
+    /// Freeze callback: one result per agent name (joined MPC signs, in `slots` order).
+    #[private]
+    pub fn on_revoked(&self, slots: Vec<(AgentSlot, String, String, HlAction)>) -> Vec<Revoked> {
+        slots
+            .into_iter()
+            .enumerate()
+            .map(|(i, (slot, burn, payload, action))| {
+                #[allow(deprecated)]
+                let sig = match env::promise_result(i as u64) {
+                    near_sdk::PromiseResult::Successful(bytes) => near_sdk::serde_json::from_slice::<MpcSignature>(&bytes).ok(),
+                    _ => None,
+                };
+                if sig.is_none() {
+                    log!("MPC sign failed for agent {} on leg {}", slot.name, slot.leg);
+                }
+                Revoked {
+                    leg: slot.leg,
+                    name: slot.name,
+                    burn_address: burn,
+                    signature: sig.map(|s| SignOut { payload, big_r: s.big_r.affine_point, s: s.s.scalar, recovery_id: s.recovery_id, action: Some(action) }),
+                }
+            })
+            .collect()
+    }
+
+    /// Agent names approved through the contract for this owner (what a freeze revokes).
+    pub fn get_agent_slots(&self, owner: String) -> Vec<AgentSlot> {
+        agent_slots().get(&owner).cloned().unwrap_or_default()
     }
 
     /// Anyone: records the EVM address of `owner`'s leg, read from the MPC contract (not trusted from the caller).
@@ -398,6 +478,42 @@ impl Leash {
         require!(st.agent.as_ref() == Some(&env::predecessor_account_id()), "not this owner's agent");
         require!(!st.frozen, "frozen");
         st
+    }
+
+    /// Freeze: MPC-sign approveAgent(burn address) for every agent name approved on the owner's legs, all in this
+    /// transaction (joined), so HL replaces each agent by a keyless one. The relayer posts the results to HL.
+    fn revoke_agents(&self, owner: &str) -> Option<Promise> {
+        let slots = agent_slots().get(owner).cloned().unwrap_or_default();
+        if slots.is_empty() {
+            return None;
+        }
+        let need = Gas::from_gas(REVOKE_SIGN_GAS.as_gas() * slots.len() as u64 + ON_REVOKED_GAS.as_gas() + Gas::from_tgas(5).as_gas());
+        require!(
+            env::prepaid_gas().as_gas().saturating_sub(env::used_gas().as_gas()) >= need.as_gas(),
+            format!("attach more gas: freezing {} agents needs {} TGas", slots.len(), need.as_tgas())
+        );
+        let now_ms = env::block_timestamp_ms();
+        let mut meta = Vec::with_capacity(slots.len());
+        let mut joined: Option<Promise> = None;
+        for (i, slot) in slots.into_iter().enumerate() {
+            let path = leg_path(owner, slot.leg);
+            let burn = burn_address(&path);
+            let action = HlAction::ApproveAgent { agent_address: burn.clone(), agent_name: slot.name.clone(), nonce: now_ms + i as u64 };
+            let payload = action.digest(self.hl_chain());
+            let args = json!({ "request": { "path": path, "payload_v2": { "Ecdsa": hex::encode(payload) }, "domain_id": MPC_ECDSA_DOMAIN } });
+            let p = Promise::new(self.mpc_contract.clone()).function_call(
+                "sign".to_string(),
+                args.to_string().into_bytes(),
+                MPC_SIGN_DEPOSIT,
+                REVOKE_SIGN_GAS,
+            );
+            joined = Some(match joined {
+                None => p,
+                Some(j) => j.and(p),
+            });
+            meta.push((slot, burn, hex::encode(payload), action));
+        }
+        Some(joined.unwrap().then(Self::ext(env::current_account_id()).with_static_gas(ON_REVOKED_GAS).on_revoked(meta)))
     }
 
     fn sign_hl(&self, path: String, action: HlAction) -> Promise {
