@@ -1,75 +1,50 @@
-# Phase 2: strategies on the HyperNear primitive (design)
+# Phase 2: strategies on the HyperNear primitive
 
-Status: design only, branch `phase2`. Nothing here is built. Goal: demo 2 of the primitive, "one account per bot with capped top-ups": every strategy runs on its own leg, so its losses stay on that leg, the contract's cap and cooldown bound how much the margin guard can top it up, and `freeze` stops all of it.
+Status: built and run on testnet (branch `phase2`). Goal, demo 2 of the primitive, "one account per bot with capped top-ups": every strategy runs on its own leg, so its losses stay on that leg, the contract's cap and cooldown bound how much the margin guard can top it up, and `freeze` stops all of it. Everything is in `agent/src/strategy/`; evidence is in `agent/results/`.
 
-## 1. Strategy spec
+## What was built
 
-One JSON object, validated by one JSON Schema (`agent/src/strategy/schema.json`, checked with `ajv`) plus a few cross-field rules in code (e.g. `lower < upper`).
-
-```json
-{ "id": "grid-btc-1", "type": "grid", "leg": 3, "coin": "BTC",
-  "params": { "lower": 70000, "upper": 80000, "levels": 10, "sizePerLevel": "0.0002" },
-  "limits": { "maxNotional": 200, "maxLeverage": 3, "maxDailyLoss": 15, "topUpCapPerDay": 30 },
-  "onStop": "cancel" }
-```
-
-- `type` is `grid`, `twap` (also DCA) or `carry`; `params` is a different shape per type.
-- Limits can only tighten the existing order policy (`maxLeverage` 5, `maxNotional` $100 per order, allowed coins in `agent/src/config.ts`), never loosen it.
-- `topUpCapPerDay` is an off-chain budget for the guard. The contract's daily cap is per owner and shared by all legs, so the sum of the budgets must be at most that cap (checked when a spec is accepted).
-- Leg numbers: the agent scans legs 0 to 3 today (`MAX_LEGS`), the hedge pair uses 0 and 1, the reserve is 2. The contract tracks at most 8 agent names per owner (that bounds a freeze to one transaction), so 8 legs is the ceiling; raising `MAX_LEGS` to 8 costs a few more `get_leg` reads.
-
-## 2. Runtime
-
-- **One runner per strategy**, one tick loop (10 s, like the guard), using that leg's existing HL API key (`AgentKeyStore`). State in `<dataDir>/strategies.json`; orders carry a client order id so a restart resumes instead of duplicating.
-- **Every order goes through one pure function** `checkOrder(spec, policy, state)`: order policy first, then the spec's limits (notional including resting orders, leverage, daily loss). A refusal is logged, never sent.
-- **Daily loss limit:** when equity falls more than `maxDailyLoss` below the day's start, the runner pauses, cancels resting orders and (per `onStop`) flattens reduce-only. This needs no signature because it only reduces risk.
-- **Kill switch:** `POST /strategy/:id/stop` and `/pause`, owner-signed `Command`s (same verifier and replay cache as `/hedge/open`). `freeze` revokes the leg keys, so every runner also stops when it sees `agents.revoked` or an HL "not an approved agent" error.
-- **Known limit, same as the hedge:** orders already resting (a grid ladder) stay on the book after a freeze, because the revoked key can no longer cancel them. Mitigations: the runner cancels before a normal stop; a grid is capped at `levels` orders; the owner approves a fresh agent to cancel after a freeze; and HL's `scheduleCancel` (dead-man switch) is wrapped in core and armed by the runner, but the exchange refuses it below $1,000,000 traded volume, testnet included (C19), so it only helps accounts with that volume; the working mitigation is `Relayer.onBeforeRevoke`, which cancels every strategy's resting orders before a relayed freeze's revocations are posted.
-- **Margin guard:** unchanged logic, but it must (a) scan all strategy legs, (b) take a configured reserve leg as the source, and (c) never take margin from a leg that runs a strategy with an open position. Events (`strategy.started`, `strategy.order`, `strategy.refused`, `strategy.paused`, `strategy.stopped`) go to the existing `/events` stream.
-
-## 3. Built-ins, simplest first
-
-1. **Grid.** A ladder of post-only limit orders between `lower` and `upper`; when one fills, place the opposite order one level away. Polls `openOrders` and `userFills` each tick (no websocket needed). Stops and cancels if price leaves the range. In a trend it builds one-sided inventory, bounded by `maxNotional` and `maxDailyLoss`.
-2. **TWAP and DCA.** TWAP uses Hyperliquid's native `twapOrder` (core already has `twapOrderOpen`). DCA is a timer: one marketable limit order per interval until `totalNotional` is reached.
-3. **Spot-perp funding carry on one leg.** Feasibility, checked against HL testnet today: our legs are in HL's `default` account mode (`userAbstraction` of leg 0 returns `"default"`). In that mode one address holds spot balances and perp positions at the same time, with separate margin, so a leg can hold spot long plus perp short; it needs USDC on both sides. The agent can only move spot to perp (contract rule), so the owner splits the funding up front with `usdClassTransfer`. It does not need unified or portfolio margin. **Testnet problem:** spot books are thin or mispriced (BTC/USDC spot quotes 1.0, UETH/USDC 0.001); the only usable pair is PURR/USDC spot (4.58) against the PURR perp (4.41) at about $3.8k daily volume, so a live run is a small size on PURR. Logic: enter when predicted funding, net of fees, beats a threshold; keep spot size equal to perp size within a drift band; exit when funding falls below the threshold. A 1-hour spike confirms the spot order path (asset index 10000 + pair index) before any build.
-
-## 4. Strategy builder (plain language to spec)
-
-1. The owner writes rules. Claude (Sonnet 5.5, structured output with the spec JSON Schema as the format, same pattern as `validation/src/claude.ts`) returns `{spec, assumptions[]}`.
-2. `validateSpec(spec, ownerState)` checks the schema, the order policy, that the leg is registered and free, and that the budgets fit the contract cap. Errors go back to Claude for one repair attempt; otherwise the user sees the error.
-3. The UI shows the spec as a diff against the previous spec (or empty), a plain-language summary and the worst case (`maxNotional`, `maxDailyLoss`).
-4. The owner signs a `Command` `strategy.start` that binds the spec by hash (a new `specHash` field in the existing command type, so `packages/hypernear-client` and the web signer change by a few lines). **No auto-start.** Free text only ever produces a proposal; the contract and the signature are the backstop, as in the injection demo.
-
-## 5. Decision layer for running strategies
-
-Reuse the Jev to Claude pipeline (`decideByFactors`, `proposeAction`) with a new action set, `continue | pause | adjust | stop`, and factors such as "is price outside the assumed range", "is the loss near the daily limit", "has funding flipped". Propose mode only: the proposal appears on `/events` as `decision.proposed` and the owner accepts with a signed command. Measured on the existing layer, Jev is rarely decisive at the 0.90 gate, so in practice Claude decides, at 2 to 9 s per proposal. To keep cost flat the check runs only when a trigger fires (price moved by a set amount, or a limit is over half used), not on a fixed timer.
-
-## 6. Cost, tests and cut lines
-
-| Piece | New code | Reused | Hours | Test | Cut line |
-|---|---|---|---|---|---|
-| Spec, schema, `validateSpec`, `checkOrder` | all | `OrderPolicy`, config | 5 | JSON fixtures: valid, invalid, each limit | never cut |
-| Runner, state, endpoints, kill switch, events | runner, `/strategy/*` | `Legs`, key store, `commands.ts`, `EventBus`, `market.ts` | 10 | fake HL transport; dry-run replay | never cut |
-| Guard for strategy legs | scan 8 legs, reserve leg | `guardLoop.ts`, `guard.ts` | 3 | existing guard fixtures plus one new | never cut |
-| Grid | planner, fill handling | order helpers in `hedge.ts` | 6 + 2 live | fill-sequence fixtures; 1 testnet run | keep |
-| TWAP and DCA | slicer | `twapOrderOpen` | 4 + 1 live | slice-plan fixtures; 1 testnet run | keep (drop the live run first) |
-| Carry | spike, entry/exit logic, spot orders | funding reads in `market.ts` | 1 + 8 + 3 live | funding-series fixtures; 1 PURR testnet run | **cut first** |
-| Builder | prompt, repair loop, diff, `specHash` command | `claudeEscalator` pattern, `commands.ts` | 9 | recorded Claude outputs as fixtures; 1 live call | keep |
-| Strategy decisions | action set, triggers | `decide.ts` | 6 | fakes as in `propose.test.ts` | cut second |
-| Web: strategies panel, builder box, diff, sign, stop | panel | current page, signer | 12 | existing Playwright checks | thin version first |
-| README and docs | addendum | | 3 | judge-path run on a fresh clone | |
-
-Total about 73 h with everything. **Thin slice (about 44 h):** spec, runner, guard, grid, TWAP/DCA, builder, a minimal strategies list in the web page. Drop carry, then the strategy decision layer, then the live TWAP run, in that order. Each built-in gets one live testnet run recorded in `validation/results/` like the Phase 1 claims.
-
-## 7. Open question for the user: a full terminal UI
-
-PerpX's UI is large: `packages/ui` is 545 files (6.4 MB) and `apps/web` 794 files (19 MB). Its data hooks call PerpX's `apps/api` (346 files) and use `PerpsClient`, `SdkManager` and stores from core, which we deleted in the baseline strip.
-
-| | Reuse PerpX UI | Extend our page |
+| Piece | Where | Evidence |
 |---|---|---|
-| What is needed | restore the deleted core parts and `api-client`; either an agent shim that speaks PerpX's API or new data hooks; Privy and agent-key wiring; build fixes | add a candlestick chart (`lightweight-charts`, one dependency), positions and orders per leg from HL info, strategies panel |
-| Estimate | 35 to 50 h, high risk | 10 to 16 h |
-| Disclosure | several MB more baseline code outside the NEAR integration, which is not judged | all new code, built in the window |
-| Result | a full terminal: order book, charts, trading panels | a lighter view without order-book depth |
+| Spec and validation against the order policy and the contract policy; `checkOrder` gate for every order | `spec.ts` | fixture tests (`strategy-spec.test.ts`, 44 cases) |
+| Grid (long-only ladder of post-only buys, reduce-only sells one level up) | `grid.ts`, `runner.ts` | [`grid-live.json`](../agent/results/grid-live.json) |
+| TWAP / DCA (one IOC order per interval, `limitPx` cap, skipped slices are not retried) | `runner.ts` | [`twap-live.json`](../agent/results/twap-live.json) (includes a service restart in the middle) |
+| Runner per leg: kill switch, loss limit, freeze stop, dead-man attempt, restart | `runner.ts`, `manager.ts` | unit tests with a fake exchange |
+| Strategy builder (plain language to spec) | `builder.ts`, `POST /strategy/draft` | [`draft-live.json`](../agent/results/draft-live.json), [`builder-e2e-live.json`](../agent/results/builder-e2e-live.json) |
+| Strategy decisions (pause / continue / adjust, propose only) | `decide.ts`, `facts.ts`, `decisions.ts` | [`strategy-decision-live.json`](../agent/results/strategy-decision-live.json), [`strategy-decision-losing-live.json`](../agent/results/strategy-decision-losing-live.json) |
+| Guard for strategy legs (reserve leg, per-strategy budget) | `guardLoop.ts` | [`demo2-live.json`](../agent/results/demo2-live.json) |
 
-Recommendation: extend our page, and pick up a self-contained PerpX component (for example its chart) only if it turns out to be standalone (about 1 h to check). The terminal does not change the security story, and the strategies panel is what the demo needs.
+**Spec.** One JSON object: `{id, type: "grid" | "twap", leg, coin, params, limits {maxNotional, maxLeverage, maxDailyLoss, topUpCapPerDay}, onStop: "cancel" | "flatten"}`, validated by hand-written code in `spec.ts` (no schema library: unknown fields are errors, every error is listed). Limits can only tighten the order policy. Legs 0 to 2 are reserved (hedge pair and guard reserve). The owner signs a `startStrategy` Command whose `specHash` field is the sha256 of the canonical spec; the server compares it with the spec it received, so a changed spec does not start.
+
+**Runtime.** One runner per strategy, ticking every 15 s (5 s in the live runs), trading with the leg's own HL API wallet.
+- Every order goes through `checkOrder`: order policy first (coin, notional, minimum $10), then the spec's limits (exposure including resting orders, price range). A refusal is an event, never an order.
+- Loss limit: `maxDailyLoss` is checked against the strategy's own PnL (`pnl.ts`: fills since the start, positions at mark, funding), never against equity, so a guard top-up is not a gain and an owner transfer is not a loss. It is counted since the start, not reset each day.
+- Kill switch: owner-signed `pauseStrategy` / `stopStrategy`. A pause or stop that cannot clear the book enters `cancelling` and retries every tick (`strategy.cancel_failed`). `onStop: "flatten"` also closes the position.
+- Freeze: the relayer calls `onBeforeRevoke`, which cancels every strategy's resting orders before the revocations are posted (8 s bound). A frozen strategy can be resumed after the owner unfreezes and approves a fresh agent key.
+- Restart: specs and progress are saved to `<dataDir>/strategies.json`. On start every saved strategy comes back paused, orphaned orders on its leg are cancelled (`strategy.restored`), and the owner resumes it with a signed `startStrategy` over the stored spec (`POST /strategy/resume`).
+- Events `strategy.*` (all carry `owner`, `id`, `leg`) go to the existing `/events` stream.
+
+**Dead-man switch.** HL's `scheduleCancel` is wrapped in core (`HlClient.scheduleCancel`) and the runner arms it every tick, but the exchange refuses it until the account has traded $1,000,000 (claim C19, testnet too). The runner reports `strategy.deadman {armed:false}` once and goes on. So a crashed agent leaves at most `levels` resting grid buys until it restarts; restore then cancels them.
+
+**Guard for strategy legs.** A leg that runs a strategy is topped up only from the reserve leg (2), only within the strategy's `topUpCapPerDay`, and only if the strategies' budgets leave the hedge guard its share of the contract's daily cap (`hedgeReserveUsd`, default $20, at most half the cap). The contract's own cap and cooldown still apply on top.
+
+**Builder.** Claude Sonnet 5.5 with structured output drafts a spec from the owner's text and the facts it is given (mids, policy, free legs, existing strategies). It is told to copy the owner's numbers faithfully: a request over a cap is refused by `validateSpec` with the reason, not silently clamped. The response is `{spec, specHash, diff against the running strategy, warnings}`, or 422 `{errors, draft}`. Nothing starts without the owner's signed start. A grid drafted by the builder defaults to `onStop: "flatten"`; a TWAP/DCA to `"cancel"` (it keeps what it bought).
+
+**Strategy decisions.** Same machinery and gate as the hedge decisions: Jev answers five yes/no questions (near liquidation, losing, top-up budget used up, price off plan, volatile) in one request; decisive answers (at least 0.90 or at most 0.10) go through a small table; undecided ones go to Sonnet, then Opus if Sonnet disagrees with the table; a remaining disagreement takes the safer action. The facts are the strategy's own buckets (PnL against the loss limit, share of the top-up budget used, fill rate, slices left, distance to liquidation), not the hedge's margin buckets. Propose only: `decision.proposed` with `kind: "strategy"`; accept goes through `/decision/:id/accept` (pause and adjust pause the strategy, continue closes the proposal).
+
+## Demo 2, as run
+
+[`demo2-live.json`](../agent/results/demo2-live.json): a TWAP bot at 20x on leg 3 with a $5 daily top-up budget. The owner moved the leg's spare margin to spot; the guard moved $5 from leg 2 to leg 3 through the contract's `rebalance` (NEAR tx in the file); a second stress was refused by the guard ("strategy top-up budget used"); a direct `rebalance` above the contract's daily cap was refused by the contract ("daily cap exceeded"). Thresholds were demo values: HL keeps about 10% of the notional non-withdrawable, so a 20x leg stripped of spare margin sits near 8x maintenance, never near the default 2x floor; the run used a guard floor of 10x and an operator max leverage of 20x (the default stays 5x).
+
+## Cut
+
+- **Funding carry** (spot long plus perp short on one leg): not built. Feasibility was checked (legs are in HL's `default` account mode, so one address holds spot and perp), but the agent can only move spot to perp, so entry would need an owner-signed step; it was the first item on the cut list.
+- **Native `twapOrder`:** TWAP/DCA is a timer of IOC orders, which needs no extra signing path and is easier to bound with `checkOrder`.
+- **A full terminal UI:** the web page was extended instead (leg chart, positions and orders, strategies panel). Reusing PerpX's UI would have added several MB of baseline code outside the NEAR integration.
+
+## Known limits
+
+- No exchange-side dead-man below $1M volume (above). A freeze posted by someone other than our relayer still leaves resting orders until a fresh agent cancels them.
+- Runners are in memory between restarts except for the saved specs: a restart pauses everything until the owner resumes.
+- The loss limit counts PnL since the start of the strategy, not per UTC day; unrealized PnL assumes the leg started flat.
+- `/strategy/draft` and strategy proposals are unauthenticated and spend model credits; they are rate-limited per IP.
