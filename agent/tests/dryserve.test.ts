@@ -57,16 +57,46 @@ describe('--dry-run --serve', () => {
     expect((await post(`${base}/relay`, { owner: 'nope' })).status).toBe(400);
   });
 
-  it('/events replays the recorded guard demo sequence', async () => {
+  it('/events replays the recorded guard demo, then the recorded proposals (C18b), then the recorded freeze', async () => {
     const base = await serve();
     const ctrl = new AbortController();
     const res = await fetch(`${base}/events`, { signal: ctrl.signal });
     const reader = res.body!.getReader();
     let text = '';
-    while (!text.includes('event: guard.ok\ndata: {"id":1000007')) text += new TextDecoder().decode((await reader.read()).value);
+    while (!text.includes('event: agents.revoked\n')) text += new TextDecoder().decode((await reader.read()).value);
     ctrl.abort();
     const types = [...text.matchAll(/event: (\S+)/g)].map((m) => m[1]);
-    expect(types).toEqual(['guard.ok', 'stress.marginMoved', 'stress.posted', 'guard.trigger', 'guard.rebalance.start', 'guard.rebalance.signed', 'guard.rebalance.posted', 'guard.ok']);
+    expect(types).toEqual([
+      'guard.ok', 'stress.marginMoved', 'stress.posted', 'guard.trigger', 'guard.rebalance.start', 'guard.rebalance.signed', 'guard.rebalance.posted', 'guard.ok',
+      ...Array(5).fill('decision.proposed'),
+      'agents.revoked',
+    ]);
     expect(text).toMatch(/"dryRun":true/);
+    const proposed = JSON.parse(/event: decision\.proposed\ndata: (.*)\n/.exec(text)![1]!).data;
+    expect(proposed).toMatchObject({ id: 'dry-s01', owner: OWNER, coin: 'BTC', action: 'hold', source: 'disagree', flagged: true, model: 'claude-opus-5-5', recorded: true });
+    expect(proposed.factors.hedgeNeeded).toEqual({ p: 0.46, decidedBy: 'claude' });
+  });
+
+  it('GET /owner: config for the UI, nothing to approve, the latest recorded proposal', async () => {
+    const base = await serve();
+    const r = await (await fetch(`${base}/owner/${OWNER}`)).json();
+    expect(r.config).toEqual({ contractId: DRY_CONTRACT_ID, chainTag: 'near-testnet', agentAccount: 'agent.dry-run', hlNetwork: 'testnet' });
+    expect(r.pendingApprovals).toEqual([]);
+    expect(r.legs[0].agent.approvedAt).toEqual(expect.any(Number));
+    expect(r.decision).toMatchObject({ mode: 'propose', latest: { id: 'dry-s41', action: 'close_both', status: 'open' } });
+  });
+
+  it('accepting a recorded proposal: signed command must match, then simulated within the order policy', async () => {
+    const base = await serve();
+    const sign = async (action: 'close_both' | 'hold') => {
+      const command = newCommand(OWNER, action, 'BTC');
+      return { command, sig: await owner.signTypedData(commandTypedData('near-testnet', DRY_CONTRACT_ID, command) as never) };
+    };
+    expect((await post(`${base}/decision/dry-s21/accept`, await sign('hold'))).status).toBe(400);
+    const r = await (await post(`${base}/decision/dry-s21/accept`, await sign('close_both'))).json();
+    expect(r).toMatchObject({ dryRun: true, id: 'dry-s21', action: 'close_both', auto: false });
+    expect(r.result.simulatedFills.map((f: any) => f.leg)).toEqual([0, 1]);
+    const p = await post(`${base}/decision/propose`, { owner: OWNER });
+    expect(p.status).toBe(202);
   });
 });

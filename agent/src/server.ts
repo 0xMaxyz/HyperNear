@@ -3,6 +3,9 @@
 //   POST /relay         {owner, nonce, intent, sig} -> owner_execute (or {owner, intent:{type:'registerLeg', leg}})
 //   POST /hedge/open    {command, sig}: owner-signed EIP-712 Command (action openHedge, expiry <= 60 s, fresh nonce)
 //   POST /hedge/close   {command, sig}: same, action closeHedge. Both also need the owner's setPolicy opt-in.
+//   POST /decision/propose        {owner}: queue a proposal now (202; it arrives on /events as decision.proposed)
+//   POST /decision/:id/accept     {command, sig}: command.action/coin must equal the proposal's; executed within the order policy
+//   POST /decision/mode           {command, sig}: action setDecisionMode, mode ('off'|'propose'|'auto') in command.coin
 //   GET  /events        SSE: hedge, guard and decision log
 // The guard loop (guardLoop.ts) runs in the same process when the NEAR agent key is set.
 // Run: node agent/src/server.ts            (keys from env, see config.ts)
@@ -17,8 +20,12 @@ import { ReplayCache, verifyCommand } from './commands.ts';
 import { DEFAULT_GUARD_CONFIG, evaluateGuard, type GuardConfig } from './guard.ts';
 import { GuardLoop } from './guardLoop.ts';
 import { HedgeRefused, Hedger } from './hedge.ts';
-import { guardInputs, Legs, type OwnerSnapshot } from './legs.ts';
-import { breakevens, readPnlData, type LegPnlData } from './pnl.ts';
+import { guardInputs, Legs, pendingApprovals, type OwnerSnapshot } from './legs.ts';
+import { claudeEscalator } from './claude.ts';
+import { proposeAction } from './decide.ts';
+import { Decider, DECISION_MODES, DecisionModes, proposalEvent, type DecisionMode } from './decisions.ts';
+import { jevAsk } from './jev.ts';
+import { breakevens, openTime, readPnlData, type LegPnlData } from './pnl.ts';
 import { hlPoster, HttpError, RateLimiter, Relayer } from './relayer.ts';
 
 export interface Deps {
@@ -31,6 +38,8 @@ export interface Deps {
   replay: ReplayCache;
   guardConfig: GuardConfig;
   guardLoop?: GuardLoop;
+  /** proposals, accept, modes; its loop runs only with TYPESAFE_API_KEY and ANTHROPIC_API_KEY set (or in the dry run) */
+  decider?: Decider;
   annualVol?: number;
   /** fills, fee rate, funding per leg for the break-even (default: read from HL) */
   pnlData?: (s: OwnerSnapshot) => Promise<LegPnlData[]>;
@@ -82,6 +91,8 @@ async function assertOptedIn(d: Deps, owner: Hex) {
   if (st.frozen) throw new HttpError(403, 'owner is frozen');
 }
 
+const verifier = (d: Deps) => ({ chainTag: async () => (await d.client.getConfig()).chain_tag, contractId: d.client.contractId, cache: d.replay });
+
 export function handler(d: Deps) {
   return async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', 'http://x');
@@ -94,17 +105,21 @@ export function handler(d: Deps) {
       const ownerPath = /^\/owner\/(0x[0-9a-fA-F]{40})$/.exec(url.pathname);
       if (req.method === 'GET' && ownerPath) {
         const owner = ownerOf(ownerPath[1]);
-        const [snapshot, policy] = await Promise.all([d.legs.snapshot(owner), d.client.getOwner(owner)]);
+        const [snapshot, policy, cfg] = await Promise.all([d.legs.snapshot(owner), d.client.getOwner(owner), d.client.getConfig()]);
         const guard = evaluateGuard(guardInputs(snapshot, d.annualVol ?? 0.6), d.guardConfig);
         const breakeven = breakevens(snapshot, await (d.pnlData ?? ((s) => readPnlData(d.legs.hl, s)))(snapshot));
+        const latest = d.decider?.latest(owner);
         return reply(200, {
           owner,
-          legs: snapshot.legs.map((l) => ({ leg: l.leg, address: l.address, agent: l.agent })),
+          config: { contractId: d.client.contractId, chainTag: cfg.chain_tag, agentAccount: d.config.nearAgent?.accountId ?? null, hlNetwork: cfg.hl_mainnet ? 'mainnet' : 'testnet' },
+          legs: snapshot.legs.map((l) => ({ leg: l.leg, address: l.address, agent: l.agent && { address: l.agent.address, name: l.agent.name, approvedAt: l.agent.approvedAt ?? null } })),
+          pendingApprovals: pendingApprovals(snapshot),
           snapshot,
           policy,
           orderPolicy: d.config.policy,
           guard,
           breakeven,
+          decision: d.decider && { mode: d.decider.d.modes.get(owner), latest: latest ? { ...proposalEvent(latest), status: latest.status, at: latest.at } : null },
         });
       }
       if (req.method === 'POST' && url.pathname === '/relay') {
@@ -115,18 +130,44 @@ export function handler(d: Deps) {
         }
         const out = await d.relayer.relay(ip, await readJson(req));
         d.bus.emit('relay', out);
+        if (out.kind === 'approveAgent' && out.ok && d.legs.keys.get(out.owner, out.leg)?.address === out.agent) d.legs.keys.markApproved(out.owner, out.leg);
+        // a revoked key is never approved again: the next /owner shows a fresh key to approve
+        if (out.kind === 'freeze') for (const r of out.revoked) if (r.ok) d.legs.keys.ensure(out.owner, r.leg, true);
         return reply(200, out);
+      }
+      if (req.method === 'POST' && url.pathname === '/decision/propose') {
+        if (!d.relayer.limiter.allow(req.socket.remoteAddress ?? 'unknown')) throw new HttpError(429, 'rate limited');
+        if (!d.decider || (!d.dryRun && !d.config.decide.live)) throw new HttpError(503, 'decision layer off (TYPESAFE_API_KEY and ANTHROPIC_API_KEY not set)');
+        const owner = ownerOf(((await readJson(req)) as { owner?: unknown })?.owner);
+        const p = await d.decider.prepare(owner);
+        if ('skipped' in p) throw new HttpError(409, p.skipped);
+        void d.decider.run(p.input).catch((e) => console.error('proposal failed:', (e as Error).message));
+        return reply(202, { owner, coin: p.input.coin, queued: true });
+      }
+      if (req.method === 'POST' && url.pathname === '/decision/mode') {
+        if (!d.decider) throw new HttpError(503, 'decision layer off');
+        const cmd = await verifyCommand(verifier(d), await readJson(req), 'setDecisionMode');
+        const mode = cmd.coin as DecisionMode;
+        if (!DECISION_MODES.includes(mode)) throw new HttpError(400, `mode (command.coin) must be one of ${DECISION_MODES.join(', ')}`);
+        if (mode === 'auto') await assertOptedIn(d, cmd.owner);
+        d.decider.d.modes.set(cmd.owner, mode);
+        d.bus.emit('decision.mode', { owner: cmd.owner, mode });
+        return reply(200, { owner: cmd.owner, mode });
+      }
+      const accept = /^\/decision\/([\w-]{1,64})\/accept$/.exec(url.pathname);
+      if (req.method === 'POST' && accept) {
+        if (!d.decider) throw new HttpError(503, 'decision layer off');
+        const id = accept[1]!;
+        const cmd = await verifyCommand(verifier(d), await readJson(req), d.decider.get(id).proposal.action);
+        await assertOptedIn(d, cmd.owner);
+        return reply(200, await d.decider.accept(id, cmd));
       }
       if (req.method === 'POST' && (url.pathname === '/hedge/open' || url.pathname === '/hedge/close')) {
         const open = url.pathname === '/hedge/open';
-        const cmd = await verifyCommand(
-          { chainTag: async () => (await d.client.getConfig()).chain_tag, contractId: d.client.contractId, cache: d.replay },
-          await readJson(req),
-          open ? 'openHedge' : 'closeHedge'
-        );
+        const cmd = await verifyCommand(verifier(d), await readJson(req), open ? 'openHedge' : 'closeHedge');
         await assertOptedIn(d, cmd.owner);
         d.bus.emit('command', { ...cmd });
-        if (d.dryRun) return reply(200, await d.dryRun.hedge(cmd.action, cmd.owner, cmd.coin, Number(cmd.ratio)));
+        if (d.dryRun) return reply(200, await d.dryRun.hedge(open ? 'openHedge' : 'closeHedge', cmd.owner, cmd.coin, Number(cmd.ratio)));
         const out = open ? await d.hedger.openHedge(cmd.owner, cmd.coin, Number(cmd.ratio)) : await d.hedger.closeHedge(cmd.owner, cmd.coin);
         return reply(200, out);
       }
@@ -168,12 +209,24 @@ export function buildDeps(config: AgentConfig): Deps {
     owners: () => [...new Set([...legs.keys.owners(), ...config.guard.watchOwners])] as Hex[],
     cfg: { intervalMs: config.guard.intervalSec * 1000, guard: guardConfig, annualVol: config.guard.annualVol },
   });
-  return {
-    config, client, legs, bus, guardConfig, guardLoop, annualVol: config.guard.annualVol,
+  const hedger = new Hedger(legs, config.policy, bus);
+  const d: Deps = {
+    config, client, legs, bus, guardConfig, guardLoop, annualVol: config.guard.annualVol, hedger,
     replay: new ReplayCache(),
-    hedger: new Hedger(legs, config.policy, bus),
     relayer: new Relayer(client, new RateLimiter(config.relayPerMinute), hlPoster(config.network), bus),
   };
+  const clients = config.decide.live ? { ask: jevAsk(), escalate: claudeEscalator() } : undefined;
+  d.decider = new Decider({
+    legs, bus, policy: config.policy, annualVol: config.guard.annualVol,
+    modes: new DecisionModes(config.dataDir),
+    propose: (i) => (clients ? proposeAction(i.state, i.ctx, clients) : Promise.reject(new Error('decision layer off'))),
+    execute: (owner, action, coin, orders) => hedger.runOrders(owner, action, coin, orders),
+    checkOwner: (owner) => assertOptedIn(d, owner),
+    owners: () => [...new Set([...legs.keys.owners(), ...config.guard.watchOwners])] as Hex[],
+    openedAt: async (s, coin) => openTime((await readPnlData(legs.hl, s)).find((x) => x.leg === 1)?.fills ?? [], coin),
+    intervalMs: config.decide.intervalSec * 1000,
+  });
+  return d;
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -190,9 +243,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const deps = buildDeps(config);
     const server = createServer(handler(deps));
     if (config.nearAgent) deps.guardLoop?.start();
+    if (config.decide.live) deps.decider?.start(); // its own timer: the guard never waits on it
     server.listen(config.port, () => {
       console.log(`hypernear agent on :${config.port} (${config.network}, contract ${config.contractId}, relayer ${config.relayer ? 'set' : 'MISSING'}, ` +
-        `near agent ${config.nearAgent ? 'set, guard loop on' : 'MISSING, guard loop off'})`);
+        `near agent ${config.nearAgent ? 'set, guard loop on' : 'MISSING, guard loop off'}, ` +
+        `decisions ${config.decide.live ? `every ${config.decide.intervalSec} s` : 'off (TYPESAFE_API_KEY / ANTHROPIC_API_KEY not set)'})`);
     });
   }
 }

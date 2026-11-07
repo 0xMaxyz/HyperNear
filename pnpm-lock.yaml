@@ -26,12 +26,18 @@ importers:
 
   agent:
     dependencies:
+      '@anthropic-ai/sdk':
+        specifier: ^1.6.0
+        version: 1.6.0(zod@4.6.7)
       '@hypernear/client':
         specifier: workspace:*
         version: link:../packages/hypernear-client
       '@perps-platform/core':
         specifier: workspace:*
         version: link:../packages/core
+      '@typesafe-ai/sdk':
+        specifier: 0.7.0
+        version: 0.7.0
       viem:
         specifier: 2.54.3
         version: 2.54.3(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.6.7)

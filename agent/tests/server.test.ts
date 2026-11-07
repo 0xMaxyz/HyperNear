@@ -13,6 +13,7 @@ import { EventBus } from '../src/events.ts';
 import { Hedger } from '../src/hedge.ts';
 import { AgentKeyStore, Legs } from '../src/legs.ts';
 import { HttpError, parseRelayBody, RateLimiter, Relayer } from '../src/relayer.ts';
+import { Decider, DecisionModes } from '../src/decisions.ts';
 import { handler, type Deps } from '../src/server.ts';
 import { ch, OWNER, snap } from './agent-helpers.ts';
 
@@ -63,7 +64,7 @@ describe('AgentKeyStore', () => {
 
 // ---- HTTP API with a mocked contract and a fake leg snapshot
 
-function deps(o: { owner?: Record<string, unknown> | null; legs?: Record<number, string | null>; fail?: string } = {}) {
+function deps(o: { owner?: Record<string, unknown> | null; legs?: Record<number, string | null>; fail?: string; value?: unknown } = {}) {
   const calls: { method: string; args: Record<string, unknown> }[] = [];
   const backend: NearBackend = {
     async view<T>(_c: string, method: string, args: Record<string, unknown>) {
@@ -75,7 +76,7 @@ function deps(o: { owner?: Record<string, unknown> | null; legs?: Record<number,
     async call<T>(_c: string, method: string, args: Record<string, unknown>) {
       calls.push({ method, args });
       if (o.fail) throw new (await import('@hypernear/client')).HyperNearContractError(o.fail);
-      return { txHash: 'tx1', value: (method === 'register_leg' ? LEG0 : null) as T };
+      return { txHash: 'tx1', value: (method === 'register_leg' ? LEG0 : (o.value ?? null)) as T };
     },
   };
   const client = new HyperNearClient({ contractId: 'leash.testnet', backend });
@@ -207,5 +208,105 @@ describe('signed commands on /hedge/*', () => {
     const r2 = await post(`${base}/hedge/close`, body);
     expect(r2.status).toBe(401);
     expect((await r2.json()).error).toMatch(/replayed/);
+  });
+});
+
+describe('approveAgent end to end', () => {
+  const AGENT_NAME = 'leash-leg0';
+  const signOut = (agent: string) => ({ payload: '00', big_r: `02${'aa'.repeat(32)}`, s: 'bb'.repeat(32), recovery_id: 0, action: { type: 'approveAgent', agentAddress: agent, agentName: AGENT_NAME, nonce: 123 } });
+
+  async function setup(hlReply: unknown) {
+    const keysDir = mkdtempSync(join(tmpdir(), 'hypernear-'));
+    const agent = new AgentKeyStore(keysDir).ensure(OWNER, 0).address;
+    const { d } = deps({ value: signOut(agent) });
+    const legs = new Legs({ client: d.client, dataDir: keysDir, network: 'testnet', coins: ['BTC'] });
+    // the live snapshot creates each registered leg's key (Legs.snapshot -> keys.ensure); HL is not reachable here
+    legs.snapshot = async () => {
+      const s = snap(ch(), ch());
+      return { ...s, legs: s.legs.map((l) => ({ ...l, agent: legs.keys.ensure(OWNER, l.leg) })) };
+    };
+    const posted: any[] = [];
+    const deps2: Deps = { ...d, legs, relayer: new Relayer(d.client, new RateLimiter(5), async (b) => (posted.push(b), hlReply), d.bus) };
+    return { d: deps2, agent, posted, base: await serve(deps2) };
+  }
+  const intent = (agent: string) => ({ type: 'approveAgent', leg: 0, agent, agentName: AGENT_NAME, hlNonce: 123 });
+
+  it('/owner lists every leg key still to approve with the exact intent fields, plus config', async () => {
+    const { base, agent } = await setup({ status: 'ok' });
+    const r = await (await fetch(`${base}/owner/${OWNER}`)).json();
+    expect(r.config).toEqual({ contractId: 'leash.testnet', chainTag: 'near-testnet', agentAccount: 'agent.testnet', hlNetwork: 'testnet' });
+    expect(r.legs[0].agent).toMatchObject({ address: agent, approvedAt: null });
+    expect(r.pendingApprovals.map((p: any) => [p.type, p.leg, p.agentName])).toEqual([['approveAgent', 0, 'leash-leg0'], ['approveAgent', 1, 'leash-leg1']]);
+    expect(r.pendingApprovals[0]).toMatchObject({ agent, hlNonce: expect.any(Number) });
+  });
+
+  it('/relay posts the contract-signed approval to HL, marks the key approved, emits agents.approved', async () => {
+    const { d, base, agent, posted } = await setup({ status: 'ok', response: { type: 'default' } });
+    const r = await (await post(`${base}/relay`, { owner: OWNER, nonce: 3, intent: intent(agent), sig: SIG })).json();
+    expect(r).toMatchObject({ kind: 'approveAgent', owner: OWNER, leg: 0, agent, ok: true, txHash: 'tx1' });
+    expect(posted[0]).toMatchObject({ action: { type: 'approveAgent', agentAddress: agent, hyperliquidChain: 'Testnet', signatureChainId: '0x66eee' }, nonce: 123 });
+    expect(d.legs.keys.get(OWNER, 0)?.approvedAt).toEqual(expect.any(Number));
+    expect(d.bus.since().find((e) => e.type === 'agents.approved')?.data).toMatchObject({ owner: OWNER, leg: 0, agent, ok: true });
+    const o = await (await fetch(`${base}/owner/${OWNER}`)).json();
+    expect(o.pendingApprovals.map((p: any) => p.leg)).toEqual([1]);
+  });
+
+  it('an HL refusal comes back as ok: false with the HL text (200); the key stays unapproved', async () => {
+    const { d, base, agent } = await setup({ status: 'err', response: 'Must deposit before performing actions.' });
+    const r = await post(`${base}/relay`, { owner: OWNER, nonce: 3, intent: intent(agent), sig: SIG });
+    expect(r.status).toBe(200);
+    expect(await r.json()).toMatchObject({ ok: false, hl: { response: expect.stringMatching(/Must deposit/) } });
+    expect(d.legs.keys.get(OWNER, 0)?.approvedAt).toBeUndefined();
+  });
+});
+
+describe('decision routes', () => {
+  function withDecider() {
+    const { d } = deps();
+    d.legs.snapshot = async () =>
+      snap(ch({ accountValue: 50, maint: 5, positions: [{ coin: 'BTC', szi: '0.0008' }] }), ch({ accountValue: 50, maint: 20, positions: [{ coin: 'BTC', szi: '-0.0006' }] }));
+    const executed: unknown[] = [];
+    d.config = { ...d.config, decide: { live: true, intervalSec: 300 } };
+    d.decider = new Decider({
+      legs: d.legs, bus: d.bus, policy: d.config.policy, annualVol: 0.6,
+      modes: new DecisionModes(mkdtempSync(join(tmpdir(), 'hypernear-'))),
+      propose: async () => ({ id: 'p-1', action: 'reduce_hedge', source: 'jev', factors: {} as never, rationale: 'r', latencyMs: 1, model: 'jev-1.14.0', flagged: false, trace: { jevMs: 1, calls: [], tableAction: null } }),
+      execute: async (_o, _a, _c, orders) => (executed.push(orders), { ok: true }),
+      checkOwner: async () => undefined,
+      owners: () => [OWNER],
+    });
+    return { d, executed };
+  }
+
+  it('propose (202, result on /events), then accept with a matching signed command', async () => {
+    const { d, executed } = withDecider();
+    const base = await serve(d);
+    const r = await post(`${base}/decision/propose`, { owner: OWNER });
+    expect(r.status).toBe(202);
+    expect(await r.json()).toMatchObject({ owner: OWNER, coin: 'BTC', queued: true });
+    await new Promise((ok) => setTimeout(ok, 20));
+    expect(d.bus.since().find((e) => e.type === 'decision.proposed')?.data).toMatchObject({ id: 'p-1', action: 'reduce_hedge', coin: 'BTC' });
+    const wrong = await post(`${base}/decision/p-1/accept`, await signed(newCommand(OWNER, 'close_both', 'BTC')));
+    expect(wrong.status).toBe(400);
+    expect((await wrong.json()).error).toMatch(/must be reduce_hedge/);
+    const ok = await post(`${base}/decision/p-1/accept`, await signed(newCommand(OWNER, 'reduce_hedge', 'BTC')));
+    expect(ok.status).toBe(200);
+    expect(executed).toHaveLength(1);
+    // a fresh nonce: the replay cache would answer 401 first
+    expect((await post(`${base}/decision/p-1/accept`, await signed(newCommand(OWNER, 'reduce_hedge', 'BTC', '0', 30, Date.now() + 7)))).status).toBe(409);
+    const o = await (await fetch(`${base}/owner/${OWNER}`)).json();
+    expect(o.decision).toMatchObject({ mode: 'propose', latest: { id: 'p-1', status: 'accepted' } });
+  });
+
+  it('mode: owner-signed setDecisionMode; unsigned or unknown mode refused; 503 without model keys', async () => {
+    const { d } = withDecider();
+    const base = await serve(d);
+    const r = await post(`${base}/decision/mode`, await signed(newCommand(OWNER, 'setDecisionMode', 'auto')));
+    expect(await r.json()).toMatchObject({ owner: OWNER, mode: 'auto' });
+    expect(d.decider!.d.modes.get(OWNER)).toBe('auto');
+    expect((await post(`${base}/decision/mode`, await signed(newCommand(OWNER, 'setDecisionMode', 'yolo', '0', 30, Date.now() + 7)))).status).toBe(400);
+    expect((await post(`${base}/decision/mode`, { owner: OWNER, mode: 'auto' })).status).toBe(401);
+    d.config = { ...d.config, decide: { live: false, intervalSec: 300 } };
+    expect((await post(`${base}/decision/propose`, { owner: OWNER })).status).toBe(503);
   });
 });

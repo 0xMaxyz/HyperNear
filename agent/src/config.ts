@@ -24,6 +24,8 @@ export interface AgentConfig {
   /** POST /relay requests per IP per minute. */
   relayPerMinute: number;
   port: number;
+  /** decision layer: live when both model keys are set (the SDKs read them from env) */
+  decide: { live: boolean; intervalSec: number };
   guard: {
     intervalSec: number;
     /** trigger at accountValue / maintenance <= this (plan: 2) */
@@ -60,6 +62,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AgentConfig {
     },
     relayPerMinute: num(env.HYPERNEAR_RELAY_PER_MINUTE, 20),
     port: num(env.PORT, 8787),
+    decide: { live: Boolean(env.TYPESAFE_API_KEY && env.ANTHROPIC_API_KEY), intervalSec: num(env.HYPERNEAR_DECIDE_INTERVAL_SEC, 300) },
     guard: {
       intervalSec: num(env.HYPERNEAR_GUARD_INTERVAL_SEC, 10),
       marginFloor: num(env.HYPERNEAR_GUARD_MARGIN_FLOOR, 2),

@@ -10,8 +10,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.6.0",
     "@hypernear/client": "workspace:*",
     "@perps-platform/core": "workspace:*",
+    "@typesafe-ai/sdk": "0.7.0",
     "viem": "2.54.3"
   }
 }
