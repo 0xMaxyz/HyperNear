@@ -65,7 +65,7 @@ describe('--dry-run --serve', () => {
     let text = '';
     while (!text.includes('event: agents.revoked\n')) text += new TextDecoder().decode((await reader.read()).value);
     ctrl.abort();
-    const types = [...text.matchAll(/event: (\S+)/g)].map((m) => m[1]);
+    const types = [...text.matchAll(/event: (\S+)/g)].map((m) => m[1]!).filter((t) => !t.startsWith('strategy.')); // the strategy replay follows
     expect(types).toEqual([
       'guard.ok', 'stress.marginMoved', 'stress.posted', 'guard.trigger', 'guard.rebalance.start', 'guard.rebalance.signed', 'guard.rebalance.posted', 'guard.ok',
       ...Array(5).fill('decision.proposed'),

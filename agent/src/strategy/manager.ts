@@ -77,7 +77,7 @@ export class StrategyManager {
   }
 
   #onLeg(owner: Hex, leg: number) {
-    return this.#mine(owner).find((r) => r.runner.spec.leg === leg && r.runner.state !== 'stopped' && r.runner.state !== 'done')?.runner;
+    return this.#mine(owner).find((r) => r.runner.spec.leg === leg && r.runner.state !== 'stopped')?.runner;
   }
 
   /** What the guard may still spend on this leg today (the strategy's topUpCapPerDay); undefined: no strategy runs there. */
@@ -113,7 +113,7 @@ export class StrategyManager {
 
   /** Everything validateSpec needs; `selfId` is excluded from the busy legs and the budget (it is being replaced or resumed). */
   async context(owner: Hex, selfId?: string) {
-    const live = this.#mine(owner).filter((r) => (r.runner.state === 'running' || r.runner.state === 'paused') && r.runner.spec.id !== selfId);
+    const live = this.#mine(owner).filter((r) => r.runner.state !== 'stopped' && r.runner.spec.id !== selfId);
     const [registered, st] = await Promise.all([this.#o.legs.registered(owner), this.#o.client.getOwner(owner)]);
     return {
       orderPolicy: this.#o.policy,
