@@ -1,0 +1,165 @@
+{
+  "claim": "C17b",
+  "title": "Jev yes/no factor layout: decisiveness at 0.90, stability, latency, agreement with Claude",
+  "status": "✅",
+  "at": "2026-11-07T14:07:57.692Z",
+  "network": "testnet",
+  "numbers": {
+    "calls": 100,
+    "errors": 0,
+    "attempts": 101,
+    "failedAttempts": 1,
+    "latencyP50Ms": 421,
+    "latencyP95Ms": 483,
+    "maxBodyBytes": 713,
+    "shareCallsFullyDecidedAt090": 0,
+    "shareStatesDecidedInBothRuns": 0,
+    "decisive.hedgeNeeded": 0,
+    "decisive.fundingMaterial": 0.03,
+    "decisive.nearLiquidation": 0.31,
+    "decisive.inProfit": 0.35,
+    "decisive.volatile": 0,
+    "actionFlipRate": 0.04,
+    "factorBooleanFlipRate": 0.016,
+    "meanAbsProbDiffBetweenRuns": 0.01404,
+    "agreementWithClaudeAll": 0.3,
+    "agreementCompared": 10,
+    "agreementWithClaudeWhereDecided": null,
+    "agreementComparedDecided": 0
+  },
+  "refs": {
+    "agreementRows": [
+      {
+        "id": "s01",
+        "jev": "close_both",
+        "claude": "hold",
+        "decidedInBothRuns": false,
+        "gate": {
+          "hedgeNeeded": null,
+          "fundingMaterial": null,
+          "nearLiquidation": null,
+          "inProfit": null,
+          "volatile": null
+        }
+      },
+      {
+        "id": "s06",
+        "jev": "close_both",
+        "claude": "close_both",
+        "decidedInBothRuns": false,
+        "gate": {
+          "hedgeNeeded": null,
+          "fundingMaterial": null,
+          "nearLiquidation": null,
+          "inProfit": false,
+          "volatile": null
+        }
+      },
+      {
+        "id": "s11",
+        "jev": "hold",
+        "claude": "reduce_hedge",
+        "decidedInBothRuns": false,
+        "gate": {
+          "hedgeNeeded": null,
+          "fundingMaterial": null,
+          "nearLiquidation": null,
+          "inProfit": null,
+          "volatile": null
+        }
+      },
+      {
+        "id": "s16",
+        "jev": "close_both",
+        "claude": "reduce_hedge",
+        "decidedInBothRuns": false,
+        "gate": {
+          "hedgeNeeded": null,
+          "fundingMaterial": null,
+          "nearLiquidation": null,
+          "inProfit": null,
+          "volatile": null
+        }
+      },
+      {
+        "id": "s21",
+        "jev": "close_both",
+        "claude": "close_both",
+        "decidedInBothRuns": false,
+        "gate": {
+          "hedgeNeeded": null,
+          "fundingMaterial": null,
+          "nearLiquidation": null,
+          "inProfit": null,
+          "volatile": null
+        }
+      },
+      {
+        "id": "s26",
+        "jev": "close_both",
+        "claude": "hold",
+        "decidedInBothRuns": false,
+        "gate": {
+          "hedgeNeeded": null,
+          "fundingMaterial": null,
+          "nearLiquidation": false,
+          "inProfit": null,
+          "volatile": null
+        }
+      },
+      {
+        "id": "s31",
+        "jev": "take_profit",
+        "claude": "take_profit",
+        "decidedInBothRuns": false,
+        "gate": {
+          "hedgeNeeded": null,
+          "fundingMaterial": null,
+          "nearLiquidation": null,
+          "inProfit": null,
+          "volatile": null
+        }
+      },
+      {
+        "id": "s36",
+        "jev": "reduce_hedge",
+        "claude": "close_both",
+        "decidedInBothRuns": false,
+        "gate": {
+          "hedgeNeeded": null,
+          "fundingMaterial": null,
+          "nearLiquidation": true,
+          "inProfit": null,
+          "volatile": null
+        }
+      },
+      {
+        "id": "s41",
+        "jev": "close_both",
+        "claude": "hold",
+        "decidedInBothRuns": false,
+        "gate": {
+          "hedgeNeeded": null,
+          "fundingMaterial": null,
+          "nearLiquidation": false,
+          "inProfit": null,
+          "volatile": null
+        }
+      },
+      {
+        "id": "s46",
+        "jev": "close_both",
+        "claude": "add_hedge",
+        "decidedInBothRuns": false,
+        "gate": {
+          "hedgeNeeded": null,
+          "fundingMaterial": null,
+          "nearLiquidation": null,
+          "inProfit": false,
+          "volatile": null
+        }
+      }
+    ]
+  },
+  "notes": []
+}

@@ -1,0 +1,55 @@
+{
+  "model": "claude-sonnet-5-5",
+  "decisions": [
+    {
+      "id": "s01",
+      "action": "hold",
+      "rationale": "The hedge is fully covered with both legs at safe liquidation distances, funding is neutral, and the hedge is only minutes old, so any change would add risk and cost without a clear benefit. Reserve margin is thin and volatility is elevated, so avoid actions like adding to the short leg or taking profit on one leg that would unbalance the hedge and expose the remaining leg."
+    },
+    {
+      "id": "s06",
+      "action": "close_both",
+      "rationale": "Both legs are within 1.5x to 3x of maintenance margin while the combined PnL is a large loss, so liquidation risk and capital erosion take priority over waiting for a recovery. Closing both now preserves the remaining capital, even though volatility is calm and reserve margin is ample."
+    },
+    {
+      "id": "s11",
+      "action": "reduce_hedge",
+      "rationale": "The short is larger than the long, so the position is net short while price is falling, and the long leg's liquidation distance is already close at 1.5x to 3x maintenance margin. Shrinking the short brings coverage back toward neutral, and it also cuts the exposure that would hurt if price reversed sharply, while ample reserve margin and calm volatility leave room to do this without closing both legs."
+    },
+    {
+      "id": "s16",
+      "action": "reduce_hedge",
+      "rationale": "Price is rising in elevated volatility, so the short leg is the one nearing liquidation (1.5x to 3x maintenance margin) and there is no reserve margin to top it up. Shrinking the short frees margin and moves it away from liquidation, and the long leg's comfortable distance and flat combined PnL mean the extra directional exposure is acceptable."
+    },
+    {
+      "id": "s21",
+      "action": "close_both",
+      "rationale": "The short leg is only 1.5x to 3x maintenance margin from liquidation with extreme volatility and no reserve margin to top it up, so a spike could liquidate it and break the hedge. With a large combined profit already on the books, closing both legs now locks in gains and removes the liquidation risk."
+    },
+    {
+      "id": "s26",
+      "action": "hold",
+      "rationale": "Both legs sit far from liquidation (over 6x maintenance margin) and the combined PnL is a small profit, while funding cost is minor and the hedge is only minutes old in a ranging market. Closing, trimming, or resizing either leg in extreme volatility with thin reserve margin would add slippage and fee risk without clear benefit, so keep the structure and monitor it."
+    },
+    {
+      "id": "s31",
+      "action": "take_profit",
+      "rationale": "Combined PnL is a large profit, but reserve margin is thin and the long is only half hedged, so locking in gains from the profitable leg builds capital and frees margin while liquidation distances are still comfortable. Closing everything would give up the rising trend and adding a hedge would add funding cost and drain the thin reserves."
+    },
+    {
+      "id": "s36",
+      "action": "close_both",
+      "rationale": "Both legs are within 1.5x maintenance margin of liquidation with thin reserve margin and no effective hedge coverage, so any adverse move could liquidate a leg and there is little capital to top up. Closing both now preserves capital at a small loss, which takes priority over the funding being earned."
+    },
+    {
+      "id": "s41",
+      "action": "hold",
+      "rationale": "Both legs are far from liquidation and volatility is calm, so there is no urgent protection need, and the falling price favors keeping the short leg that is producing the profit. Funding cost is high but the hedge is only minutes old, and with no reserve margin, adding hedge or closing out legs gains little versus the risk of acting prematurely."
+    },
+    {
+      "id": "s46",
+      "action": "add_hedge",
+      "rationale": "The long leg is close to liquidation while price is falling in elevated volatility, and only about half of it is hedged, so growing the short leg cuts directional exposure and eases liquidation risk. The short leg has a comfortable liquidation buffer, funding is paying us, and reserve margin is ample to support the larger hedge."
+    }
+  ]
+}

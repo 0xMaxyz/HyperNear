@@ -2,12 +2,12 @@
   "claim": "C18",
   "title": "Claude structured-output escalation: latency, agreement with Jev",
   "status": "✅",
-  "at": "2026-11-07T13:40:39.251Z",
+  "at": "2026-11-07T14:07:13.843Z",
   "network": "testnet",
   "numbers": {
     "calls": 10,
-    "latencyP50Ms": 2150,
-    "latencyP95Ms": 3455,
+    "latencyP50Ms": 2055,
+    "latencyP95Ms": 2642,
     "agreementWithJev": 0.5,
     "compared": 10
   },
@@ -17,7 +17,7 @@
     "sample": {
       "out": {
         "action": "hold",
-        "rationale": "The hedge is fully covered with both legs at comfortable or far liquidation distances, funding is neutral, and the hedge is only minutes old, so there is no pressing reason to change it. Reducing or taking profit on a leg would break the hedge amid elevated volatility, and adding to the short would drain thin reserve margin and shrink the short leg's liquidation buffer."
+        "rationale": "The hedge is fully covered with both legs at safe liquidation distances, funding is neutral, and the hedge is only minutes old, so any change would add risk and cost without a clear benefit. Reserve margin is thin and volatility is elevated, so avoid actions like adding to the short leg or taking profit on one leg that would unbalance the hedge and expose the remaining leg."
       },
       "usage": {
         "input_tokens": 608,
@@ -27,7 +27,7 @@
           "ephemeral_5m_input_tokens": 0,
           "ephemeral_1h_input_tokens": 0
         },
-        "output_tokens": 136,
+        "output_tokens": 137,
         "output_tokens_details": {
           "thinking_tokens": 0
         },

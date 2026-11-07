@@ -1,0 +1,1905 @@
+{
+  "model": "jev-1.14.0",
+  "calls": [
+    {
+      "id": "s01",
+      "run": 0,
+      "order": [
+        "inProfit",
+        "volatile",
+        "nearLiquidation",
+        "fundingMaterial",
+        "hedgeNeeded"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.47,
+        "fundingMaterial": 0.17,
+        "nearLiquidation": 0.21,
+        "inProfit": 0.73,
+        "volatile": 0.77
+      },
+      "ms": 441.086327
+    },
+    {
+      "id": "s01",
+      "run": 1,
+      "order": [
+        "inProfit",
+        "nearLiquidation",
+        "fundingMaterial",
+        "hedgeNeeded",
+        "volatile"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.47,
+        "fundingMaterial": 0.16,
+        "nearLiquidation": 0.21,
+        "inProfit": 0.71,
+        "volatile": 0.76
+      },
+      "ms": 457.20292499999994
+    },
+    {
+      "id": "s02",
+      "run": 0,
+      "order": [
+        "nearLiquidation",
+        "volatile",
+        "hedgeNeeded",
+        "fundingMaterial",
+        "inProfit"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.47,
+        "fundingMaterial": 0.27,
+        "nearLiquidation": 0.65,
+        "inProfit": 0.78,
+        "volatile": 0.19
+      },
+      "ms": 425.3714729999999
+    },
+    {
+      "id": "s02",
+      "run": 1,
+      "order": [
+        "nearLiquidation",
+        "inProfit",
+        "fundingMaterial",
+        "hedgeNeeded",
+        "volatile"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.46,
+        "fundingMaterial": 0.24,
+        "nearLiquidation": 0.69,
+        "inProfit": 0.76,
+        "volatile": 0.18
+      },
+      "ms": 430.6940820000002
+    },
+    {
+      "id": "s03",
+      "run": 0,
+      "order": [
+        "fundingMaterial",
+        "inProfit",
+        "hedgeNeeded",
+        "volatile",
+        "nearLiquidation"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.47,
+        "fundingMaterial": 0.79,
+        "nearLiquidation": 0.21,
+        "inProfit": 0.75,
+        "volatile": 0.28
+      },
+      "ms": 406.78140699999994
+    },
+    {
+      "id": "s03",
+      "run": 1,
+      "order": [
+        "hedgeNeeded",
+        "fundingMaterial",
+        "volatile",
+        "nearLiquidation",
+        "inProfit"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.48,
+        "fundingMaterial": 0.82,
+        "nearLiquidation": 0.18,
+        "inProfit": 0.74,
+        "volatile": 0.26
+      },
+      "ms": 449.3299079999997
+    },
+    {
+      "id": "s04",
+      "run": 0,
+      "order": [
+        "fundingMaterial",
+        "volatile",
+        "inProfit",
+        "nearLiquidation",
+        "hedgeNeeded"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.34,
+        "fundingMaterial": 0.43,
+        "nearLiquidation": 0.96,
+        "inProfit": 0.08,
+        "volatile": 0.84
+      },
+      "ms": 406.14719000000014
+    },
+    {
+      "id": "s04",
+      "run": 1,
+      "order": [
+        "volatile",
+        "nearLiquidation",
+        "fundingMaterial",
+        "hedgeNeeded",
+        "inProfit"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.31,
+        "fundingMaterial": 0.48,
+        "nearLiquidation": 0.96,
+        "inProfit": 0.08,
+        "volatile": 0.84
+      },
+      "ms": 411.400623
+    },
+    {
+      "id": "s05",
+      "run": 0,
+      "order": [
+        "hedgeNeeded",
+        "volatile",
+        "inProfit",
+        "nearLiquidation",
+        "fundingMaterial"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.4,
+        "fundingMaterial": 0.14,
+        "nearLiquidation": 0.18,
+        "inProfit": 0.07,
+        "volatile": 0.78
+      },
+      "ms": 418.13020800000004
+    },
+    {
+      "id": "s05",
+      "run": 1,
+      "order": [
+        "inProfit",
+        "fundingMaterial",
+        "hedgeNeeded",
+        "nearLiquidation",
+        "volatile"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.4,
+        "fundingMaterial": 0.15,
+        "nearLiquidation": 0.2,
+        "inProfit": 0.07,
+        "volatile": 0.79
+      },
+      "ms": 410.72678499999984
+    },
+    {
+      "id": "s06",
+      "run": 0,
+      "order": [
+        "hedgeNeeded",
+        "nearLiquidation",
+        "inProfit",
+        "fundingMaterial",
+        "volatile"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.38,
+        "fundingMaterial": 0.13,
+        "nearLiquidation": 0.34,
+        "inProfit": 0.05,
+        "volatile": 0.17
+      },
+      "ms": 487.39631799999916
+    },
+    {
+      "id": "s06",
+      "run": 1,
+      "order": [
+        "hedgeNeeded",
+        "fundingMaterial",
+        "nearLiquidation",
+        "inProfit",
+        "volatile"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.38,
+        "fundingMaterial": 0.11,
+        "nearLiquidation": 0.41,
+        "inProfit": 0.05,
+        "volatile": 0.17
+      },
+      "ms": 416.044449
+    },
+    {
+      "id": "s07",
+      "run": 0,
+      "order": [
+        "inProfit",
+        "hedgeNeeded",
+        "volatile",
+        "nearLiquidation",
+        "fundingMaterial"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.54,
+        "fundingMaterial": 0.11,
+        "nearLiquidation": 0.05,
+        "inProfit": 0.2,
+        "volatile": 0.12
+      },
+      "ms": 430.75286400000005
+    },
+    {
+      "id": "s07",
+      "run": 1,
+      "order": [
+        "nearLiquidation",
+        "hedgeNeeded",
+        "inProfit",
+        "fundingMaterial",
+        "volatile"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.54,
+        "fundingMaterial": 0.1,
+        "nearLiquidation": 0.05,
+        "inProfit": 0.2,
+        "volatile": 0.12
+      },
+      "ms": 402.84961099999964
+    },
+    {
+      "id": "s08",
+      "run": 0,
+      "order": [
+        "volatile",
+        "hedgeNeeded",
+        "fundingMaterial",
+        "nearLiquidation",
+        "inProfit"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.41,
+        "fundingMaterial": 0.17,
+        "nearLiquidation": 0.69,
+        "inProfit": 0.08,
+        "volatile": 0.21
+      },
+      "ms": 419.06502999999975
+    },
+    {
+      "id": "s08",
+      "run": 1,
+      "order": [
+        "volatile",
+        "fundingMaterial",
+        "nearLiquidation",
+        "hedgeNeeded",
+        "inProfit"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.43,
+        "fundingMaterial": 0.16,
+        "nearLiquidation": 0.67,
+        "inProfit": 0.08,
+        "volatile": 0.21
+      },
+      "ms": 408.6541729999999
+    },
+    {
+      "id": "s09",
+      "run": 0,
+      "order": [
+        "fundingMaterial",
+        "nearLiquidation",
+        "volatile",
+        "inProfit",
+        "hedgeNeeded"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.41,
+        "fundingMaterial": 0.82,
+        "nearLiquidation": 0.84,
+        "inProfit": 0.74,
+        "volatile": 0.34
+      },
+      "ms": 402.5543069999994
+    },
+    {
+      "id": "s09",
+      "run": 1,
+      "order": [
+        "volatile",
+        "fundingMaterial",
+        "hedgeNeeded",
+        "inProfit",
+        "nearLiquidation"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.41,
+        "fundingMaterial": 0.81,
+        "nearLiquidation": 0.86,
+        "inProfit": 0.77,
+        "volatile": 0.33
+      },
+      "ms": 416.9559470000004
+    },
+    {
+      "id": "s10",
+      "run": 0,
+      "order": [
+        "nearLiquidation",
+        "volatile",
+        "hedgeNeeded",
+        "inProfit",
+        "fundingMaterial"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.47,
+        "fundingMaterial": 0.21,
+        "nearLiquidation": 0.1,
+        "inProfit": 0.1,
+        "volatile": 0.67
+      },
+      "ms": 463.3779830000003
+    },
+    {
+      "id": "s10",
+      "run": 1,
+      "order": [
+        "hedgeNeeded",
+        "nearLiquidation",
+        "volatile",
+        "inProfit",
+        "fundingMaterial"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.46,
+        "fundingMaterial": 0.21,
+        "nearLiquidation": 0.1,
+        "inProfit": 0.09,
+        "volatile": 0.67
+      },
+      "ms": 448.0242450000005
+    },
+    {
+      "id": "s11",
+      "run": 0,
+      "order": [
+        "inProfit",
+        "hedgeNeeded",
+        "fundingMaterial",
+        "volatile",
+        "nearLiquidation"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.5,
+        "fundingMaterial": 0.19,
+        "nearLiquidation": 0.35,
+        "inProfit": 0.19,
+        "volatile": 0.15
+      },
+      "ms": 425.95390899999984
+    },
+    {
+      "id": "s11",
+      "run": 1,
+      "order": [
+        "inProfit",
+        "fundingMaterial",
+        "nearLiquidation",
+        "hedgeNeeded",
+        "volatile"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.5,
+        "fundingMaterial": 0.2,
+        "nearLiquidation": 0.45,
+        "inProfit": 0.21,
+        "volatile": 0.16
+      },
+      "ms": 430.5275190000011
+    },
+    {
+      "id": "s12",
+      "run": 0,
+      "order": [
+        "fundingMaterial",
+        "hedgeNeeded",
+        "volatile",
+        "inProfit",
+        "nearLiquidation"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.5,
+        "fundingMaterial": 0.23,
+        "nearLiquidation": 0.52,
+        "inProfit": 0.4,
+        "volatile": 0.23
+      },
+      "ms": 422.2886920000001
+    },
+    {
+      "id": "s12",
+      "run": 1,
+      "order": [
+        "fundingMaterial",
+        "nearLiquidation",
+        "inProfit",
+        "volatile",
+        "hedgeNeeded"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.5,
+        "fundingMaterial": 0.21,
+        "nearLiquidation": 0.55,
+        "inProfit": 0.41,
+        "volatile": 0.24
+      },
+      "ms": 394.56563200000164
+    },
+    {
+      "id": "s13",
+      "run": 0,
+      "order": [
+        "fundingMaterial",
+        "volatile",
+        "inProfit",
+        "nearLiquidation",
+        "hedgeNeeded"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.31,
+        "fundingMaterial": 0.85,
+        "nearLiquidation": 0.92,
+        "inProfit": 0.04,
+        "volatile": 0.19
+      },
+      "ms": 454.62859600000047
+    },
+    {
+      "id": "s13",
+      "run": 1,
+      "order": [
+        "inProfit",
+        "hedgeNeeded",
+        "fundingMaterial",
+        "nearLiquidation",
+        "volatile"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.29,
+        "fundingMaterial": 0.85,
+        "nearLiquidation": 0.92,
+        "inProfit": 0.04,
+        "volatile": 0.19
+      },
+      "ms": 451.10291400000096
+    },
+    {
+      "id": "s14",
+      "run": 0,
+      "order": [
+        "nearLiquidation",
+        "fundingMaterial",
+        "hedgeNeeded",
+        "volatile",
+        "inProfit"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.37,
+        "fundingMaterial": 0.15,
+        "nearLiquidation": 0.92,
+        "inProfit": 0.08,
+        "volatile": 0.87
+      },
+      "ms": 428.49799899999925
+    },
+    {
+      "id": "s14",
+      "run": 1,
+      "order": [
+        "hedgeNeeded",
+        "volatile",
+        "fundingMaterial",
+        "inProfit",
+        "nearLiquidation"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.37,
+        "fundingMaterial": 0.16,
+        "nearLiquidation": 0.91,
+        "inProfit": 0.08,
+        "volatile": 0.89
+      },
+      "ms": 405.44707799999924
+    },
+    {
+      "id": "s15",
+      "run": 0,
+      "order": [
+        "volatile",
+        "inProfit",
+        "nearLiquidation",
+        "hedgeNeeded",
+        "fundingMaterial"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.4,
+        "fundingMaterial": 0.13,
+        "nearLiquidation": 0.43,
+        "inProfit": 0.08,
+        "volatile": 0.24
+      },
+      "ms": 435.96066900000005
+    },
+    {
+      "id": "s15",
+      "run": 1,
+      "order": [
+        "hedgeNeeded",
+        "volatile",
+        "nearLiquidation",
+        "inProfit",
+        "fundingMaterial"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.39,
+        "fundingMaterial": 0.13,
+        "nearLiquidation": 0.42,
+        "inProfit": 0.07,
+        "volatile": 0.25
+      },
+      "ms": 404.07691200000045
+    },
+    {
+      "id": "s16",
+      "run": 0,
+      "order": [
+        "hedgeNeeded",
+        "nearLiquidation",
+        "inProfit",
+        "volatile",
+        "fundingMaterial"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.5,
+        "fundingMaterial": 0.23,
+        "nearLiquidation": 0.82,
+        "inProfit": 0.21,
+        "volatile": 0.7
+      },
+      "ms": 410.44077000000107
+    },
+    {
+      "id": "s16",
+      "run": 1,
+      "order": [
+        "hedgeNeeded",
+        "inProfit",
+        "nearLiquidation",
+        "volatile",
+        "fundingMaterial"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.5,
+        "fundingMaterial": 0.23,
+        "nearLiquidation": 0.78,
+        "inProfit": 0.22,
+        "volatile": 0.7
+      },
+      "ms": 455.96490300000005
+    },
+    {
+      "id": "s17",
+      "run": 0,
+      "order": [
+        "nearLiquidation",
+        "fundingMaterial",
+        "volatile",
+        "hedgeNeeded",
+        "inProfit"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.48,
+        "fundingMaterial": 0.14,
+        "nearLiquidation": 0.13,
+        "inProfit": 0.88,
+        "volatile": 0.24
+      },
+      "ms": 456.2199920000003
+    },
+    {
+      "id": "s17",
+      "run": 1,
+      "order": [
+        "nearLiquidation",
+        "hedgeNeeded",
+        "volatile",
+        "inProfit",
+        "fundingMaterial"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.47,
+        "fundingMaterial": 0.14,
+        "nearLiquidation": 0.14,
+        "inProfit": 0.89,
+        "volatile": 0.23
+      },
+      "ms": 418.84038000000146
+    },
+    {
+      "id": "s18",
+      "run": 0,
+      "order": [
+        "hedgeNeeded",
+        "inProfit",
+        "fundingMaterial",
+        "volatile",
+        "nearLiquidation"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.43,
+        "fundingMaterial": 0.13,
+        "nearLiquidation": 0.9,
+        "inProfit": 0.86,
+        "volatile": 0.25
+      },
+      "ms": 485.5843429999986
+    },
+    {
+      "id": "s18",
+      "run": 1,
+      "order": [
+        "hedgeNeeded",
+        "fundingMaterial",
+        "inProfit",
+        "volatile",
+        "nearLiquidation"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.44,
+        "fundingMaterial": 0.12,
+        "nearLiquidation": 0.88,
+        "inProfit": 0.87,
+        "volatile": 0.25
+      },
+      "ms": 406.401382
+    },
+    {
+      "id": "s19",
+      "run": 0,
+      "order": [
+        "nearLiquidation",
+        "hedgeNeeded",
+        "volatile",
+        "inProfit",
+        "fundingMaterial"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.5,
+        "fundingMaterial": 0.16,
+        "nearLiquidation": 0.07,
+        "inProfit": 0.23,
+        "volatile": 0.14
+      },
+      "ms": 412.9467710000008
+    },
+    {
+      "id": "s19",
+      "run": 1,
+      "order": [
+        "inProfit",
+        "fundingMaterial",
+        "volatile",
+        "hedgeNeeded",
+        "nearLiquidation"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.51,
+        "fundingMaterial": 0.17,
+        "nearLiquidation": 0.07,
+        "inProfit": 0.21,
+        "volatile": 0.14
+      },
+      "ms": 420.9725049999997
+    },
+    {
+      "id": "s20",
+      "run": 0,
+      "order": [
+        "nearLiquidation",
+        "hedgeNeeded",
+        "inProfit",
+        "volatile",
+        "fundingMaterial"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.31,
+        "fundingMaterial": 0.84,
+        "nearLiquidation": 0.7,
+        "inProfit": 0.07,
+        "volatile": 0.85
+      },
+      "ms": 420.33268600000156
+    },
+    {
+      "id": "s20",
+      "run": 1,
+      "order": [
+        "fundingMaterial",
+        "volatile",
+        "nearLiquidation",
+        "hedgeNeeded",
+        "inProfit"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.31,
+        "fundingMaterial": 0.83,
+        "nearLiquidation": 0.69,
+        "inProfit": 0.06,
+        "volatile": 0.86
+      },
+      "ms": 443.48567600000024
+    },
+    {
+      "id": "s21",
+      "run": 0,
+      "order": [
+        "volatile",
+        "inProfit",
+        "hedgeNeeded",
+        "fundingMaterial",
+        "nearLiquidation"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.46,
+        "fundingMaterial": 0.17,
+        "nearLiquidation": 0.88,
+        "inProfit": 0.87,
+        "volatile": 0.83
+      },
+      "ms": 409.77347200000077
+    },
+    {
+      "id": "s21",
+      "run": 1,
+      "order": [
+        "fundingMaterial",
+        "volatile",
+        "nearLiquidation",
+        "hedgeNeeded",
+        "inProfit"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.48,
+        "fundingMaterial": 0.16,
+        "nearLiquidation": 0.88,
+        "inProfit": 0.88,
+        "volatile": 0.82
+      },
+      "ms": 440.2087539999993
+    },
+    {
+      "id": "s22",
+      "run": 0,
+      "order": [
+        "volatile",
+        "fundingMaterial",
+        "inProfit",
+        "hedgeNeeded",
+        "nearLiquidation"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.53,
+        "fundingMaterial": 0.14,
+        "nearLiquidation": 0.73,
+        "inProfit": 0.78,
+        "volatile": 0.19
+      },
+      "ms": 414.62131000000227
+    },
+    {
+      "id": "s22",
+      "run": 1,
+      "order": [
+        "inProfit",
+        "fundingMaterial",
+        "nearLiquidation",
+        "hedgeNeeded",
+        "volatile"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.55,
+        "fundingMaterial": 0.15,
+        "nearLiquidation": 0.76,
+        "inProfit": 0.77,
+        "volatile": 0.18
+      },
+      "ms": 396.10907600000064
+    },
+    {
+      "id": "s23",
+      "run": 0,
+      "order": [
+        "fundingMaterial",
+        "nearLiquidation",
+        "inProfit",
+        "hedgeNeeded",
+        "volatile"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.38,
+        "fundingMaterial": 0.36,
+        "nearLiquidation": 0.87,
+        "inProfit": 0.13,
+        "volatile": 0.8
+      },
+      "ms": 432.96129400000063
+    },
+    {
+      "id": "s23",
+      "run": 1,
+      "order": [
+        "hedgeNeeded",
+        "nearLiquidation",
+        "volatile",
+        "fundingMaterial",
+        "inProfit"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.38,
+        "fundingMaterial": 0.36,
+        "nearLiquidation": 0.88,
+        "inProfit": 0.12,
+        "volatile": 0.81
+      },
+      "ms": 438.9906179999998
+    },
+    {
+      "id": "s24",
+      "run": 0,
+      "order": [
+        "volatile",
+        "fundingMaterial",
+        "hedgeNeeded",
+        "inProfit",
+        "nearLiquidation"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.48,
+        "fundingMaterial": 0.15,
+        "nearLiquidation": 0.24,
+        "inProfit": 0.86,
+        "volatile": 0.23
+      },
+      "ms": 414.8016380000008
+    },
+    {
+      "id": "s24",
+      "run": 1,
+      "order": [
+        "inProfit",
+        "hedgeNeeded",
+        "nearLiquidation",
+        "volatile",
+        "fundingMaterial"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.47,
+        "fundingMaterial": 0.15,
+        "nearLiquidation": 0.3,
+        "inProfit": 0.87,
+        "volatile": 0.24
+      },
+      "ms": 418.5214659999983
+    },
+    {
+      "id": "s25",
+      "run": 0,
+      "order": [
+        "hedgeNeeded",
+        "inProfit",
+        "nearLiquidation",
+        "fundingMaterial",
+        "volatile"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.24,
+        "fundingMaterial": 0.86,
+        "nearLiquidation": 0.65,
+        "inProfit": 0.05,
+        "volatile": 0.2
+      },
+      "ms": 412.04008899999826
+    },
+    {
+      "id": "s25",
+      "run": 1,
+      "order": [
+        "hedgeNeeded",
+        "volatile",
+        "inProfit",
+        "nearLiquidation",
+        "fundingMaterial"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.26,
+        "fundingMaterial": 0.85,
+        "nearLiquidation": 0.71,
+        "inProfit": 0.05,
+        "volatile": 0.2
+      },
+      "ms": 436.97181000000273
+    },
+    {
+      "id": "s26",
+      "run": 0,
+      "order": [
+        "hedgeNeeded",
+        "volatile",
+        "fundingMaterial",
+        "nearLiquidation",
+        "inProfit"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.47,
+        "fundingMaterial": 0.21,
+        "nearLiquidation": 0.1,
+        "inProfit": 0.7,
+        "volatile": 0.85
+      },
+      "ms": 425.1159030000017
+    },
+    {
+      "id": "s26",
+      "run": 1,
+      "order": [
+        "volatile",
+        "inProfit",
+        "hedgeNeeded",
+        "fundingMaterial",
+        "nearLiquidation"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.49,
+        "fundingMaterial": 0.21,
+        "nearLiquidation": 0.09,
+        "inProfit": 0.71,
+        "volatile": 0.85
+      },
+      "ms": 433.09565000000293
+    },
+    {
+      "id": "s27",
+      "run": 0,
+      "order": [
+        "nearLiquidation",
+        "inProfit",
+        "hedgeNeeded",
+        "fundingMaterial",
+        "volatile"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.47,
+        "fundingMaterial": 0.29,
+        "nearLiquidation": 0.73,
+        "inProfit": 0.2,
+        "volatile": 0.8
+      },
+      "ms": 920.6224249999977
+    },
+    {
+      "id": "s27",
+      "run": 1,
+      "order": [
+        "volatile",
+        "nearLiquidation",
+        "inProfit",
+        "fundingMaterial",
+        "hedgeNeeded"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.46,
+        "fundingMaterial": 0.3,
+        "nearLiquidation": 0.66,
+        "inProfit": 0.18,
+        "volatile": 0.81
+      },
+      "ms": 484.5196959999994
+    },
+    {
+      "id": "s28",
+      "run": 0,
+      "order": [
+        "volatile",
+        "fundingMaterial",
+        "hedgeNeeded",
+        "nearLiquidation",
+        "inProfit"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.46,
+        "fundingMaterial": 0.35,
+        "nearLiquidation": 0.74,
+        "inProfit": 0.85,
+        "volatile": 0.85
+      },
+      "ms": 413.67416199999934
+    },
+    {
+      "id": "s28",
+      "run": 1,
+      "order": [
+        "fundingMaterial",
+        "nearLiquidation",
+        "inProfit",
+        "hedgeNeeded",
+        "volatile"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.45,
+        "fundingMaterial": 0.39,
+        "nearLiquidation": 0.83,
+        "inProfit": 0.84,
+        "volatile": 0.85
+      },
+      "ms": 483.17462499999965
+    },
+    {
+      "id": "s29",
+      "run": 0,
+      "order": [
+        "hedgeNeeded",
+        "fundingMaterial",
+        "nearLiquidation",
+        "inProfit",
+        "volatile"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.36,
+        "fundingMaterial": 0.16,
+        "nearLiquidation": 0.9,
+        "inProfit": 0.08,
+        "volatile": 0.76
+      },
+      "ms": 440.8058490000003
+    },
+    {
+      "id": "s29",
+      "run": 1,
+      "order": [
+        "hedgeNeeded",
+        "fundingMaterial",
+        "volatile",
+        "nearLiquidation",
+        "inProfit"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.34,
+        "fundingMaterial": 0.17,
+        "nearLiquidation": 0.89,
+        "inProfit": 0.07,
+        "volatile": 0.76
+      },
+      "ms": 428.51043899999786
+    },
+    {
+      "id": "s30",
+      "run": 0,
+      "order": [
+        "hedgeNeeded",
+        "volatile",
+        "inProfit",
+        "fundingMaterial",
+        "nearLiquidation"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.49,
+        "fundingMaterial": 0.15,
+        "nearLiquidation": 0.88,
+        "inProfit": 0.74,
+        "volatile": 0.81
+      },
+      "ms": 418.07370100000117
+    },
+    {
+      "id": "s30",
+      "run": 1,
+      "order": [
+        "inProfit",
+        "volatile",
+        "fundingMaterial",
+        "nearLiquidation",
+        "hedgeNeeded"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.49,
+        "fundingMaterial": 0.14,
+        "nearLiquidation": 0.87,
+        "inProfit": 0.75,
+        "volatile": 0.81
+      },
+      "ms": 400.476713
+    },
+    {
+      "id": "s31",
+      "run": 0,
+      "order": [
+        "volatile",
+        "fundingMaterial",
+        "inProfit",
+        "nearLiquidation",
+        "hedgeNeeded"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.5,
+        "fundingMaterial": 0.18,
+        "nearLiquidation": 0.15,
+        "inProfit": 0.89,
+        "volatile": 0.23
+      },
+      "ms": 444.19946100000016
+    },
+    {
+      "id": "s31",
+      "run": 1,
+      "order": [
+        "inProfit",
+        "fundingMaterial",
+        "volatile",
+        "hedgeNeeded",
+        "nearLiquidation"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.5,
+        "fundingMaterial": 0.18,
+        "nearLiquidation": 0.15,
+        "inProfit": 0.89,
+        "volatile": 0.23
+      },
+      "ms": 443.57345799999894
+    },
+    {
+      "id": "s32",
+      "run": 0,
+      "order": [
+        "hedgeNeeded",
+        "fundingMaterial",
+        "inProfit",
+        "volatile",
+        "nearLiquidation"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.55,
+        "fundingMaterial": 0.23,
+        "nearLiquidation": 0.82,
+        "inProfit": 0.34,
+        "volatile": 0.22
+      },
+      "ms": 409.037261999998
+    },
+    {
+      "id": "s32",
+      "run": 1,
+      "order": [
+        "nearLiquidation",
+        "hedgeNeeded",
+        "inProfit",
+        "volatile",
+        "fundingMaterial"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.53,
+        "fundingMaterial": 0.23,
+        "nearLiquidation": 0.86,
+        "inProfit": 0.29,
+        "volatile": 0.22
+      },
+      "ms": 429.1125620000021
+    },
+    {
+      "id": "s33",
+      "run": 0,
+      "order": [
+        "volatile",
+        "nearLiquidation",
+        "hedgeNeeded",
+        "inProfit",
+        "fundingMaterial"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.31,
+        "fundingMaterial": 0.38,
+        "nearLiquidation": 0.89,
+        "inProfit": 0.11,
+        "volatile": 0.78
+      },
+      "ms": 483.23279900000125
+    },
+    {
+      "id": "s33",
+      "run": 1,
+      "order": [
+        "volatile",
+        "nearLiquidation",
+        "inProfit",
+        "fundingMaterial",
+        "hedgeNeeded"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.32,
+        "fundingMaterial": 0.41,
+        "nearLiquidation": 0.91,
+        "inProfit": 0.08,
+        "volatile": 0.8
+      },
+      "ms": 400.7613300000012
+    },
+    {
+      "id": "s34",
+      "run": 0,
+      "order": [
+        "hedgeNeeded",
+        "inProfit",
+        "fundingMaterial",
+        "nearLiquidation",
+        "volatile"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.41,
+        "fundingMaterial": 0.89,
+        "nearLiquidation": 0.77,
+        "inProfit": 0.66,
+        "volatile": 0.88
+      },
+      "ms": 459.58157100000244
+    },
+    {
+      "id": "s34",
+      "run": 1,
+      "order": [
+        "fundingMaterial",
+        "hedgeNeeded",
+        "nearLiquidation",
+        "inProfit",
+        "volatile"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.42,
+        "fundingMaterial": 0.89,
+        "nearLiquidation": 0.7,
+        "inProfit": 0.6,
+        "volatile": 0.88
+      },
+      "ms": 426.4013879999984
+    },
+    {
+      "id": "s35",
+      "run": 0,
+      "order": [
+        "inProfit",
+        "fundingMaterial",
+        "hedgeNeeded",
+        "volatile",
+        "nearLiquidation"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.47,
+        "fundingMaterial": 0.37,
+        "nearLiquidation": 0.93,
+        "inProfit": 0.19,
+        "volatile": 0.72
+      },
+      "ms": 433.4286809999976
+    },
+    {
+      "id": "s35",
+      "run": 1,
+      "order": [
+        "hedgeNeeded",
+        "inProfit",
+        "nearLiquidation",
+        "fundingMaterial",
+        "volatile"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.47,
+        "fundingMaterial": 0.35,
+        "nearLiquidation": 0.93,
+        "inProfit": 0.15,
+        "volatile": 0.73
+      },
+      "ms": 429.9613390000013
+    },
+    {
+      "id": "s36",
+      "run": 0,
+      "order": [
+        "hedgeNeeded",
+        "fundingMaterial",
+        "nearLiquidation",
+        "volatile",
+        "inProfit"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.36,
+        "fundingMaterial": 0.31,
+        "nearLiquidation": 0.94,
+        "inProfit": 0.13,
+        "volatile": 0.32
+      },
+      "ms": 405.7834980000007
+    },
+    {
+      "id": "s36",
+      "run": 1,
+      "order": [
+        "volatile",
+        "inProfit",
+        "nearLiquidation",
+        "fundingMaterial",
+        "hedgeNeeded"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.39,
+        "fundingMaterial": 0.3,
+        "nearLiquidation": 0.94,
+        "inProfit": 0.13,
+        "volatile": 0.32
+      },
+      "ms": 423.444819999997
+    },
+    {
+      "id": "s37",
+      "run": 0,
+      "order": [
+        "volatile",
+        "inProfit",
+        "nearLiquidation",
+        "fundingMaterial",
+        "hedgeNeeded"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.44,
+        "fundingMaterial": 0.76,
+        "nearLiquidation": 0.89,
+        "inProfit": 0.8,
+        "volatile": 0.27
+      },
+      "ms": 434.6478530000022
+    },
+    {
+      "id": "s37",
+      "run": 1,
+      "order": [
+        "inProfit",
+        "volatile",
+        "hedgeNeeded",
+        "fundingMaterial",
+        "nearLiquidation"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.45,
+        "fundingMaterial": 0.77,
+        "nearLiquidation": 0.88,
+        "inProfit": 0.81,
+        "volatile": 0.28
+      },
+      "ms": 454.9076580000001
+    },
+    {
+      "id": "s38",
+      "run": 0,
+      "order": [
+        "volatile",
+        "nearLiquidation",
+        "inProfit",
+        "hedgeNeeded",
+        "fundingMaterial"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.3,
+        "fundingMaterial": 0.83,
+        "nearLiquidation": 0.93,
+        "inProfit": 0.06,
+        "volatile": 0.37
+      },
+      "ms": 425.8761830000003
+    },
+    {
+      "id": "s38",
+      "run": 1,
+      "order": [
+        "hedgeNeeded",
+        "inProfit",
+        "nearLiquidation",
+        "volatile",
+        "fundingMaterial"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.33,
+        "fundingMaterial": 0.85,
+        "nearLiquidation": 0.93,
+        "inProfit": 0.05,
+        "volatile": 0.36
+      },
+      "ms": 410.785312
+    },
+    {
+      "id": "s39",
+      "run": 0,
+      "order": [
+        "inProfit",
+        "volatile",
+        "fundingMaterial",
+        "hedgeNeeded",
+        "nearLiquidation"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.46,
+        "fundingMaterial": 0.1,
+        "nearLiquidation": 0.41,
+        "inProfit": 0.25,
+        "volatile": 0.14
+      },
+      "ms": 429.2261510000026
+    },
+    {
+      "id": "s39",
+      "run": 1,
+      "order": [
+        "fundingMaterial",
+        "inProfit",
+        "volatile",
+        "nearLiquidation",
+        "hedgeNeeded"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.51,
+        "fundingMaterial": 0.1,
+        "nearLiquidation": 0.36,
+        "inProfit": 0.25,
+        "volatile": 0.14
+      },
+      "ms": 405.3341920000021
+    },
+    {
+      "id": "s40",
+      "run": 0,
+      "order": [
+        "volatile",
+        "hedgeNeeded",
+        "nearLiquidation",
+        "inProfit",
+        "fundingMaterial"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.52,
+        "fundingMaterial": 0.78,
+        "nearLiquidation": 0.15,
+        "inProfit": 0.17,
+        "volatile": 0.25
+      },
+      "ms": 406.51594699999987
+    },
+    {
+      "id": "s40",
+      "run": 1,
+      "order": [
+        "inProfit",
+        "fundingMaterial",
+        "volatile",
+        "nearLiquidation",
+        "hedgeNeeded"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.52,
+        "fundingMaterial": 0.77,
+        "nearLiquidation": 0.13,
+        "inProfit": 0.16,
+        "volatile": 0.25
+      },
+      "ms": 488.47727499999746
+    },
+    {
+      "id": "s41",
+      "run": 0,
+      "order": [
+        "hedgeNeeded",
+        "volatile",
+        "fundingMaterial",
+        "inProfit",
+        "nearLiquidation"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.4,
+        "fundingMaterial": 0.81,
+        "nearLiquidation": 0.08,
+        "inProfit": 0.71,
+        "volatile": 0.2
+      },
+      "ms": 414.69822700000077
+    },
+    {
+      "id": "s41",
+      "run": 1,
+      "order": [
+        "fundingMaterial",
+        "inProfit",
+        "hedgeNeeded",
+        "volatile",
+        "nearLiquidation"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.4,
+        "fundingMaterial": 0.81,
+        "nearLiquidation": 0.09,
+        "inProfit": 0.67,
+        "volatile": 0.19
+      },
+      "ms": 422.21286500000133
+    },
+    {
+      "id": "s42",
+      "run": 0,
+      "order": [
+        "fundingMaterial",
+        "inProfit",
+        "volatile",
+        "hedgeNeeded",
+        "nearLiquidation"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.45,
+        "fundingMaterial": 0.19,
+        "nearLiquidation": 0.58,
+        "inProfit": 0.69,
+        "volatile": 0.83
+      },
+      "ms": 418.8276859999969
+    },
+    {
+      "id": "s42",
+      "run": 1,
+      "order": [
+        "volatile",
+        "nearLiquidation",
+        "inProfit",
+        "fundingMaterial",
+        "hedgeNeeded"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.45,
+        "fundingMaterial": 0.18,
+        "nearLiquidation": 0.52,
+        "inProfit": 0.72,
+        "volatile": 0.83
+      },
+      "ms": 403.82996000000276
+    },
+    {
+      "id": "s43",
+      "run": 0,
+      "order": [
+        "volatile",
+        "nearLiquidation",
+        "inProfit",
+        "fundingMaterial",
+        "hedgeNeeded"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.46,
+        "fundingMaterial": 0.12,
+        "nearLiquidation": 0.52,
+        "inProfit": 0.86,
+        "volatile": 0.87
+      },
+      "ms": 415.1605169999966
+    },
+    {
+      "id": "s43",
+      "run": 1,
+      "order": [
+        "volatile",
+        "hedgeNeeded",
+        "nearLiquidation",
+        "fundingMaterial",
+        "inProfit"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.47,
+        "fundingMaterial": 0.13,
+        "nearLiquidation": 0.43,
+        "inProfit": 0.86,
+        "volatile": 0.87
+      },
+      "ms": 416.4521640000021
+    },
+    {
+      "id": "s44",
+      "run": 0,
+      "order": [
+        "volatile",
+        "fundingMaterial",
+        "nearLiquidation",
+        "hedgeNeeded",
+        "inProfit"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.31,
+        "fundingMaterial": 0.88,
+        "nearLiquidation": 0.54,
+        "inProfit": 0.05,
+        "volatile": 0.18
+      },
+      "ms": 418.1661380000005
+    },
+    {
+      "id": "s44",
+      "run": 1,
+      "order": [
+        "fundingMaterial",
+        "inProfit",
+        "nearLiquidation",
+        "volatile",
+        "hedgeNeeded"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.27,
+        "fundingMaterial": 0.89,
+        "nearLiquidation": 0.62,
+        "inProfit": 0.04,
+        "volatile": 0.17
+      },
+      "ms": 397.9022550000009
+    },
+    {
+      "id": "s45",
+      "run": 0,
+      "order": [
+        "inProfit",
+        "volatile",
+        "nearLiquidation",
+        "fundingMaterial",
+        "hedgeNeeded"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.52,
+        "fundingMaterial": 0.2,
+        "nearLiquidation": 0.08,
+        "inProfit": 0.92,
+        "volatile": 0.16
+      },
+      "ms": 404.3666100000046
+    },
+    {
+      "id": "s45",
+      "run": 1,
+      "order": [
+        "volatile",
+        "inProfit",
+        "hedgeNeeded",
+        "nearLiquidation",
+        "fundingMaterial"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.5,
+        "fundingMaterial": 0.21,
+        "nearLiquidation": 0.08,
+        "inProfit": 0.92,
+        "volatile": 0.16
+      },
+      "ms": 440.7289960000053
+    },
+    {
+      "id": "s46",
+      "run": 0,
+      "order": [
+        "inProfit",
+        "nearLiquidation",
+        "volatile",
+        "hedgeNeeded",
+        "fundingMaterial"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.37,
+        "fundingMaterial": 0.31,
+        "nearLiquidation": 0.45,
+        "inProfit": 0.08,
+        "volatile": 0.82
+      },
+      "ms": 411.7161819999965
+    },
+    {
+      "id": "s46",
+      "run": 1,
+      "order": [
+        "fundingMaterial",
+        "inProfit",
+        "nearLiquidation",
+        "hedgeNeeded",
+        "volatile"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.34,
+        "fundingMaterial": 0.29,
+        "nearLiquidation": 0.55,
+        "inProfit": 0.08,
+        "volatile": 0.83
+      },
+      "ms": 397.70964500000264
+    },
+    {
+      "id": "s47",
+      "run": 0,
+      "order": [
+        "nearLiquidation",
+        "volatile",
+        "hedgeNeeded",
+        "inProfit",
+        "fundingMaterial"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.47,
+        "fundingMaterial": 0.21,
+        "nearLiquidation": 0.08,
+        "inProfit": 0.21,
+        "volatile": 0.66
+      },
+      "ms": 411.9288299999971
+    },
+    {
+      "id": "s47",
+      "run": 1,
+      "order": [
+        "nearLiquidation",
+        "hedgeNeeded",
+        "inProfit",
+        "fundingMaterial",
+        "volatile"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.48,
+        "fundingMaterial": 0.2,
+        "nearLiquidation": 0.09,
+        "inProfit": 0.22,
+        "volatile": 0.68
+      },
+      "ms": 463.28483699999924
+    },
+    {
+      "id": "s48",
+      "run": 0,
+      "order": [
+        "inProfit",
+        "volatile",
+        "fundingMaterial",
+        "nearLiquidation",
+        "hedgeNeeded"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.46,
+        "fundingMaterial": 0.12,
+        "nearLiquidation": 0.42,
+        "inProfit": 0.2,
+        "volatile": 0.25
+      },
+      "ms": 431.9941830000025
+    },
+    {
+      "id": "s48",
+      "run": 1,
+      "order": [
+        "nearLiquidation",
+        "inProfit",
+        "fundingMaterial",
+        "hedgeNeeded",
+        "volatile"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.46,
+        "fundingMaterial": 0.12,
+        "nearLiquidation": 0.52,
+        "inProfit": 0.21,
+        "volatile": 0.25
+      },
+      "ms": 433.4532340000005
+    },
+    {
+      "id": "s49",
+      "run": 0,
+      "order": [
+        "fundingMaterial",
+        "inProfit",
+        "nearLiquidation",
+        "volatile",
+        "hedgeNeeded"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.27,
+        "fundingMaterial": 0.39,
+        "nearLiquidation": 0.84,
+        "inProfit": 0.08,
+        "volatile": 0.23
+      },
+      "ms": 414.3017169999948
+    },
+    {
+      "id": "s49",
+      "run": 1,
+      "order": [
+        "nearLiquidation",
+        "inProfit",
+        "fundingMaterial",
+        "hedgeNeeded",
+        "volatile"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.27,
+        "fundingMaterial": 0.35,
+        "nearLiquidation": 0.8,
+        "inProfit": 0.09,
+        "volatile": 0.23
+      },
+      "ms": 405.8193969999993
+    },
+    {
+      "id": "s50",
+      "run": 0,
+      "order": [
+        "volatile",
+        "inProfit",
+        "fundingMaterial",
+        "nearLiquidation",
+        "hedgeNeeded"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.46,
+        "fundingMaterial": 0.79,
+        "nearLiquidation": 0.92,
+        "inProfit": 0.09,
+        "volatile": 0.34
+      },
+      "ms": 407.95090500000515
+    },
+    {
+      "id": "s50",
+      "run": 1,
+      "order": [
+        "inProfit",
+        "fundingMaterial",
+        "volatile",
+        "hedgeNeeded",
+        "nearLiquidation"
+      ],
+      "probs": {
+        "hedgeNeeded": 0.45,
+        "fundingMaterial": 0.79,
+        "nearLiquidation": 0.91,
+        "inProfit": 0.08,
+        "volatile": 0.35
+      },
+      "ms": 416.9081520000036
+    }
+  ]
+}
