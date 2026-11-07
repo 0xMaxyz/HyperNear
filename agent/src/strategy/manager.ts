@@ -73,6 +73,24 @@ export class StrategyManager {
     return e && e.runner.state !== 'stopped' ? e.runner.spec : undefined;
   }
 
+  #onLeg(owner: Hex, leg: number) {
+    return this.#mine(owner).find((r) => r.runner.spec.leg === leg && r.runner.state !== 'stopped' && r.runner.state !== 'done')?.runner;
+  }
+
+  /** What the guard may still spend on this leg today (the strategy's topUpCapPerDay); undefined: no strategy runs there. */
+  topUpLeft(owner: Hex, leg: number): number | undefined {
+    return this.#onLeg(owner, leg)?.topUpLeft();
+  }
+
+  recordTopUp(owner: Hex, leg: number, usd: number) {
+    this.#onLeg(owner, leg)?.addTopUp(usd);
+  }
+
+  /** The runner of an owner's strategy (for the decision layer's facts). */
+  runner(owner: Hex, id: string) {
+    return this.#runners.get(`${owner}:${id}`)?.runner;
+  }
+
   /** The owner's live specs (not stopped). */
   specs(owner: Hex): StrategySpec[] {
     return this.#mine(owner).filter((r) => r.runner.state !== 'stopped').map((r) => r.runner.spec);

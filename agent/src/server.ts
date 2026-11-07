@@ -285,6 +285,9 @@ export function buildDeps(config: AgentConfig): Deps {
     agentId: config.nearAgent?.accountId,
     agentClient: agentSender && new HyperNearClient({ contractId: config.contractId, network: config.network, rpcUrl: rpc, sender: agentSender }),
     owners: () => [...new Set([...legs.keys.owners(), ...config.guard.watchOwners])] as Hex[],
+    // a strategy leg is topped up only from the reserve leg and within the strategy's own daily budget
+    budgetLeftUsd: (o, leg) => d.strategies?.topUpLeft(o, leg),
+    onTopUp: (o, leg, usd) => d.strategies?.recordTopUp(o, leg, usd),
     cfg: { intervalMs: config.guard.intervalSec * 1000, guard: guardConfig, annualVol: config.guard.annualVol },
   });
   const hedger = new Hedger(legs, config.policy, bus);

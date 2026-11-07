@@ -26,6 +26,8 @@ export interface RunnerSaved {
   state: RunState;
   held: number[];
   twap: TwapState;
+  /** guard top-ups taken today (UTC day number, USD): the strategy's topUpCapPerDay is checked against this */
+  topUp: { day: number; usd: number };
 }
 
 export interface RunnerOpts {
@@ -52,6 +54,7 @@ export class StrategyRunner {
   state: RunState = 'running';
   grid: GridState = emptyGrid();
   twap: TwapState = { done: 0, skipped: 0, filledSize: 0, nextAt: 0 };
+  topUp = { day: 0, usd: 0 };
   /** 'unavailable': the exchange refused scheduleCancel (testnet and mainnet require $1M traded volume). */
   deadman: 'off' | 'armed' | 'unavailable' = 'off';
   readonly #o: RunnerOpts;
@@ -66,10 +69,28 @@ export class StrategyRunner {
     if (o.initial?.state) this.state = o.initial.state;
     if (o.initial?.held) this.grid = { held: o.initial.held, orders: {} };
     if (o.initial?.twap) this.twap = { ...o.initial.twap };
+    if (o.initial?.topUp) this.topUp = { ...o.initial.topUp };
   }
 
   snapshot(): RunnerSaved {
-    return { state: this.state, held: this.grid.held, twap: this.twap };
+    return { state: this.state, held: this.grid.held, twap: this.twap, topUp: this.topUp };
+  }
+
+  /** USD of the daily top-up budget (limits.topUpCapPerDay) left today. */
+  topUpLeft(): number {
+    const day = Math.floor(this.#now / DAY_MS);
+    return Math.max(0, this.spec.limits.topUpCapPerDay - (this.topUp.day === day ? this.topUp.usd : 0));
+  }
+
+  addTopUp(usd: number) {
+    const day = Math.floor(this.#now / DAY_MS);
+    this.topUp = { day, usd: (this.topUp.day === day ? this.topUp.usd : 0) + usd };
+    this.#o.onChange?.();
+  }
+
+  /** Account value at the start of the UTC day, as the daily-loss check sees it (undefined before the first tick). */
+  dayStartEquity() {
+    return this.#dayStart?.equity;
   }
 
   get #now() {
