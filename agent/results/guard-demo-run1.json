@@ -1,0 +1,138 @@
+{
+  "at": "2026-11-07T13:47:02.769Z",
+  "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+  "contractId": "leash-spike-1107.testnet",
+  "nearAgentId": "fcagent.leash-spike-1107.testnet",
+  "floor": 2.5,
+  "mid": 75787.5,
+  "summary": {
+    "detectMs": 2534,
+    "rebalanceStartMs": 2534,
+    "nearSignedMs": 9308,
+    "hlPostedMs": 10744,
+    "recoveredMs": 13604,
+    "nearTx": "4ej8UZ8CDcHUZHGZhS4m1GTuMgZdaPaRL1fBvvKWtDes",
+    "amount": "2.09",
+    "leg1RatioAfter": 4.992298867815517
+  },
+  "timeline": [
+    {
+      "t": -9576,
+      "event": "guard.ok",
+      "detail": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "legs": [
+          "leg0:BTC",
+          "leg1:BTC"
+        ]
+      }
+    },
+    {
+      "t": -3151,
+      "event": "stress.marginMoved",
+      "detail": {
+        "movedToSpot": "9.39",
+        "signAndPostMs": 8032
+      }
+    },
+    {
+      "t": 0,
+      "event": "stress.posted",
+      "detail": {
+        "leverage": 40,
+        "addedShort": "0.00056",
+        "addedUsd": 42.43736,
+        "orderMs": 1274
+      }
+    },
+    {
+      "t": 2534,
+      "event": "guard.trigger",
+      "detail": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "detectedAt": 1794059225303,
+        "triggered": [
+          {
+            "id": "leg1:BTC",
+            "trigger": true,
+            "reasons": [
+              "margin_floor"
+            ],
+            "distance": 0.013532307473557069,
+            "plausibleMove": 0.0013594297632883313
+          }
+        ],
+        "plan": {
+          "kind": "rebalance",
+          "from": {
+            "leg": 2,
+            "address": "0x2a32c77d9b5e3e0ed8780e9fc5def0aa629c62ab"
+          },
+          "to": {
+            "leg": 1,
+            "address": "0x8056c4fa3aad69cf04c2ade906c58489e76c9986"
+          },
+          "amount": "2.09",
+          "reasons": [
+            "margin_floor"
+          ]
+        }
+      }
+    },
+    {
+      "t": 2534,
+      "event": "guard.rebalance.start",
+      "detail": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "kind": "rebalance",
+        "from": {
+          "leg": 2,
+          "address": "0x2a32c77d9b5e3e0ed8780e9fc5def0aa629c62ab"
+        },
+        "to": {
+          "leg": 1,
+          "address": "0x8056c4fa3aad69cf04c2ade906c58489e76c9986"
+        },
+        "amount": "2.09",
+        "reasons": [
+          "margin_floor"
+        ]
+      }
+    },
+    {
+      "t": 9308,
+      "event": "guard.rebalance.signed",
+      "detail": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "method": "rebalance",
+        "txHash": "4ej8UZ8CDcHUZHGZhS4m1GTuMgZdaPaRL1fBvvKWtDes",
+        "ms": 6774
+      }
+    },
+    {
+      "t": 10744,
+      "event": "guard.rebalance.posted",
+      "detail": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "hl": {
+          "status": "ok",
+          "response": {
+            "type": "default"
+          }
+        },
+        "ms": 8210
+      }
+    },
+    {
+      "t": 13604,
+      "event": "guard.ok",
+      "detail": {
+        "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+        "legs": [
+          "leg0:BTC",
+          "leg1:BTC"
+        ]
+      }
+    }
+  ]
+}

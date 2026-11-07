@@ -1,5 +1,6 @@
 export * from './errors';
 export * from './intents';
+export * from './commands';
 export { hlPayloadDigest } from './hlDigest';
 export { DEFAULT_RPC, nearAccount, nearApiBackend, type CallOptions, type NearBackend } from './near';
 export {

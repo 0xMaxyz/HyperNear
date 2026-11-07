@@ -1,9 +1,10 @@
 // HTTP API for the web app (node:http, no framework).
 //   GET  /owner/:addr   legs, HL snapshot (incl. withdrawable), contract policy, guard evaluation
 //   POST /relay         {owner, nonce, intent, sig} -> owner_execute (or {owner, intent:{type:'registerLeg', leg}})
-//   POST /hedge/open    {owner, coin, ratio}   (owner must have opted the agent in via setPolicy)
-//   POST /hedge/close   {owner, coin}
+//   POST /hedge/open    {command, sig}: owner-signed EIP-712 Command (action openHedge, expiry <= 60 s, fresh nonce)
+//   POST /hedge/close   {command, sig}: same, action closeHedge. Both also need the owner's setPolicy opt-in.
 //   GET  /events        SSE: hedge, guard and decision log
+// The guard loop (guardLoop.ts) runs in the same process when the NEAR agent key is set.
 // Run: node agent/src/server.ts            (keys from env, see config.ts)
 //      node agent/src/server.ts --dry-run  (no keys, no network: replays agent/fixtures/)
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
@@ -11,7 +12,9 @@ import type { Hex } from 'viem';
 import { HyperNearClient, nearAccount } from '@hypernear/client';
 import { loadConfig, type AgentConfig } from './config.ts';
 import { EventBus } from './events.ts';
-import { evaluateGuard } from './guard.ts';
+import { ReplayCache, verifyCommand } from './commands.ts';
+import { DEFAULT_GUARD_CONFIG, evaluateGuard, type GuardConfig } from './guard.ts';
+import { GuardLoop } from './guardLoop.ts';
 import { HedgeRefused, Hedger } from './hedge.ts';
 import { guardInputs, Legs } from './legs.ts';
 import { HttpError, RateLimiter, Relayer } from './relayer.ts';
@@ -23,6 +26,9 @@ export interface Deps {
   hedger: Hedger;
   relayer: Relayer;
   bus: EventBus;
+  replay: ReplayCache;
+  guardConfig: GuardConfig;
+  guardLoop?: GuardLoop;
   annualVol?: number;
 }
 
@@ -74,8 +80,7 @@ export function handler(d: Deps) {
       if (req.method === 'GET' && ownerPath) {
         const owner = ownerOf(ownerPath[1]);
         const [snapshot, policy] = await Promise.all([d.legs.snapshot(owner), d.client.getOwner(owner)]);
-        const guard = evaluateGuard(guardInputs(snapshot, d.annualVol ?? 0.6));
-        for (const g of guard.filter((x) => x.trigger)) d.bus.emit('guard', { owner, ...g });
+        const guard = evaluateGuard(guardInputs(snapshot, d.annualVol ?? 0.6), d.guardConfig);
         return send(res, 200, {
           owner,
           legs: snapshot.legs.map((l) => ({ leg: l.leg, address: l.address, agent: l.agent })),
@@ -92,12 +97,15 @@ export function handler(d: Deps) {
         return send(res, 200, out);
       }
       if (req.method === 'POST' && (url.pathname === '/hedge/open' || url.pathname === '/hedge/close')) {
-        const b = (await readJson(req)) as Record<string, unknown>;
-        const owner = ownerOf(b.owner);
-        const coin = String(b.coin ?? '');
-        await assertOptedIn(d, owner);
-        const out =
-          url.pathname === '/hedge/open' ? await d.hedger.openHedge(owner, coin, Number(b.ratio)) : await d.hedger.closeHedge(owner, coin);
+        const open = url.pathname === '/hedge/open';
+        const cmd = await verifyCommand(
+          { chainTag: async () => (await d.client.getConfig()).chain_tag, contractId: d.client.contractId, cache: d.replay },
+          await readJson(req),
+          open ? 'openHedge' : 'closeHedge'
+        );
+        await assertOptedIn(d, cmd.owner);
+        d.bus.emit('command', { ...cmd });
+        const out = open ? await d.hedger.openHedge(cmd.owner, cmd.coin, Number(cmd.ratio)) : await d.hedger.closeHedge(cmd.owner, cmd.coin);
         return send(res, 200, out);
       }
       if (req.method === 'GET' && url.pathname === '/events') {
@@ -123,7 +131,23 @@ export function buildDeps(config: AgentConfig): Deps {
   const client = new HyperNearClient({ contractId: config.contractId, network: config.network, rpcUrl: rpc, sender });
   const bus = new EventBus();
   const legs = new Legs({ client, dataDir: config.dataDir, network: config.network, coins: config.policy.allowedCoins });
-  return { config, client, legs, bus, hedger: new Hedger(legs, config.policy, bus), relayer: new Relayer(client, new RateLimiter(config.relayPerMinute)) };
+  const guardConfig: GuardConfig = { ...DEFAULT_GUARD_CONFIG, marginFloorMultiple: config.guard.marginFloor, latencyP95Sec: config.guard.latencyP95Sec };
+  // the guard signs rebalances with the NEAR agent's function-call key, never with the relayer's
+  const agentSender = config.nearAgent && nearAccount(config.nearAgent.accountId, config.nearAgent.secretKey, rpc ?? (config.network === 'mainnet' ? 'https://free.rpc.fastnear.com' : 'https://test.rpc.fastnear.com'));
+  const guardLoop = new GuardLoop({
+    legs,
+    bus,
+    agentId: config.nearAgent?.accountId,
+    agentClient: agentSender && new HyperNearClient({ contractId: config.contractId, network: config.network, rpcUrl: rpc, sender: agentSender }),
+    owners: () => [...new Set([...legs.keys.owners(), ...config.guard.watchOwners])] as Hex[],
+    cfg: { intervalMs: config.guard.intervalSec * 1000, guard: guardConfig, annualVol: config.guard.annualVol },
+  });
+  return {
+    config, client, legs, bus, guardConfig, guardLoop, annualVol: config.guard.annualVol,
+    replay: new ReplayCache(),
+    hedger: new Hedger(legs, config.policy, bus),
+    relayer: new Relayer(client, new RateLimiter(config.relayPerMinute)),
+  };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -132,10 +156,12 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     runDryRun();
   } else {
     const config = loadConfig();
-    const server = createServer(handler(buildDeps(config)));
+    const deps = buildDeps(config);
+    const server = createServer(handler(deps));
+    if (config.nearAgent) deps.guardLoop?.start();
     server.listen(config.port, () => {
       console.log(`hypernear agent on :${config.port} (${config.network}, contract ${config.contractId}, relayer ${config.relayer ? 'set' : 'MISSING'}, ` +
-        `near agent ${config.nearAgent ? 'set' : 'MISSING'})`);
+        `near agent ${config.nearAgent ? 'set, guard loop on' : 'MISSING, guard loop off'})`);
     });
   }
 }

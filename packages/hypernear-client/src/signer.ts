@@ -24,6 +24,8 @@ export interface NearMasterSignerOptions {
   signOwnerIntent?: (typedData: OwnerIntentTypedData) => Promise<Hex>;
   /** Skip the lookup when the leg address is already known. */
   legAddress?: Hex;
+  /** Called with each NEAR transaction the signer sends (for logs and timelines). */
+  onNearTx?: (tx: { method: string; txHash: string }) => void;
 }
 
 const unsupported = (msg: string): never => {
@@ -125,17 +127,23 @@ export class NearMasterSigner implements HlAsyncSigner {
     const cfg = await client.getConfig();
     const mapped = mapHlPayload(payload, { mode, owner: this.#owner, leg, hlChain: cfg.hl_mainnet ? 'Mainnet' : 'Testnet' });
     const owner = this.#owner;
-    let out: SignOut | null;
+    let r: { txHash: string; value: SignOut | null };
+    let method: string;
     if (mapped.kind === 'rebalance') {
-      ({ value: out } = await client.rebalance({ owner, fromLeg: leg, toAddress: mapped.toAddress, amount: mapped.amount, hlTime: mapped.hlTime }));
+      method = 'rebalance';
+      r = await client.rebalance({ owner, fromLeg: leg, toAddress: mapped.toAddress, amount: mapped.amount, hlTime: mapped.hlTime });
     } else if (mapped.kind === 'agentUsdClassTransfer') {
-      ({ value: out } = await client.agentUsdClassTransfer({ owner, leg, amount: mapped.amount, toPerp: true, hlNonce: mapped.hlNonce }));
+      method = 'agent_usd_class_transfer';
+      r = await client.agentUsdClassTransfer({ owner, leg, amount: mapped.amount, toPerp: true, hlNonce: mapped.hlNonce });
     } else {
+      method = 'owner_execute';
       const nonce = await client.getOwnerNonce(owner);
       const typed = ownerIntentTypedData({ chainTag: cfg.chain_tag, contractId: client.contractId, owner, nonce, intent: mapped.intent });
       const signature = await this.#o.signOwnerIntent!(typed);
-      ({ value: out } = await client.ownerExecute({ owner, nonce, intent: mapped.intent, signature }));
+      r = await client.ownerExecute({ owner, nonce, intent: mapped.intent, signature });
     }
+    this.#o.onNearTx?.({ method, txHash: r.txHash });
+    const out = r.value;
     if (!out) throw new HyperNearMpcSignError(`MPC sign failed for ${payload.primaryType} (leg ${leg})`);
     const want = hlPayloadDigest(payload as never).slice(2);
     if (out.payload !== want) throw new HyperNearDigestMismatchError(`contract signed ${out.payload}, payload hashes to ${want}`);

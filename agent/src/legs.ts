@@ -35,6 +35,10 @@ export class AgentKeyStore {
     chmodSync(tmp, 0o600);
     renameSync(tmp, this.#file);
   }
+  /** Owners this service holds agent keys for (the guard watches them). */
+  owners(): Hex[] {
+    return Object.keys(this.#read()) as Hex[];
+  }
   /** Public part only (safe to log/serve). */
   get(owner: string, leg: number): { address: Hex; name: string; approvedAt?: number } | undefined {
     const a = this.#read()[owner.toLowerCase()]?.[String(leg)];
