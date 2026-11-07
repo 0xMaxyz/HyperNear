@@ -15,3 +15,6 @@ test-results
 contract/out/*.key
 out/**/*secret*
 out/**/*.key
+
+# contract-dev spike outputs (derived addresses, signatures); never commit
+contract/out/
