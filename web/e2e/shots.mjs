@@ -3,6 +3,7 @@
 // Output: screenshots/*.png and a PASS/FAIL line per check on stdout.
 import { chromium } from '@playwright/test';
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { installMockWallet } from './mock-wallet.mjs';
@@ -84,6 +85,24 @@ await withAgent('near-liquidation', async () => {
   await demo(page);
   await shot(page, '06-guard-trigger');
   check('guard trigger is flagged on a leg', (await page.locator('td .flag').count()) >= 1);
+  await ctx.close();
+});
+
+// 2b. the real proposal from the live models (agent/results/decision-live.json: source disagree, flagged, claude-opus-5-5),
+//     fed to the page as one decision.proposed event, to check that a flagged disagreement reads clearly
+await withAgent('hedged', async () => {
+  const live = JSON.parse(readFileSync(new URL('../../agent/results/decision-live.json', import.meta.url), 'utf8')).proposed;
+  const { page, ctx } = await open();
+  const frame = { id: 1, at: Date.now() - 3000, type: 'decision.proposed', data: live };
+  await page.route('**/events', (route) => route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream', 'access-control-allow-origin': '*' }, body: `id: 1
+event: decision.proposed
+data: ${JSON.stringify(frame)}
+
+` }));
+  await demo(page, 4000);
+  const panel = page.locator('section[aria-labelledby=dec-h]');
+  check('live flagged disagreement: action, source, model and look-twice are shown', /hold/i.test(await panel.locator('.big-action').innerText()) && (await panel.getByText(/disagreed/).count()) === 1 && (await panel.getByText(live.model).count()) >= 1 && (await panel.getByText(/look twice/).count()) === 1);
+  await shot(page, '07-decision-live-flagged');
   await ctx.close();
 });
 
