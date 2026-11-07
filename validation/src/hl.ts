@@ -1,4 +1,6 @@
+import { execFileSync } from 'node:child_process';
 import { readFileSync, existsSync } from 'node:fs';
+import { isAbsolute } from 'node:path';
 import { recoverTypedDataAddress, parseSignature, type Hex, type TypedDataDomain } from 'viem';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import {
@@ -225,14 +227,16 @@ export interface SignedActionFile {
  * Returns null when the file does not exist yet.
  */
 export function loadSignedActionFile(relPath: string): SignedActionFile | null {
-  const p = `${REPO_ROOT}${relPath}`;
+  const p = isAbsolute(relPath) ? relPath : `${REPO_ROOT}${relPath}`;
   if (!existsSync(p)) return null;
   const j = JSON.parse(readFileSync(p, 'utf8')) as Record<string, any>;
-  const address = (j.derivedAddress ?? j.address) as HexAddress | undefined;
-  if (!address || !j.action || !j.signature) {
+  // contract-dev's c2 file nests the request under exchangeRequest and names the signer `master`
+  const req = j.exchangeRequest ?? j;
+  const address = (j.derivedAddress ?? j.address ?? j.master) as HexAddress | undefined;
+  if (!address || !req.action || !req.signature) {
     throw new Error(`${relPath}: expected {derivedAddress|address, action, signature}`);
   }
-  return { address, action: j.action, signature: j.signature, meta: j.meta };
+  return { address, action: req.action, signature: req.signature, meta: { legs: j.legs, ...j.meta } };
 }
 
 export type ExchangeResponse = { status: 'ok'; response: unknown } | { status: 'err'; response: string };
@@ -296,3 +300,29 @@ export function sizeForNotional(usd: number, px: number, szDecimals: number): st
 
 /** HL price rule: at most 5 significant figures. */
 export const roundPx = (px: number): string => String(Number(px.toPrecision(5)));
+
+/**
+ * Asks contract-dev's script (run from its checkout, e.g. ~/work/near_hck-contract on ci32) for a FRESH
+ * MPC-signed approveAgent: HL rejects stale nonces. Takes ~12 s. Never prints the script's output.
+ */
+export function signFreshApproveAgent(contractDir: string, path: string, agentAddress: HexAddress, agentName: string) {
+  const out = execFileSync(
+    'node',
+    ['contract/scripts/sign-approve.mjs', path, agentAddress, String(Date.now()), agentName],
+    { cwd: contractDir, encoding: 'utf8', timeout: 120_000, maxBuffer: 1 << 20 },
+  );
+  const j = JSON.parse(out.slice(out.indexOf('{'))) as {
+    master: HexAddress;
+    signTx: string;
+    gasTGas: string;
+    exchangeRequest: { action: UserSignedAction; nonce: number; signature: RsvSignature };
+  };
+  return j;
+}
+
+/** Reads a 32-byte hex private key from a file without ever returning anything but the key; throws without echoing contents. */
+export function readHexKeyFile(path: string): Hex {
+  const m = /(?:0x)?([0-9a-fA-F]{64})(?![0-9a-fA-F])/.exec(readFileSync(path, 'utf8'));
+  if (!m) throw new Error(`no 32-byte hex key found in ${path}`);
+  return `0x${m[1]}` as Hex;
+}
