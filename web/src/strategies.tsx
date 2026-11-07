@@ -47,7 +47,7 @@ function eventText(e: AgentEvent): string {
     default: return `${id}${JSON.stringify(d).slice(0, 120)}`;
   }
 }
-const bad = (t: string) => /refused|rejected|error|lost|skipped/.test(t);
+const bad = (t: string) => /refused|rejected|error|lost|skipped:/.test(t);
 
 type Draft = { kind: 'ok'; text: string; res: DraftOk; hashOk: boolean | null } | { kind: 'refused'; text: string; errors: string[]; draft?: unknown };
 

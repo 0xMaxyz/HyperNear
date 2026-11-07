@@ -103,6 +103,9 @@ await withAgent(async () => {
   check('Start: the agent verified the command and its specHash', /Strategy btc-grid started on leg 3/.test(await note()));
   check('btc-grid is running, the recorded grid-live-1 on that leg was replaced', (await page.locator('table.mini tr', { hasText: 'btc-grid' }).getByText('running').count()) === 1 && (await page.locator('table.mini tr', { hasText: 'grid-live-1' }).getByText('stopped').count()) === 1);
 
+  await page.locator('table.mini tr', { hasText: 'btc-grid' }).scrollIntoViewIfNeeded();
+  await shot(page, '24-strategy-running');
+
   // ---- pause, resume, stop
   const row = () => page.locator('table.mini tr', { hasText: 'btc-grid' });
   await row().getByRole('button', { name: 'Pause' }).click();
@@ -131,7 +134,7 @@ await withAgent(async () => {
   await page.waitForTimeout(wait);
   const lines = await page.locator('.log.compact li').allInnerTexts();
   check('strategy log has the recorded grid and TWAP events, in words', lines.length >= 10 && lines.some((l) => /grid-live-1: started/.test(l)) && lines.some((l) => /slice \d+ of \d+/.test(l)) && lines.some((l) => /restored after a restart/.test(l)) && lines.some((l) => /\(recorded\)/.test(l)), `${lines.length} lines`);
-  await shot(page, '24-strategies-and-log');
+  await shot(page, '27-strategy-log-recorded');
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(600);
   await shot(page, '25-phase2-mobile');
