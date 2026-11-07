@@ -1,13 +1,9 @@
-import { decisionOf, type AgentEvent, type Decision, type GuardRow, type LegSnap, type OwnerView, type Position } from './api';
+import { decisionOf, type AgentEvent, type Decision, type DecisionMode, type GuardRow, type LegSnap, type OwnerView, type Position } from './api';
 
 const SOURCES: Record<string, string> = {
-  jev: 'Jev',
-  jev_factors: 'Jev',
-  claude_agrees: 'Claude agreed with Jev',
-  claude_for_undecided: 'Claude, for the factors Jev could not decide',
-  less_risky_of_two: 'Jev and Claude disagreed, the less risky action was taken',
-  claude_only: 'Claude only, Jev was unavailable',
-  fallback_hold: 'fallback to hold, both models failed',
+  jev: 'Jev decided alone',
+  claude: 'Claude decided',
+  disagree: 'Jev and Claude disagreed, the less risky action was taken',
 };
 const FACTORS: Record<string, string> = {
   hedgeNeeded: 'Hedge still needed',
@@ -186,53 +182,91 @@ function summarize(e: AgentEvent): string {
       const ls = (d.legs as { leg: number; ok: boolean }[] | undefined) ?? [];
       return `${who}trading keys revoked on Hyperliquid: ${ls.filter((l) => l.ok).length} of ${ls.length} legs${ls.some((l) => !l.ok) ? `, failed on ${ls.filter((l) => !l.ok).map((l) => l.leg).join(', ')}` : ''}`;
     }
-    case 'decision.proposed':
-    case 'decision.accepted':
-    case 'decision.rejected': {
+    case 'decision.proposed': {
       const x = decisionOf(e);
-      return `${e.type.slice(9)}: ${x ? `${x.action.replaceAll('_', ' ')} (${SOURCES[x.source] ?? x.source})` : JSON.stringify(d).slice(0, 100)}`;
+      return `proposed: ${x ? `${x.action.replaceAll('_', ' ')} on ${x.coin} (${SOURCES[x.source] ?? x.source}${x.flagged ? ', flagged' : ''})` : JSON.stringify(d).slice(0, 100)}`;
     }
+    case 'decision.accepted':
+      return `${who}accepted: ${String(d.action).replaceAll('_', ' ')} on ${d.coin}${d.auto ? ' automatically' : ''}`;
+    case 'decision.rejected':
+      return `${who}rejected: ${String(d.action).replaceAll('_', ' ')} on ${d.coin}${d.reason ? `, ${d.reason}` : ''}`;
+    case 'decision.mode':
+      return `${who}decision mode set to ${d.mode}`;
     case 'guard.rebalance.posted':
       return `${who}rebalance posted to Hyperliquid${d.ms ? ` after ${(d.ms / 1000).toFixed(1)} s` : ''}`;
+    case 'agents.prepared':
+      return `${who}agent keys prepared for legs ${((d.legs as { leg: number }[] | undefined) ?? []).map((l) => l.leg).join(', ')}`;
     default:
       return `${who}${JSON.stringify(d).slice(0, 140)}`;
   }
 }
 
-export function DecisionPanel({ d, canSign, busy, onAccept, onDismiss }: { d?: Decision; canSign: boolean; busy: boolean; onAccept: () => void; onDismiss: () => void }) {
-  const latency = d?.latencyMs ?? ((d?.jevMs ?? 0) + (d?.escalationMs ?? 0) || undefined);
-  const probs = d?.factors ?? d?.probabilities;
+export function DecisionPanel(p: {
+  d?: Decision;
+  mode?: DecisionMode;
+  canSign: boolean;
+  busy: string | null;
+  onAccept: () => void;
+  onDismiss: () => void;
+  onMode: (m: DecisionMode) => void;
+  onAsk: () => void;
+}) {
+  const { d } = p;
+  const why = p.canSign ? undefined : 'Log in to sign';
   return (
     <section className="card" aria-labelledby="dec-h">
       <h2 id="dec-h">Decision</h2>
+      <fieldset className="mode" disabled={!p.canSign || p.busy !== null} title={why}>
+        <legend>Autonomy</legend>
+        {(['off', 'propose', 'auto'] as const).map((m) => (
+          <label key={m} className={p.mode === m ? 'on' : ''}>
+            <input type="radio" name="mode" checked={p.mode === m} onChange={() => p.onMode(m)} />
+            {m === 'off' ? 'Off' : m === 'propose' ? 'Propose' : 'Auto'}
+          </label>
+        ))}
+      </fieldset>
+      <p className="muted small">
+        {p.mode === 'auto'
+          ? 'Auto runs unflagged proposals within the contract and order policy. Flagged ones and hold still wait for you.'
+          : p.mode === 'off'
+            ? 'The agent makes no proposals.'
+            : 'The agent proposes and nothing runs until you accept and sign.'}
+      </p>
       {!d ? (
-        <p className="state">No proposal waiting. When the agent suggests an action, the reasoning and the Accept button appear here. Nothing runs until you accept.</p>
+        <p className="state">No proposal waiting.</p>
       ) : (
         <>
-          <p className="big-action">{d.action.replaceAll('_', ' ')}{d.coin ? ` on ${d.coin}` : ''}</p>
+          <p className="big-action">{d.action.replaceAll('_', ' ')} on {d.coin}</p>
           <dl className="kv">
             <dt>Source</dt>
-            <dd className={d.flagged ? 'flag' : ''}>{SOURCES[d.source] ?? d.source}{d.flagged ? ', needs your attention' : ''}</dd>
-            {latency !== undefined && (<><dt>Latency</dt><dd>{(latency / 1000).toFixed(1)} s</dd></>)}
+            <dd className={d.flagged ? 'flag' : ''}>{SOURCES[d.source] ?? d.source}{d.flagged ? ', look twice' : ''}</dd>
+            <dt>Model</dt>
+            <dd>{d.model}</dd>
+            <dt>Latency</dt>
+            <dd>{(d.latencyMs / 1000).toFixed(1)} s</dd>
           </dl>
-          {probs && (
-            <ul className="probs" aria-label={d.factors ? 'Probability of yes per factor' : 'Probability per action'}>
-              {Object.entries(probs).map(([k, v]) => (
-                <li key={k}>
-                  <span>{FACTORS[k] ?? k.replaceAll('_', ' ')}</span>
-                  <meter min={0} max={1} value={v} aria-label={`${k} ${(v * 100).toFixed(0)} percent`} />
-                  <span className="num">{(v * 100).toFixed(0)}%</span>
-                </li>
-              ))}
-            </ul>
-          )}
+          {d.recorded && <p className="muted small">Recorded from a live testnet run.</p>}
+          <ul className="probs" aria-label="Probability of yes per factor">
+            {Object.entries(d.factors ?? {}).map(([k, f]) => (
+              <li key={k}>
+                <span>{FACTORS[k] ?? k}</span>
+                <meter min={0} max={1} value={f.p ?? 0} aria-label={`${k} ${f.p === null ? 'unknown' : `${(f.p * 100).toFixed(0)} percent`}`} />
+                <span className="num">{f.p === null ? 'n/a' : `${(f.p * 100).toFixed(0)}%`}</span>
+                <span className="muted small who-decided">{f.decidedBy === 'claude' ? 'Claude' : 'Jev'}</span>
+              </li>
+            ))}
+          </ul>
+          {d.error && <p className="state err">{d.error}</p>}
           {d.rationale && <p className="rationale">{d.rationale}</p>}
           <div className="actions">
-            <button className="primary" disabled={!canSign || busy} title={canSign ? undefined : 'Log in to sign'} onClick={onAccept}>{busy ? 'Waiting for signature…' : 'Accept and sign'}</button>
-            <button disabled={busy} onClick={onDismiss}>Dismiss</button>
+            <button className="primary" disabled={!p.canSign || p.busy !== null} title={why} onClick={p.onAccept}>{p.busy === 'decision' ? 'Waiting for signature…' : 'Accept and sign'}</button>
+            <button disabled={!p.canSign || p.busy !== null} title={why} onClick={p.onDismiss}>Dismiss</button>
           </div>
         </>
       )}
+      <div className="actions">
+        <button disabled={p.busy !== null} onClick={p.onAsk}>{p.busy === 'ask' ? 'Asking…' : 'Ask for a proposal'}</button>
+      </div>
     </section>
   );
 }
