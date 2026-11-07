@@ -8,8 +8,8 @@ import type { PnlBreakdown } from './pnl.ts';
 import type { CoinInfo, TradingPort } from './port.ts';
 import { checkOrder, type GridSpec, type StrategySpec, type TwapSpec } from './spec.ts';
 
-/** done: a TWAP ran all its slices (a grid never finishes). */
-export type RunState = 'running' | 'paused' | 'stopped' | 'frozen' | 'done';
+/** done: a TWAP ran all its slices (a grid never finishes). cancelling: a pause or stop could not clear the book; every tick retries. */
+export type RunState = 'running' | 'paused' | 'stopped' | 'frozen' | 'done' | 'cancelling';
 export type Emit = (type: string, data: Record<string, unknown>) => void;
 
 export interface TwapState {
@@ -70,6 +70,7 @@ export class StrategyRunner {
   #leverageSet = false;
   #errors = 0;
   #busy = false;
+  #pending?: { next: 'paused' | 'stopped'; reason: string };
 
   constructor(o: RunnerOpts) {
     this.spec = o.spec;
@@ -115,7 +116,9 @@ export class StrategyRunner {
 
   /** One pass: sync with the exchange, check limits, place what the ladder is missing. Never throws (errors pause after MAX_ERRORS). */
   async tick() {
-    if (this.state !== 'running' || this.#busy) return;
+    if (this.#busy) return;
+    if (this.state === 'cancelling') return this.#retryCancel();
+    if (this.state !== 'running') return;
     this.#busy = true;
     try {
       await this.#step();
@@ -280,22 +283,53 @@ export class StrategyRunner {
     return true;
   }
 
+  /**
+   * Clears the book for a pause or stop. If it cannot (three tries), the runner is `cancelling` and every tick retries until
+   * the book is empty: a paused strategy must not leave orders resting without anyone saying so (strategy.cancel_failed).
+   */
+  async #cancelThen(next: 'paused' | 'stopped', reason: string): Promise<number | string> {
+    try {
+      return await this.#killOrders();
+    } catch (e) {
+      this.#pending = { next, reason };
+      this.state = 'cancelling';
+      this.#emit('cancel_failed', { message: (e as Error).message, next, retrying: true });
+      return `cancel failed: ${(e as Error).message}`;
+    }
+  }
+
+  async #retryCancel() {
+    this.#busy = true;
+    try {
+      const cancelled = await this.#killOrders();
+      const { next, reason } = this.#pending ?? { next: 'paused' as const, reason: 'retry' };
+      this.state = next;
+      this.#pending = undefined;
+      this.#emit('cancelled', { state: next, reason, cancelled });
+    } catch (e) {
+      this.#emit('cancel_failed', { message: (e as Error).message, retrying: true });
+    } finally {
+      this.#busy = false;
+      this.#o.onChange?.();
+    }
+  }
+
   async pause(reason: string) {
     if (this.state !== 'running') return;
     this.state = 'paused';
-    const cancelled = await this.#killOrders().catch((e) => `cancel failed: ${(e as Error).message}`);
-    this.#emit('paused', { reason, cancelled });
+    const cancelled = await this.#cancelThen('paused', reason);
+    this.#emit('paused', { reason, cancelled, state: this.state });
   }
 
   async stop(reason: string) {
     if (this.state === 'stopped') return;
     this.state = 'stopped';
-    const cancelled = await this.#killOrders().catch((e) => `cancel failed: ${(e as Error).message}`);
+    const cancelled = await this.#cancelThen('stopped', reason);
     let flattened = false;
     if (this.spec.onStop === 'flatten') {
       await this.#o.port.flatten(this.spec.coin).then(() => (flattened = true), (e) => this.#emit('error', { message: `flatten failed: ${(e as Error).message}` }));
     }
-    this.#emit('stopped', { reason, cancelled, flattened });
+    this.#emit('stopped', { reason, cancelled, flattened, state: this.state });
   }
 
   /** The owner froze: the agent key is being revoked, so cancel while it still works, then never trade again. */

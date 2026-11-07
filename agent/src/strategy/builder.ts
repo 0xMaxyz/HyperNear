@@ -4,7 +4,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { Hex } from 'viem';
 import { SONNET_MODEL } from '../decide.ts';
-import { canonicalJson, specHash, validateSpec, STRATEGY_TYPES, type SpecContext, type StrategySpec } from './spec.ts';
+import { canonicalJson, specHash, strategyRoomUsd, validateSpec, STRATEGY_TYPES, type SpecContext, type StrategySpec } from './spec.ts';
 
 export const MAX_DRAFT_TEXT = 600;
 
@@ -123,6 +123,10 @@ export function warningsFor(spec: StrategySpec, ctx: SpecContext, mid: number | 
   const worst = spec.type === 'grid' ? spec.params.levels * Number(spec.params.sizePerLevel) * spec.params.upper : spec.params.slices * Number(spec.params.sizePerSlice) * spec.params.limitPx;
   if (worst > 0.8 * spec.limits.maxNotional) w.push(`worst-case exposure $${worst.toFixed(0)} (${exposureText}) is above 80% of maxNotional $${spec.limits.maxNotional}`);
   if (ctx.owner && spec.limits.topUpCapPerDay > ctx.owner.daily_cap / 2e6) w.push(`top-up budget $${spec.limits.topUpCapPerDay}/day is more than half of your contract cap $${ctx.owner.daily_cap / 1e6}/day`);
+  const cap = (ctx.owner?.daily_cap ?? 0) / 1e6;
+  if (ctx.owner && cap - strategyRoomUsd(ctx) > 0 && spec.limits.topUpCapPerDay > 0) {
+    w.push(`the hedge guard keeps $${cap - strategyRoomUsd(ctx)} of your $${cap}/day contract cap; strategies share the other $${strategyRoomUsd(ctx)} (other budgets: $${ctx.otherTopUpBudget})`);
+  }
   if (spec.limits.maxLeverage >= 3) w.push(`leverage up to ${spec.limits.maxLeverage}x: a ${(100 / spec.limits.maxLeverage).toFixed(0)}% move against the position can liquidate it`);
   if (spec.type === 'grid') {
     const step = (spec.params.upper - spec.params.lower) / (spec.params.levels - 1);

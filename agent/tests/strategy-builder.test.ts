@@ -75,6 +75,12 @@ describe('strategy builder (model output is fixture data; spec.ts decides)', () 
     expect(d.warnings.join('\n')).toContain('replaces your running strategy grid-btc-1');
   });
 
+  it('warns how much of the contract cap the hedge guard keeps', async () => {
+    const withReserve: DrafterDeps = { ...deps(async () => ({ cannot: '', spec: fx.grid })), context: async () => ({ ...ctx, hedgeReserveUsd: 20 }) };
+    const d = await drafter(withReserve)(OWNER, 'grid');
+    expect(d.ok && d.warnings.join('\n')).toContain('the hedge guard keeps $20 of your $50/day contract cap; strategies share the other $30');
+  });
+
   it('warns when the leg has no approved agent key yet', async () => {
     const d = await drafter(deps(async () => ({ cannot: '', spec: fx.grid }), undefined, false))(OWNER, 'grid');
     expect(d.ok && d.warnings.join('\n')).toContain('no approved agent key');

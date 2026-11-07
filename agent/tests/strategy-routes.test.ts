@@ -15,7 +15,7 @@ import { Hedger } from '../src/hedge.ts';
 import { Legs } from '../src/legs.ts';
 import { RateLimiter, Relayer } from '../src/relayer.ts';
 import { handler, type Deps } from '../src/server.ts';
-import { StrategyManager } from '../src/strategy/manager.ts';
+import { StartConflict, StrategyManager } from '../src/strategy/manager.ts';
 import type { PlaceRequest, TradingPort } from '../src/strategy/port.ts';
 import { specHash, validateSpec, type SpecContext } from '../src/strategy/spec.ts';
 import { OWNER } from './agent-helpers.ts';
@@ -124,6 +124,17 @@ describe('strategy routes', () => {
     const body = await start(specHash(spec), spec, Date.now() + 3);
     expect((await post(`${base}/strategy/start`, body)).status).toBe(200);
     expect((await post(`${base}/strategy/start`, body)).status).toBe(401);
+  });
+
+  it('a start that lost the race for its leg is answered 409', async () => {
+    const { d } = setup();
+    d.strategies!.start = async () => {
+      throw new StartConflict('leg 3 already runs strategy other');
+    };
+    const base = await serve(d);
+    const r = await post(`${base}/strategy/start`, await start(specHash(spec)));
+    expect(r.status).toBe(409);
+    expect((await r.json()).error).toContain('already runs');
   });
 
   it('a pause command cannot start a strategy and a start command cannot carry a zero hash for other actions', async () => {

@@ -18,6 +18,7 @@ class FakePort implements TradingPort {
   frozen = false;
   deadmanRefuses = false;
   iocRefuses = false;
+  cancelFailures = 0;
   open = new Map<string, PlaceRequest>();
   fills = new Set<string>();
   placed: PlaceRequest[] = [];
@@ -49,6 +50,7 @@ class FakePort implements TradingPort {
     return { oid };
   }
   async cancel(_a: number, oids: string[]) {
+    if (this.cancelFailures-- > 0) throw new Error('HL unreachable');
     for (const o of oids) {
       this.cancelled.push(o);
       this.open.delete(o);
@@ -160,6 +162,34 @@ describe('StrategyRunner', () => {
     await runner.pause('test');
     expect(port.open.size).toBe(0);
     expect(types()).toContain('strategy.paused');
+  });
+
+  it('a pause that cannot clear the book keeps retrying every tick (cancelling) and says so', async () => {
+    const { port, runner, types } = setup({ cancelFailures: 3 });
+    await runner.tick(); // two resting buys
+    await runner.pause('test'); // three tries fail
+    expect(runner.state).toBe('cancelling');
+    expect(port.open.size).toBe(2);
+    expect(types()).toContain('strategy.cancel_failed');
+    await runner.tick(); // the retry succeeds
+    expect(runner.state).toBe('paused');
+    expect(port.open.size).toBe(0);
+    expect(types()).toContain('strategy.cancelled');
+    port.mid = 76000;
+    await runner.tick();
+    expect(port.placed).toHaveLength(2); // nothing new was placed meanwhile
+  });
+
+  it('a stop that cannot clear the book ends stopped only after the retry empties it', async () => {
+    const { port, runner } = setup({ cancelFailures: 4 });
+    await runner.tick();
+    await runner.stop('test');
+    expect(runner.state).toBe('cancelling');
+    await runner.tick(); // fails once more (4th failure)
+    expect(runner.state).toBe('cancelling');
+    await runner.tick();
+    expect(runner.state).toBe('stopped');
+    expect(port.open.size).toBe(0);
   });
 
   it('stop with onStop flatten also closes the position', async () => {

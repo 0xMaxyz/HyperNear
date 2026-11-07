@@ -53,7 +53,11 @@
     { "name": "owner named another agent", "ctx": { "owner.agent": "someone.near" }, "errors": ["not this service"] },
     { "name": "leg already busy", "ctx": { "busyLegs": [3] }, "errors": ["already runs a strategy"] },
     { "name": "other strategies already use the cap", "ctx": { "otherTopUpBudget": 40 }, "errors": ["exceed the contract's daily cap"] },
-    { "name": "owner unknown to the contract", "ctx": { "owner": null }, "errors": ["owner is unknown to the contract"] }
+    { "name": "owner unknown to the contract", "ctx": { "owner": null }, "errors": ["owner is unknown to the contract"] },
+    { "name": "the hedge guard's reserve is not budgetable by strategies", "patch": { "limits.topUpCapPerDay": 35 }, "ctx": { "hedgeReserveUsd": 20 }, "errors": ["kept for the hedge guard"] },
+    { "name": "other strategies plus this one must fit in cap minus reserve", "patch": { "limits.topUpCapPerDay": 20 }, "ctx": { "hedgeReserveUsd": 20, "otherTopUpBudget": 15 }, "errors": ["minus $20 kept for the hedge guard"] },
+    { "name": "a budget inside cap minus reserve is fine", "patch": { "limits.topUpCapPerDay": 30 }, "ctx": { "hedgeReserveUsd": 20 }, "errors": [] },
+    { "name": "the reserve never takes more than half the cap", "patch": { "limits.topUpCapPerDay": 25 }, "ctx": { "hedgeReserveUsd": 100 }, "errors": [] }
   ],
   "orderCases": [
     { "name": "buy inside the range", "order": { "coin": "BTC", "isBuy": true, "px": 72000, "sz": 0.00015, "reduceOnly": false }, "view": { "position": 0, "restingOpeningNotional": 0 }, "ok": true },

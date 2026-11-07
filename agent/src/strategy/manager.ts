@@ -18,12 +18,17 @@ import { specHash, validateSpec, type SpecResult, type StrategySpec } from './sp
 /** Legs 0 and 1 are the hedge pair, leg 2 is the guard's reserve (docs/phase2-strategies.md). */
 export const RESERVED_LEGS = [0, 1, 2];
 
+/** Another strategy holds the leg, or this id already runs: a start that lost the race. The server answers 409. */
+export class StartConflict extends Error {}
+
 export interface ManagerOpts {
   legs: Legs;
   client: HyperNearClient;
   policy: OrderPolicy;
   emit: Emit;
   agentId?: string;
+  /** see SpecContext.hedgeReserveUsd */
+  hedgeReserveUsd?: number;
   intervalMs?: number;
   /** Where specs are saved (absent: nothing is persisted). */
   dataDir?: string;
@@ -126,6 +131,7 @@ export class StrategyManager {
       busyLegs: live.map((x) => x.runner.spec.leg),
       owner: st,
       agentId: this.#o.agentId,
+      hedgeReserveUsd: this.#o.hedgeReserveUsd,
       otherTopUpBudget: live.reduce((a, x) => a + x.runner.spec.limits.topUpCapPerDay, 0),
     };
   }
@@ -137,7 +143,7 @@ export class StrategyManager {
     // the leg needs its own HL API wallet, approved by the owner (the runner trades with it)
     if (!this.#o.legs.keys.get(owner, r.spec.leg)?.approvedAt) return { ok: false, errors: [`leg ${r.spec.leg} has no approved agent key (prepareAgents, then approveAgent)`] };
     const self = this.#runners.get(`${owner}:${r.spec.id}`)?.runner;
-    if (self && self.state !== 'stopped' && self.state !== 'done' && !(self.state === 'paused' && specHash(self.spec) === specHash(r.spec))) {
+    if (self && self.state !== 'stopped' && self.state !== 'done' && !((self.state === 'paused' || self.state === 'frozen') && specHash(self.spec) === specHash(r.spec))) {
       return { ok: false, errors: [`strategy ${r.spec.id} already exists (${self.state}); stop it first, or send the identical spec to resume a paused one`] };
     }
     return r;
@@ -167,13 +173,25 @@ export class StrategyManager {
   async start(owner: Hex, spec: StrategySpec) {
     const key = `${owner}:${spec.id}`;
     const existing = this.#runners.get(key);
-    if (existing && existing.runner.state === 'paused' && specHash(existing.runner.spec) === specHash(spec)) {
-      existing.runner.resume();
-      this.#schedule(existing);
+    if (existing && (existing.runner.state === 'paused' || existing.runner.state === 'frozen') && specHash(existing.runner.spec) === specHash(spec)) {
+      // a fresh port: after a freeze the agent key was rotated, and the old runner still holds the revoked one
+      const port = await this.#port(owner, spec.leg);
+      clearInterval(existing.timer);
+      const runner = this.#runner(owner, spec, port, { ...existing.runner.snapshot(), state: 'paused' });
+      runner.resume();
+      const e: Entry = { owner, runner };
+      this.#runners.set(key, e);
+      this.#schedule(e);
       this.#save();
-      return existing.runner.status();
+      return runner.status();
     }
-    const runner = this.#runner(owner, spec, await this.#port(owner, spec.leg));
+    const port = await this.#port(owner, spec.leg);
+    // validate() ran before the awaits above: re-check now, with no await between the check and the set
+    const clash = this.#onLeg(owner, spec.leg);
+    if (clash && clash.spec.id !== spec.id) throw new StartConflict(`leg ${spec.leg} already runs strategy ${clash.spec.id}`);
+    const again = this.#runners.get(key)?.runner.state;
+    if (again && again !== 'stopped' && again !== 'done') throw new StartConflict(`strategy ${spec.id} is already ${again}`);
+    const runner = this.#runner(owner, spec, port);
     const e: Entry = { owner, runner };
     this.#runners.set(key, e);
     this.#o.emit('strategy.started', { owner, id: spec.id, leg: spec.leg, type: spec.type, coin: spec.coin });
@@ -211,6 +229,7 @@ export class StrategyManager {
     const r = this.#get(owner, id);
     clearInterval(r.timer);
     await r.runner.pause(reason);
+    if (r.runner.state === 'cancelling') this.#schedule(r); // keep ticking: the runner retries its cancel
     this.#save();
     return r.runner.status();
   }
@@ -219,6 +238,7 @@ export class StrategyManager {
     const r = this.#get(owner, id);
     clearInterval(r.timer);
     await r.runner.stop(reason);
+    if (r.runner.state === 'cancelling') this.#schedule(r);
     this.#save();
     return r.runner.status();
   }

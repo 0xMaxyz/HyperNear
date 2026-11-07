@@ -78,6 +78,14 @@ export interface SpecContext {
   agentId?: string;
   /** topUpCapPerDay already promised to the owner's other strategies. */
   otherTopUpBudget: number;
+  /** USD of the contract's daily cap kept for the hedge guard (config.guard.hedgeReserveUsd; at most half the cap). */
+  hedgeReserveUsd?: number;
+}
+
+/** USD of the owner's daily cap that strategies may share: the cap minus the hedge guard's reserve. */
+export function strategyRoomUsd(ctx: Pick<SpecContext, 'owner' | 'hedgeReserveUsd'>): number {
+  const cap = (ctx.owner?.daily_cap ?? 0) / 1e6;
+  return cap - Math.min(cap / 2, ctx.hedgeReserveUsd ?? 0);
 }
 
 export type SpecResult = { ok: true; spec: StrategySpec } | { ok: false; errors: string[] };
@@ -144,9 +152,11 @@ export function validateSpec(input: unknown, ctx: SpecContext): SpecResult {
     if (!ctx.owner.agent) errors.push('owner has not named an agent (setPolicy)');
     else if (ctx.agentId && ctx.owner.agent !== ctx.agentId) errors.push(`contract policy names agent ${ctx.owner.agent}, not this service (${ctx.agentId})`);
     if (isObj(l) && isNum(l.topUpCapPerDay)) {
+      // the contract's cap is shared with the hedge guard: strategies may not budget the part reserved for it
       const capUsd = ctx.owner.daily_cap / 1e6;
-      if (ctx.otherTopUpBudget + l.topUpCapPerDay > capUsd) {
-        errors.push(`top-up budgets ${ctx.otherTopUpBudget} + ${l.topUpCapPerDay} exceed the contract's daily cap $${capUsd}`);
+      if (ctx.otherTopUpBudget + l.topUpCapPerDay > strategyRoomUsd(ctx)) {
+        const reserve = capUsd - strategyRoomUsd(ctx);
+        errors.push(`top-up budgets ${ctx.otherTopUpBudget} + ${l.topUpCapPerDay} exceed the contract's daily cap $${capUsd}${reserve > 0 ? ` minus $${reserve} kept for the hedge guard` : ''}`);
       }
     }
   }

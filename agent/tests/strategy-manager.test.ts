@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Hex } from 'viem';
-import { StrategyManager } from '../src/strategy/manager';
+import { StartConflict, StrategyManager } from '../src/strategy/manager';
 import type { PlaceRequest, TradingPort } from '../src/strategy/port';
 import { validateSpec, type SpecContext, type StrategySpec } from '../src/strategy/spec';
 import fx from './fixtures/strategy-spec.json';
@@ -60,6 +60,49 @@ const newDir = () => {
 };
 afterEach(() => {
   dirs.length = 0;
+});
+
+describe('StrategyManager start race and resume after a freeze', () => {
+  it('two concurrent starts on one leg: one wins, the other is a conflict', async () => {
+    const { m } = manager(newDir(), fakePort());
+    const other = { ...twap, id: 'dca-btc-2' } as StrategySpec;
+    const r = await Promise.allSettled([m.start(OWNER, twap), m.start(OWNER, other)]);
+    expect(r.map((x) => x.status).sort()).toEqual(['fulfilled', 'rejected']);
+    expect((r.find((x) => x.status === 'rejected') as PromiseRejectedResult).reason).toBeInstanceOf(StartConflict);
+    expect(m.list(OWNER)).toHaveLength(1);
+    m.shutdown();
+  });
+
+  it('two concurrent starts of the same id: one wins', async () => {
+    const { m } = manager(newDir(), fakePort());
+    const r = await Promise.allSettled([m.start(OWNER, twap), m.start(OWNER, twap)]);
+    expect(r.map((x) => x.status).sort()).toEqual(['fulfilled', 'rejected']);
+    m.shutdown();
+  });
+
+  it('a frozen strategy resumes on the identical spec, with a fresh port (the old agent key is revoked); a still-frozen owner is refused', async () => {
+    const ports: number[] = [];
+    const events: string[] = [];
+    let frozen = false;
+    const m = new StrategyManager({
+      legs: { registered: async () => [{ leg: 3, address: '0x5cba8512a2933a08fc3d33874871fe430b6e3d91' }], keys: { get: () => ({ approvedAt: 1 }) } } as never,
+      client: { getOwner: async () => ({ ...fx.context.owner, frozen }) } as never,
+      policy: ctx.orderPolicy, emit: (t) => void events.push(t), agentId: ctx.agentId, intervalMs: 3_600_000,
+      makePort: async () => (ports.push(1), fakePort()),
+    });
+    await m.start(OWNER, twap);
+    await m.cancelAll(OWNER); // the freeze hook
+    expect(m.list(OWNER)).toMatchObject([{ id: twap.id, state: 'frozen' }]);
+    frozen = true;
+    expect(await m.validate(OWNER, twap)).toMatchObject({ ok: false, errors: [expect.stringContaining('owner is frozen')] });
+    frozen = false;
+    const v = await m.validate(OWNER, twap);
+    expect(v.ok).toBe(true);
+    if (v.ok) expect(await m.start(OWNER, v.spec)).toMatchObject({ state: 'running' });
+    expect(ports).toHaveLength(2);
+    expect(events).toContain('strategy.resumed');
+    m.shutdown();
+  });
 });
 
 describe('StrategyManager persistence', () => {

@@ -38,7 +38,7 @@ import { hlPoster, HttpError, RateLimiter, Relayer } from './relayer.ts';
 import { claudeAsk, drafter, MAX_DRAFT_TEXT, type Draft } from './strategy/builder.ts';
 import { proposeStrategyAction, type StrategyClients } from './strategy/decide.ts';
 import { claudeStrategyEscalator, jevAskStrategy } from './strategy/decideClients.ts';
-import { StrategyManager } from './strategy/manager.ts';
+import { StartConflict, StrategyManager } from './strategy/manager.ts';
 import { specHash } from './strategy/spec.ts';
 
 export interface Deps {
@@ -272,7 +272,7 @@ export function handler(d: Deps) {
       }
       reply(404, { error: 'not found' });
     } catch (e) {
-      const status = e instanceof HttpError ? e.status : e instanceof HedgeRefused ? 422 : 500;
+      const status = e instanceof HttpError ? e.status : e instanceof HedgeRefused ? 422 : e instanceof StartConflict ? 409 : 500;
       if (status === 500) console.error('request failed:', (e as Error).message);
       reply(status, { error: (e as Error).message });
     }
@@ -321,7 +321,7 @@ export function buildDeps(config: AgentConfig): Deps {
     executeStrategy: (owner, id) => d.strategies!.pause(owner, id, 'accepted strategy proposal'),
   });
   const strategyClients: StrategyClients | undefined = clients && { ask: jevAskStrategy(), escalate: claudeStrategyEscalator() };
-  const strategies = new StrategyManager({ legs, client, policy: config.policy, agentId: config.nearAgent?.accountId, dataDir: config.dataDir, emit: (t, data) => void bus.emit(t, data) });
+  const strategies = new StrategyManager({ legs, client, policy: config.policy, agentId: config.nearAgent?.accountId, hedgeReserveUsd: config.guard.hedgeReserveUsd, dataDir: config.dataDir, emit: (t, data) => void bus.emit(t, data) });
   d.strategies = strategies;
   if (process.env.ANTHROPIC_API_KEY) {
     d.drafter = drafter({
