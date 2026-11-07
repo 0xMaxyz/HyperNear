@@ -24,6 +24,15 @@ export interface AgentConfig {
   /** POST /relay requests per IP per minute. */
   relayPerMinute: number;
   port: number;
+  guard: {
+    intervalSec: number;
+    /** trigger at accountValue / maintenance <= this (plan: 2) */
+    marginFloor: number;
+    latencyP95Sec: number;
+    annualVol: number;
+    /** extra owners to watch besides those we hold agent keys for */
+    watchOwners: string[];
+  };
 }
 
 const num = (v: string | undefined, d: number) => (v === undefined || v === '' ? d : Number(v));
@@ -51,6 +60,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AgentConfig {
     },
     relayPerMinute: num(env.HYPERNEAR_RELAY_PER_MINUTE, 20),
     port: num(env.PORT, 8787),
+    guard: {
+      intervalSec: num(env.HYPERNEAR_GUARD_INTERVAL_SEC, 10),
+      marginFloor: num(env.HYPERNEAR_GUARD_MARGIN_FLOOR, 2),
+      latencyP95Sec: num(env.HYPERNEAR_GUARD_LATENCY_SEC, 9),
+      annualVol: num(env.HYPERNEAR_GUARD_ANNUAL_VOL, 0.6),
+      watchOwners: (env.HYPERNEAR_WATCH_OWNERS ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
+    },
   };
 }
 

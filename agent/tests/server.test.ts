@@ -4,7 +4,10 @@ import { join } from 'node:path';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
-import { HyperNearClient, type NearBackend } from '@hypernear/client';
+import { commandTypedData, HyperNearClient, newCommand, type Command, type NearBackend } from '@hypernear/client';
+import { privateKeyToAccount } from 'viem/accounts';
+import { ReplayCache } from '../src/commands.ts';
+import { DEFAULT_GUARD_CONFIG } from '../src/guard.ts';
 import { loadConfig } from '../src/config.ts';
 import { EventBus } from '../src/events.ts';
 import { Hedger } from '../src/hedge.ts';
@@ -14,6 +17,9 @@ import { handler, type Deps } from '../src/server.ts';
 import { ch, OWNER, snap } from './agent-helpers.ts';
 
 const LEG0 = '0xfc5f38a75535cc6a864bb5ba14d9c7f29eecacac';
+// well-known PUBLIC web3 test key (its address is OWNER): never funded
+const ownerKey = privateKeyToAccount('0x4c0883a69102937d6231471b5dbb6204fe5129617082792ae468d01a3f362318');
+const signed = async (command: Command, by = ownerKey) => ({ command, sig: await by.signTypedData(commandTypedData('near-testnet', 'leash.testnet', command) as never) });
 const SIG = `0x${'ab'.repeat(65)}`;
 
 describe('RateLimiter', () => {
@@ -78,7 +84,7 @@ function deps(o: { owner?: Record<string, unknown> | null; legs?: Record<number,
   legs.snapshot = async () => snap(ch({ accountValue: 10, maint: 6, positions: [{ coin: 'BTC', szi: '0.0003', liq: '99000' }] }));
   const bus = new EventBus();
   const hedger = new Hedger(legs, config.policy, bus);
-  const d: Deps = { config, client, legs, hedger, bus, relayer: new Relayer(client, new RateLimiter(2)) };
+  const d: Deps = { config, client, legs, hedger, bus, relayer: new Relayer(client, new RateLimiter(2)), replay: new ReplayCache(), guardConfig: DEFAULT_GUARD_CONFIG };
   return { d, calls };
 }
 
@@ -95,7 +101,7 @@ async function serve(d: Deps) {
 const post = (url: string, body: unknown) => fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
 describe('HTTP API', () => {
-  it('GET /owner/:addr: legs, snapshot, policy, guard (and guard triggers go to /events)', async () => {
+  it('GET /owner/:addr: legs, snapshot, policy, guard evaluation', async () => {
     const { d } = deps();
     const base = await serve(d);
     const r = await (await fetch(`${base}/owner/${OWNER}`)).json();
@@ -104,7 +110,6 @@ describe('HTTP API', () => {
     expect(r.snapshot.legs[0].clearinghouse.withdrawable).toBe('20');
     const g = r.guard.find((x: any) => x.id === 'leg0:BTC');
     expect(g.trigger).toBe(true); // 10 / 6 <= 2x maintenance
-    expect(d.bus.since().some((e) => e.type === 'guard')).toBe(true);
   });
 
   it('POST /relay: owner_execute for a signed intent; registerLeg without a signature', async () => {
@@ -138,7 +143,7 @@ describe('HTTP API', () => {
     for (const owner of [null, { nonce: 1, agent: 'someone-else.testnet', frozen: false }, { nonce: 1, agent: 'agent.testnet', frozen: true }]) {
       const { d } = deps({ owner });
       const base = await serve(d);
-      expect((await post(`${base}/hedge/open`, { owner: OWNER, coin: 'BTC', ratio: 0.5 })).status).toBe(403);
+      expect((await post(`${base}/hedge/open`, await signed(newCommand(OWNER, 'openHedge', 'BTC', '0.5')))).status).toBe(403);
       server!.close();
     }
   });
@@ -146,7 +151,7 @@ describe('HTTP API', () => {
   it('POST /hedge/open refused by order policy -> 422 and a hedge event', async () => {
     const { d } = deps();
     const base = await serve(d);
-    const r = await post(`${base}/hedge/open`, { owner: OWNER, coin: 'DOGE', ratio: 0.5 });
+    const r = await post(`${base}/hedge/open`, await signed(newCommand(OWNER, 'openHedge', 'DOGE', '0.5')));
     expect(r.status).toBe(422);
     expect(d.bus.since().find((e) => e.type === 'hedge')?.data.refused).toMatch(/not allowed/);
   });
@@ -171,5 +176,36 @@ describe('HTTP API', () => {
     const base = await serve(d);
     expect((await fetch(`${base}/nope`)).status).toBe(404);
     expect(new HttpError(418, 'x').status).toBe(418);
+  });
+});
+
+describe('signed commands on /hedge/*', () => {
+  it.each([
+    ['no command', async () => ({ owner: OWNER, coin: 'BTC', ratio: 0.5 }), 401, /signed command required/],
+    ['wrong signer', async () => signed(newCommand(OWNER, 'openHedge', 'BTC', '0.5'), privateKeyToAccount(`0x${'11'.repeat(32)}`)), 401, /does not match/],
+    ['expired', async () => signed(newCommand(OWNER, 'openHedge', 'BTC', '0.5', -5)), 401, /expired/],
+    ['expiry > 60 s', async () => signed(newCommand(OWNER, 'openHedge', 'BTC', '0.5', 120)), 401, /60 s/],
+    ['action for the other route', async () => signed(newCommand(OWNER, 'closeHedge', 'BTC')), 400, /openHedge/],
+    ['tampered after signing', async () => ({ ...(await signed(newCommand(OWNER, 'openHedge', 'BTC', '0.5'))), command: { ...newCommand(OWNER, 'openHedge', 'BTC', '1') } }), 401, /does not match/],
+  ])('rejects %s', async (_n, body, status, re) => {
+    const { d } = deps();
+    const base = await serve(d);
+    const r = await post(`${base}/hedge/open`, await body());
+    expect(r.status).toBe(status);
+    expect((await r.json()).error).toMatch(re);
+    expect(d.bus.since().some((e) => e.type === 'hedge' || e.type === 'command')).toBe(false);
+  });
+
+  it('accepts a fresh command once, refuses its replay', async () => {
+    const { d } = deps();
+    d.hedger.closeHedge = (async () => ({ plan: { ok: true, orders: [] }, results: [] })) as never; // no HL here
+    const base = await serve(d);
+    const body = await signed(newCommand(OWNER, 'closeHedge', 'BTC'));
+    const r1 = await post(`${base}/hedge/close`, body);
+    expect(r1.status).toBe(200);
+    expect(d.bus.since().find((e) => e.type === 'command')?.data).toMatchObject({ owner: OWNER, action: 'closeHedge' });
+    const r2 = await post(`${base}/hedge/close`, body);
+    expect(r2.status).toBe(401);
+    expect((await r2.json()).error).toMatch(/replayed/);
   });
 });
