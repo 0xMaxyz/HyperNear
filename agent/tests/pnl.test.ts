@@ -5,7 +5,7 @@ import { computePnl, strategyPnl, type PnlSource } from '../src/strategy/pnl';
 const SINCE = 1_000_000;
 const fill = (time: number, closedPnl: string, fee = '0.01'): HlUserFill => ({ time, closedPnl, fee, coin: 'BTC', oid: time, px: '75000', sz: '0.00015', side: 'B', startPosition: '0', dir: 'Open Long', crossed: true, hash: '0x00', tid: time, feeToken: 'USDC', twapId: null }) as HlUserFill;
 const funding = (time: number, usdc: string): HlUserFunding => ({ time, hash: '0x00', delta: { type: 'funding', coin: 'BTC', usdc, szi: '0.0001', fundingRate: '0.0001', nSamples: null } }) as HlUserFunding;
-const positions = (unrealizedPnl: string) => ({ assetPositions: [{ position: { unrealizedPnl } }] }) as never;
+const positions = (unrealizedPnl: string) => ({ assetPositions: [{ position: { unrealizedPnl } }] }) as unknown as { assetPositions: never };
 
 /** The leg as HL reports it. accountValue / withdrawable change with deposits and transfers, the history does not. */
 function leg(o: { accountValue: number; fills?: HlUserFill[]; funding?: HlUserFunding[]; unrealized?: string }): PnlSource {
