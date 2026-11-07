@@ -1,0 +1,44 @@
+[
+  { "name": "equal sizes, fees and funding: locked PnL at the mark",
+    "input": { "legs": [
+      { "side": "long",  "size": 1, "entryPx": 100, "feesPaid": 0.1, "netFunding": -0.2 },
+      { "side": "short", "size": 1, "entryPx": 100, "feesPaid": 0.1, "netFunding": 0 } ],
+      "closeFeeRate": 0.00045, "markPx": 110 },
+    "expect": { "kind": "locked", "lockedPnl": -0.499 } },
+  { "name": "unequal sizes, no fees: break-even at the entry",
+    "input": { "legs": [
+      { "side": "long",  "size": 2, "entryPx": 100, "feesPaid": 0, "netFunding": 0 },
+      { "side": "short", "size": 1, "entryPx": 100, "feesPaid": 0, "netFunding": 0 } ],
+      "closeFeeRate": 0 },
+    "expect": { "kind": "price", "price": 100 } },
+  { "name": "unequal sizes, fees paid shift break-even up",
+    "input": { "legs": [
+      { "side": "long",  "size": 2, "entryPx": 100, "feesPaid": 0.6, "netFunding": 0 },
+      { "side": "short", "size": 1, "entryPx": 100, "feesPaid": 0.4, "netFunding": 0 } ],
+      "closeFeeRate": 0 },
+    "expect": { "kind": "price", "price": 101 } },
+  { "name": "close fee rate is charged on the notional of both legs",
+    "input": { "legs": [
+      { "side": "long",  "size": 2, "entryPx": 100, "feesPaid": 0.6, "netFunding": 0 },
+      { "side": "short", "size": 1, "entryPx": 100, "feesPaid": 0.4, "netFunding": 0 } ],
+      "closeFeeRate": 0.001 },
+    "expect": { "kind": "price", "price": 101.30391174522569 } },
+  { "name": "funding received lowers the break-even",
+    "input": { "legs": [
+      { "side": "long",  "size": 2, "entryPx": 100, "feesPaid": 0.6, "netFunding": 2 },
+      { "side": "short", "size": 1, "entryPx": 100, "feesPaid": 0.4, "netFunding": 0 } ],
+      "closeFeeRate": 0 },
+    "expect": { "kind": "price", "price": 99 } },
+  { "name": "net short with different entries",
+    "input": { "legs": [
+      { "side": "long",  "size": 1, "entryPx": 100, "feesPaid": 0, "netFunding": 0 },
+      { "side": "short", "size": 2, "entryPx": 110, "feesPaid": 0, "netFunding": 0 } ],
+      "closeFeeRate": 0 },
+    "expect": { "kind": "price", "price": 120 } },
+  { "name": "funding so large the net long is above water at any price",
+    "input": { "legs": [ { "side": "long", "size": 1, "entryPx": 100, "feesPaid": 0, "netFunding": 500 } ], "closeFeeRate": 0 },
+    "expect": { "kind": "always_profitable" } },
+  { "name": "fees so large the net short is under water at any price",
+    "input": { "legs": [ { "side": "short", "size": 1, "entryPx": 100, "feesPaid": 500, "netFunding": 0 } ], "closeFeeRate": 0 },
+    "expect": { "kind": "never_profitable" } }
+]

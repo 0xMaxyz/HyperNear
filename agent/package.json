@@ -1,0 +1,14 @@
+{
+  "name": "@hypernear/agent",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@perps-platform/core": "workspace:*",
+    "viem": "2.54.3"
+  }
+}

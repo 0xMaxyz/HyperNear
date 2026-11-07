@@ -1,0 +1,10 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "paths": { "@perps-platform/core": ["../packages/core/src/index.ts"] },
+    "types": ["node"]
+  },
+  "include": ["src/**/*", "tests/**/*", "vitest.config.ts"]
+}
