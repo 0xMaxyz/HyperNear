@@ -156,7 +156,7 @@ await page.addInitScript(() => {
     card.style.cssText = `position:fixed;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;gap:18px;padding:64px;background:${ink};color:${paper};font:600 38px/1.3 system-ui,sans-serif;text-align:center;z-index:2147483647`;
     const cap = document.createElement('div');
     cap.id = 'demo-cap';
-    cap.style.cssText = `position:fixed;left:50%;bottom:26px;transform:translateX(-50%);display:none;max-width:1080px;padding:13px 22px;background:${ink};color:${paper};font:600 22px/1.35 system-ui,sans-serif;text-align:center;border-radius:6px;box-shadow:0 2px 14px rgba(0,0,0,.4);z-index:2147483646`;
+    cap.style.cssText = `position:fixed;left:50%;bottom:26px;transform:translateX(-50%);display:none;width:max-content;max-width:1080px;padding:13px 22px;background:${ink};color:${paper};font:600 22px/1.35 system-ui,sans-serif;text-align:center;border-radius:6px;box-shadow:0 2px 14px rgba(0,0,0,.4);z-index:2147483646`;
     const cur = document.createElement('div');
     cur.id = 'demo-cursor';
     cur.style.cssText = `position:fixed;left:0;top:0;width:22px;height:22px;margin:-11px 0 0 -11px;border:3px solid ${ink};background:rgba(244,241,234,.85);border-radius:50%;pointer-events:none;z-index:2147483645;transform:translate(640px,360px);transition:transform .55s ease-in-out;opacity:0`;
@@ -164,7 +164,9 @@ await page.addInitScript(() => {
     card.style.display = 'flex';
     card.innerHTML = `<div>HyperNear: smart accounts for Hyperliquid</div><div style="font-weight:400;font-size:26px;max-width:960px">Keys held by NEAR Chain Signatures.<br>Policy in a public NEAR contract.</div>`;
   };
-  document.addEventListener('DOMContentLoaded', ready);
+  const pad = document.createElement('style');
+  pad.textContent = 'main { padding-bottom: 640px !important; }';
+  document.addEventListener('DOMContentLoaded', () => { document.head.append(pad); ready(); });
   if (document.readyState !== 'loading') ready();
 });
 const card = (html, small = '') => page.evaluate(([h, s]) => { const c = document.getElementById('demo-card'); c.innerHTML = h ? `<div>${h}</div>${s ? `<div style="font-weight:400;font-size:26px;max-width:980px">${s}</div>` : ''}` : ''; c.style.display = h ? 'flex' : 'none'; }, [html, small]);
@@ -243,7 +245,7 @@ await sleep(4200);
 // ---- 2. the problem
 await card('A Hyperliquid master key is a bare EOA.', 'No withdrawal lock. No caps. No freeze.<br>Whoever holds the key can move everything.');
 mark('problem');
-await sleep(5200);
+await sleep(5000);
 
 // ---- 3. log in
 await card('');
@@ -262,10 +264,10 @@ await cap('1. Create two Hyperliquid accounts. Their keys belong to the NEAR con
 await scrollTo(section('setup-h'), { offset: 12 });
 await sleep(1500);
 await act(page.getByRole('button', { name: 'Create legs' }));
-await sleep(1800);
+await sleep(1300);
 await cap('2. Prepare agents: the service makes one Hyperliquid trading key per leg. You sign the request.');
 await act(page.getByRole('button', { name: 'Prepare agents' }));
-await sleep(1800);
+await sleep(1300);
 await cap('3. Approve each agent. The NEAR contract signs the Hyperliquid action via MPC. No key ever sits on our server.');
 await act(page.getByRole('button', { name: 'Approve agent' }));
 await sleep(2200);
@@ -284,7 +286,7 @@ mark('hedge');
 // ---- 5. the guard
 await cap('The margin guard watches every leg. When one gets too close to liquidation it tops it up from the reserve leg.');
 await scrollTo(section('ev-h'), { offset: 14 });
-await sleep(2800);
+await sleep(2000);
 const frames = guardFrames();
 mark('guard timeline starts');
 const mid = { trigger: frames.find((f) => f.type === 'guard.trigger').dt, signed: frames.find((f) => f.type === 'guard.rebalance.signed').dt, posted: frames.find((f) => f.type === 'guard.rebalance.posted').dt, recovered: frames.filter((f) => f.type === 'guard.ok').at(-1).dt };
@@ -308,14 +310,14 @@ mark('guard done');
 
 // ---- 6. a decision
 await cap('The agent proposes an action. Jev answers first; Claude double-checks. A disagreement is flagged for you.');
-await scrollTo(section('dec-h'), { offset: 14 });
+await scrollTo(section('dec-h'), { at: 'center' });
 const wantUntil = Date.now() + 60000;
 while (held.proposals.length < 4 && Date.now() < wantUntil) await sleep(500);
 const upTo = held.proposals.findIndex((e) => e.data.flagged && e.data.action !== 'hold' && e.data.source === 'disagree');
 for (const e of held.proposals.slice(0, upTo + 1)) { emit('decision.proposed', { ...e.data }); await sleep(900); }
-await sleep(3400);
+await sleep(2600);
 await cap('Nothing runs until you sign. Accepting signs a command for this exact proposal.');
-await sleep(2200);
+await sleep(1800);
 await act(page.getByRole('button', { name: /Accept and sign/ }));
 await cap('Accepted. The orders stay inside your order policy and the contract policy.');
 await sleep(3000);
@@ -332,12 +334,12 @@ await tap(page.getByRole('button', { name: 'Draft strategy' }));
 await page.locator('.draft h4', { hasText: 'Grid on BTC' }).waitFor({ timeout: 25000 });
 await cap('The agent checks every number against your order policy and the contract policy, and shows the spec in words.');
 await scrollTo('.draft', { at: 'center' });
-await sleep(4200);
+await sleep(3400);
 await cap('The hash is recomputed in your browser. You sign exactly this spec.');
 await sleep(2600);
 await act(page.getByRole('button', { name: 'Start strategy' }));
 await cap('Started on its own leg, so its losses stay on that leg. The strategy log follows every order and fill.');
-await scrollTo('#strat-log-h', { offset: 70 });
+await scrollTo('#strat-list-h', { offset: 20 });
 const sFrames = strategyFrames();
 await Promise.all([play(sFrames, 14), sleep(8200)]); // the recorded runs last about 130 s; 14x keeps both on screen for 9 s
 await sleep(800);
@@ -353,9 +355,9 @@ const rev = held.revoked[0];
 if (rev) emit('agents.revoked', { ...rev.data });
 await scrollTo(section('ev-h'), { offset: 14 });
 await cap('Trading keys revoked on Hyperliquid: 3 of 3 legs.');
-await sleep(2800);
+await sleep(2400);
 await cap('In the live run, the old agent\'s next order was rejected 8.9 s after the freeze.');
-await sleep(3600);
+await sleep(3000);
 mark('freeze');
 
 // ---- 9. end card

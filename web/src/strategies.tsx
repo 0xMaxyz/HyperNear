@@ -240,7 +240,7 @@ export function StrategiesPanel(p: {
         </div>
 
         <div>
-          <h3>Your strategies</h3>
+          <h3 id="strat-list-h">Your strategies</h3>
           {list.state === 'loading' && <p className="state">Reading strategies…</p>}
           {list.state === 'off' && <p className="state">{list.message}</p>}
           {list.state === 'error' && <p className="state err" role="alert">{list.message}</p>}
