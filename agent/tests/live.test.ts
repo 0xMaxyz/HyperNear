@@ -1,7 +1,7 @@
 // LIVE=1 only (ci32, testnet): the D3 agent flow end to end with the test owner, and fixture recording.
 //   register legs 0/1 -> fund from lab wallet #2 -> approve one HL agent per leg (owner-mode NearMasterSigner)
 //   -> leg0 long BTC ~$30 at 3x -> openHedge(BTC, 0.5) on leg1 -> closeHedge -> both flat.
-//   Then leg2 near liquidation (max leverage on a ~$1 account) for the third fixture, closed again.
+//   Then leg2 near liquidation (max leverage, initial margin ~= a ~$3 account) for the third fixture, closed again.
 // Needs: ~/.near-credentials/testnet/<contract>.json (relayer), LAB_WALLETS_PATH (index 2), and HYPERNEAR_TEST_OWNER_KEY
 // or NEAR_NETWORK=testnet (public test key). Writes agent/fixtures/*.json and agent/results/D3-live.json.
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
@@ -125,12 +125,13 @@ describe.skipIf(!LIVE)('live D3: legs, agents, hedge open/close on HL testnet', 
     s = await until(() => legs.snapshot(o), (x) => szi(x, 0) === 0 && szi(x, 1) === 0, 'both legs flat');
     results.finalSzi = { leg0: szi(s, 0), leg1: szi(s, 1) };
 
-    // 6. third fixture: leg2 with ~$1 at near-max leverage (margin ratio ~2x maintenance), then closed
+    // 6. third fixture: leg2 (~$3) at max leverage with initial margin ~= account value, i.e. ~2x maintenance, then closed
     const addr2 = await client.registerLeg(o, 2);
     s = await legs.snapshot(o);
-    if (total(s, 2) < 0.9) {
-      orders['fund-leg2'] = await funder.usdSend({ destination: addr2, amount: total(s, 2) > 0 ? '1' : '2' }); // 1 USDC activation fee on a new address
-      s = await until(() => legs.snapshot(o), (x) => total(x, 2) >= 0.9, 'leg2 funding');
+    if (total(s, 2) < 2.9) {
+      // +1 USDC activation fee on a never-funded address
+      orders['fund-leg2'] = await funder.usdSend({ destination: addr2, amount: String(Math.ceil(3 - total(s, 2)) + (total(s, 2) > 0 ? 0 : 1)) });
+      s = await until(() => legs.snapshot(o), (x) => total(x, 2) >= 2.9, 'leg2 funding');
     }
     await legs.approveAgents(o, [2], signOwnerIntent);
     const leg2 = legs.tradingClient(o, 2);
@@ -139,11 +140,15 @@ describe.skipIf(!LIVE)('live D3: legs, agents, hedge open/close on HL testnet', 
     let opened2: unknown;
     const attempts: unknown[] = [];
     orders.leg2Attempts = attempts;
-    for (const f of [0.985, 0.97, 0.95, 0.9]) {
-      const size = floorSize((av * btc.maxLeverage * f) / mid, btc.szDecimals);
-      if (Number(size) * mid < 10) break;
+    const mid2 = Number(s.market.mids.BTC);
+    const step = 10 ** -btc.szDecimals;
+    const maxSize = Number(floorSize((av * btc.maxLeverage) / mid2, btc.szDecimals));
+    for (let k = 0; k < 4; k++) {
+      // largest size whose initial margin fits, then one size step down at a time
+      const size = (maxSize - k * step).toFixed(btc.szDecimals);
+      const f = (Number(size) * mid2) / (av * btc.maxLeverage);
       try {
-        opened2 = fillOf(await leg2.limitOrderOpen({ asset: btc.asset, isBuy: true, price: roundPx(mid * 1.01, btc.szDecimals), size, tif: 'Ioc' }));
+        opened2 = fillOf(await leg2.limitOrderOpen({ asset: btc.asset, isBuy: true, price: roundPx(mid2 * 1.01, btc.szDecimals), size, tif: 'Ioc' }));
         orders.leg2Open = { fraction: f, size, fill: opened2 };
         break;
       } catch (e) {
@@ -154,7 +159,7 @@ describe.skipIf(!LIVE)('live D3: legs, agents, hedge open/close on HL testnet', 
       s = await until(() => legs.snapshot(o), (x) => szi(x, 2) > 0, 'leg2 position');
       saveFixture('near-liquidation', `leg2: ~$${av.toFixed(2)} account long BTC at ${btc.maxLeverage}x cross (initial margin ~= account value)`, s);
       const p = szi(s, 2);
-      orders.leg2Close = fillOf(await leg2.limitOrderOpen({ asset: btc.asset, isBuy: false, price: roundPx(mid * 0.97, btc.szDecimals), size: p.toFixed(btc.szDecimals), tif: 'Ioc', reduceOnly: true }));
+      orders.leg2Close = fillOf(await leg2.limitOrderOpen({ asset: btc.asset, isBuy: false, price: roundPx(mid2 * 0.97, btc.szDecimals), size: p.toFixed(btc.szDecimals), tif: 'Ioc', reduceOnly: true }));
       s = await until(() => legs.snapshot(o), (x) => szi(x, 2) === 0, 'leg2 flat');
     }
     results.finalSzi = { ...(results.finalSzi as object), leg2: szi(s, 2) };
