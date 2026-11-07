@@ -45,5 +45,5 @@ export function newCommand(owner: Hex, action: CommandAction, coin: string, rati
 
 export async function recoverCommandSigner(chainTag: ChainTag, contractId: string, c: Command, signature: Hex): Promise<Hex> {
   const td = commandTypedData(chainTag, contractId, c);
-  return (await recoverTypedDataAddress({ ...(td as never), signature })).toLowerCase() as Hex;
+  return (await recoverTypedDataAddress({ ...(td as object), signature } as never)).toLowerCase() as Hex;
 }
