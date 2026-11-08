@@ -1,4 +1,4 @@
-import { decisionOf, type AgentEvent, type Decision, type DecisionMode, type GuardRow, type LegSnap, type OwnerView, type Position } from './api';
+import { decisionOf, sweepProblems, type Swept, type AgentEvent, type Decision, type DecisionMode, type GuardRow, type LegSnap, type OwnerView, type Position } from './api';
 
 const SOURCES: Record<string, string> = {
   jev: 'Jev decided alone',
@@ -182,6 +182,15 @@ function summarize(e: AgentEvent): string {
       const ls = (d.legs as { leg: number; ok: boolean }[] | undefined) ?? [];
       return `${who}trading keys revoked on Hyperliquid: ${ls.filter((l) => l.ok).length} of ${ls.length} legs${ls.some((l) => !l.ok) ? `, failed on ${ls.filter((l) => !l.ok).map((l) => l.leg).join(', ')}` : ''}`;
     }
+    case 'orders.swept': {
+      const w = d as unknown as Swept;
+      const secs = w.ms ? ` (${(w.ms / 1000).toFixed(1)} s)` : '';
+      if (w.error) return `${who}Freeze sweep failed: ${w.error}${secs}`;
+      const legs = w.legs.filter((l) => l.cancelled > 0).length;
+      const bad = sweepProblems(w).length > 0;
+      const head = w.cancelled === 0 ? 'no resting orders were left' : `${w.cancelled} resting order${w.cancelled === 1 ? '' : 's'} cancelled on ${legs} leg${legs === 1 ? '' : 's'}`;
+      return `${who}Freeze sweep: ${head}${bad ? ', with problems (see below)' : ''}${secs}`;
+    }
     case 'decision.proposed': {
       const x = decisionOf(e);
       return `proposed: ${x ? `${x.action.replaceAll('_', ' ')} on ${x.coin} (${SOURCES[x.source] ?? x.source}${x.flagged ? ', flagged' : ''})` : JSON.stringify(d).slice(0, 100)}`;
@@ -271,7 +280,61 @@ export function DecisionPanel(p: {
   );
 }
 
-export function Activity({ events, stream }: { events: AgentEvent[]; stream: 'live' | 'down' | 'connecting' }) {
+/** NEAR explorer for the contract's chain. */
+export const nearScan = (chainTag?: string) => (chainTag === 'near-mainnet' ? 'https://nearblocks.io/txns/' : 'https://testnet.nearblocks.io/txns/');
+
+/** Per leg of a freeze sweep: the count, the NEAR transactions that signed the cancels, and any error in plain words. */
+function SweptLegs({ w, scan }: { w: Swept; scan: string }) {
+  if (w.error || w.legs.length === 0) return null;
+  return (
+    <ul className="sub">
+      {w.legs.map((l) => (
+        <li key={l.leg} className={l.error || l.hl.some((h) => h !== 'ok') ? 'flag' : ''}>
+          <strong>Leg {l.leg}:</strong>{' '}
+          {l.found === 0 ? 'no resting orders' : `${l.cancelled} cancelled${l.cancelled < l.found ? ` of ${l.found} found` : ''}${l.skipped ? `, ${l.skipped} skipped` : ''}`}
+          {l.txHashes.map((h) => (
+            <span key={h}>
+              {', NEAR tx '}
+              <a href={`${scan}${h}`} target="_blank" rel="noreferrer">{short(h)}</a>
+            </span>
+          ))}
+          {l.error && `, error: ${l.error}`}
+          {l.hl.filter((h) => h !== 'ok').map((h) => `, Hyperliquid ${h}`)}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** The freeze as steps: keys revoked, then resting orders cleared. Small, under the Freeze button. */
+export function FreezeSteps({ events, show }: { events: AgentEvent[]; show: boolean }) {
+  if (!show) return null;
+  const rev = events.find((e) => e.type === 'agents.revoked');
+  const sw = events.find((e) => e.type === 'orders.swept');
+  const legs = (rev?.data.legs as { ok: boolean }[] | undefined) ?? [];
+  const w = sw ? (sw.data as unknown as Swept) : undefined;
+  const problems = w ? sweepProblems(w) : [];
+  return (
+    <ul className="freeze-steps" aria-label="What the freeze did">
+      <li>
+        Trading keys:{' '}
+        {rev ? <span className={legs.every((l) => l.ok) ? 'ok-text' : 'flag'}>revoked on {legs.filter((l) => l.ok).length} of {legs.length} legs</span> : <span className="muted">pending</span>}
+      </li>
+      <li>
+        Resting orders:{' '}
+        {!w ? (
+          <span className="muted">pending</span>
+        ) : problems.length === 0 ? (
+          <span className="ok-text">cleared ({w.cancelled})</span>
+        ) : (
+          <span className="flag">failed: {problems.join('; ')} (anyone can retry: see README)</span>
+        )}
+      </li>
+    </ul>
+  );
+}
+
+export function Activity({ events, stream, scan }: { events: AgentEvent[]; stream: 'live' | 'down' | 'connecting'; scan: string }) {
   return (
     <section className="card" aria-labelledby="ev-h">
       <h2 id="ev-h">Guard and decision log</h2>
@@ -281,10 +344,13 @@ export function Activity({ events, stream }: { events: AgentEvent[]; stream: 'li
       ) : (
         <ol className="log">
           {events.map((e) => (
-            <li key={e.id} className={e.type === 'guard.trigger' || e.type === 'guard.error' ? 'flag' : ''}>
+            <li key={e.id} className={e.type === 'guard.trigger' || e.type === 'guard.error' || (e.type === 'orders.swept' && sweepProblems(e.data as unknown as Swept).length > 0) ? 'flag' : ''}>
               <time dateTime={new Date(e.at).toISOString()}>{new Date(e.at).toLocaleTimeString('en-GB')}</time>
               <span className="tag">{e.type}</span>
-              <span>{summarize(e)}</span>
+              <span>
+                {summarize(e)}
+                {e.type === 'orders.swept' && <SweptLegs w={e.data as unknown as Swept} scan={scan} />}
+              </span>
             </li>
           ))}
         </ol>
