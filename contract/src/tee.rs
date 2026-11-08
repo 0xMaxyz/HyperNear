@@ -25,6 +25,8 @@ pub const TEE_MONTH_NS: u64 = 30 * 86_400 * 1_000_000_000;
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct OwnerTee {
     pub measurement_hash: Option<String>,
+    /// the owner's TEE instance (NEAR account); only it may act, and only while attested with `measurement_hash`
+    pub agent_account: Option<AccountId>,
     pub paid_until_ns: u64,
     /// cumulative months paid through payTee (the TEE agent checks the HL ledger holds at least months_paid x price)
     pub months_paid: u32,
@@ -112,6 +114,7 @@ thread_local! {
 pub fn verify_for_predecessor(a: &DstackAttestation, m: FullMeasurements) -> Result<AcceptedDstackAttestation, VerificationError> {
     #[allow(unused_mut)]
     let mut ts = env::block_timestamp() / 1_000_000_000;
+    #[allow(unused_mut)]
     let mut rd = implicit_report_data(&env::predecessor_account_id());
     #[cfg(test)]
     if let Some((t, r)) = TEST_VERIFY_OVERRIDE.with(|c| c.get()) {
@@ -128,6 +131,18 @@ pub fn owners() -> LookupMap<String, OwnerTee> {
 
 pub fn agents() -> LookupMap<AccountId, TeeAgent> {
     LookupMap::new(crate::Key::TeeAgents)
+}
+
+/// sha256(quote) of every registration: a quote registers once, so expiry cannot be extended without a fresh quote.
+pub fn used_quotes() -> LookupMap<[u8; 32], ()> {
+    LookupMap::new(crate::Key::TeeQuotes)
+}
+
+/// What a payTee commits once its usdSend is signed (on_signed).
+#[near(serializers = [json])]
+pub struct TeePayment {
+    pub owner: String,
+    pub months: u32,
 }
 
 #[cfg(test)]

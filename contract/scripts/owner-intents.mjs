@@ -18,8 +18,8 @@ export const OWNER_INTENT_TYPES = {
   // cancels = HL's own cancel entries {a: asset, o: oid}; allowed while frozen (a cancel cannot move funds)
   cancelOrders: ["CancelOrders", [...head, { name: "leg", type: "uint32" }, { name: "cancels", type: "Cancel[]" }]],
   // TEE mode: measurementHash = 0x + 64 hex; the zero hash leaves TEE mode
-  setTee: ["SetTee", [...head, { name: "measurementHash", type: "bytes32" }]],
-  payTee: ["PayTee", [...head, { name: "leg", type: "uint32" }, { name: "months", type: "uint32" }]],
+  setTee: ["SetTee", [...head, { name: "measurementHash", type: "bytes32" }, { name: "agentAccount", type: "string" }]],
+  payTee: ["PayTee", [...head, { name: "leg", type: "uint32" }, { name: "months", type: "uint32" }, { name: "priceMicro", type: "uint64" }, { name: "feeAddress", type: "address" }]],
 };
 /** Struct types referenced by an intent type (EIP-712 appends them to the type string). */
 export const OWNER_INTENT_SUBTYPES = { Cancel: [{ name: "a", type: "uint32" }, { name: "o", type: "uint64" }] };

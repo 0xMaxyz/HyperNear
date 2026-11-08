@@ -95,29 +95,33 @@
       "nonce": 7,
       "intent": {
         "type": "setTee",
-        "measurementHash": "0x7b1c0f00a2c9e0e3d7d1d4b9a8a3f1e2c4b5a6978877665544332211ffeeddcc"
+        "measurementHash": "0x7b1c0f00a2c9e0e3d7d1d4b9a8a3f1e2c4b5a6978877665544332211ffeeddcc",
+        "agentAccount": "abababababababababababababababababababababababababababababababab"
       },
-      "digest": "0xe4abf0df107c80e313ab96840da8b6d7af9fe13da2ac8a95ee3598b3f1f5a01c",
-      "signature": "0x0be6a2739a1275bc8a00730e4bafbff460ee3367b89ab0f5e1afb54e45553e4b2b4d30b5669395c9b3e5b26dad63a67e01ba0edfc168f235314c716c5f18d8e21c"
+      "digest": "0xcb2845f6a80f3e514832e9b039c7de8b723091f76b655722b084253464e2e81c",
+      "signature": "0x65b3ac2334cf2bec9f005400410884cf574c90f8b42009524f72978f52c4adf7770df4687bbb9d5afe1f149772a377810f68c61616c9ba7a0f4c00518a8a6fb21b"
     },
     {
       "nonce": 8,
       "intent": {
         "type": "setTee",
-        "measurementHash": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        "measurementHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "agentAccount": ""
       },
-      "digest": "0x9850214afd8f213eb80a6468a92d53a80fb3cb83eec99ddcec840dba568e16ce",
-      "signature": "0xeab9213d50aba94c9eac17e9ead068ba63c5d2d5354f90e45d4ca760dcd8a3d62d88127ddfc22416ca119bec0636ad3d31e2b77924f110734c21e6f49d12a19f1b"
+      "digest": "0xceef7ef24f5330eadfd26abd6ffd81d433783c184a17859334baffdbe94b5e11",
+      "signature": "0xc000ea577fd6b687d748cf160136a3c34bef63859dd6e9a10166e309d144b0d8037f238cf36992f2776725509086eea1128780ea8c1a31f2f99756739a838b7d1b"
     },
     {
       "nonce": 9,
       "intent": {
         "type": "payTee",
         "leg": 2,
-        "months": 3
+        "months": 3,
+        "priceMicro": 1000000,
+        "feeAddress": "0x306d1dbe4a4f93f06c8070b047ede9f59e37a2dc"
       },
-      "digest": "0xcb57cd26efd405d6ffd97d0654dcdd1b6ffb404e37e69517df935e9ab02e4c9a",
-      "signature": "0x23a0e3463004c69d6215d8eda62d2473a6d37957c3d3f2563abc8c2d2fbbd83b3d5a51c5f7fd2cd3943f819fac67d7debdf2ec974f6bb67cc9616397bcd009ee1b"
+      "digest": "0xea2fd9c7106e5efc819c7c2c87ea33917a724f66a144c935a223a8c2b86d8a1f",
+      "signature": "0x5a2a6b77f7cb2821dc3ef5e4ae2ad9004124eb5d8dd3bb789359d5786b7bd5510ec5f237619b1e8495a4a2d86f44832ed5129c4bd4ab516500bca9ee0723e6f91b"
     }
   ]
 }
