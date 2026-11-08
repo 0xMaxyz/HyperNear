@@ -197,6 +197,37 @@ impl DstackAttestation {
         })
     }
 
+    /// HYPERNEAR ADDITION (vendored copy): [`Self::verify`] with every check except the PPID allow-list; the PPID is
+    /// still parsed and returned. HyperNear's PPID policy is "any" (the owner opts in to measurements, not machines).
+    pub fn verify_any_ppid(
+        &self,
+        expected_report_data: ReportData,
+        timestamp_seconds: u64,
+        accepted_measurements: &[FullMeasurements],
+    ) -> Result<AcceptedDstackAttestation, VerificationError> {
+        let verification_result =
+            dcap_qvl::verify::verify(&self.quote, &self.collateral, timestamp_seconds)
+                .map_err(|e| VerificationError::DcapVerification(e.to_string()))?;
+        let report_data = verification_result
+            .report
+            .as_td10()
+            .ok_or(VerificationError::ReportNotTd10)?;
+        let advisory_ids = Self::verify_tcb_status(&verification_result)?;
+        self.verify_report_data(&expected_report_data, report_data)?;
+        let ppid = <[u8; 16]>::try_from(verification_result.ppid.as_slice())
+            .map(HexBytes::from)
+            .map_err(|_| VerificationError::PpidWrongSize(verification_result.ppid.len()))?;
+        self.verify_rtmr3(report_data, &self.tcb_info)?;
+        self.verify_app_compose(&self.tcb_info)?;
+        let measurements =
+            self.verify_any_measurements(report_data, &self.tcb_info, accepted_measurements)?;
+        Ok(AcceptedDstackAttestation {
+            measurements,
+            ppid,
+            advisory_ids,
+        })
+    }
+
     /// Replays RTMR3 from the event log by hashing all relevant events together and verifies all
     /// digests are correct
     fn verify_event_log_rtmr3(

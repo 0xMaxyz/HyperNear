@@ -90,6 +90,34 @@
       },
       "digest": "0x07cec52762d0c65801c78b936a2f8f5f9c090008089cabbe7ba9a0f522ad70e4",
       "signature": "0xe1da4810554bfc5a28e6d02613a88caaddf40aa88d39689d64e5c29aeeb1f0477ae0f5ddd1dfce00352b6f31e2b90210286b6626981b95f46f5ec8356e00a2f91b"
+    },
+    {
+      "nonce": 7,
+      "intent": {
+        "type": "setTee",
+        "measurementHash": "0x7b1c0f00a2c9e0e3d7d1d4b9a8a3f1e2c4b5a6978877665544332211ffeeddcc"
+      },
+      "digest": "0xe4abf0df107c80e313ab96840da8b6d7af9fe13da2ac8a95ee3598b3f1f5a01c",
+      "signature": "0x0be6a2739a1275bc8a00730e4bafbff460ee3367b89ab0f5e1afb54e45553e4b2b4d30b5669395c9b3e5b26dad63a67e01ba0edfc168f235314c716c5f18d8e21c"
+    },
+    {
+      "nonce": 8,
+      "intent": {
+        "type": "setTee",
+        "measurementHash": "0x0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "digest": "0x9850214afd8f213eb80a6468a92d53a80fb3cb83eec99ddcec840dba568e16ce",
+      "signature": "0xeab9213d50aba94c9eac17e9ead068ba63c5d2d5354f90e45d4ca760dcd8a3d62d88127ddfc22416ca119bec0636ad3d31e2b77924f110734c21e6f49d12a19f1b"
+    },
+    {
+      "nonce": 9,
+      "intent": {
+        "type": "payTee",
+        "leg": 2,
+        "months": 3
+      },
+      "digest": "0xcb57cd26efd405d6ffd97d0654dcdd1b6ffb404e37e69517df935e9ab02e4c9a",
+      "signature": "0x23a0e3463004c69d6215d8eda62d2473a6d37957c3d3f2563abc8c2d2fbbd83b3d5a51c5f7fd2cd3943f819fac67d7debdf2ec974f6bb67cc9616397bcd009ee1b"
     }
   ]
 }

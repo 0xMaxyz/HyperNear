@@ -20,6 +20,8 @@ const FREEZE: &[u8] = b"Freeze(address owner,uint64 nonce,bool frozen)";
 const CANCEL_ORDERS: &[u8] =
     b"CancelOrders(address owner,uint64 nonce,uint32 leg,Cancel[] cancels)Cancel(uint32 a,uint64 o)";
 const CANCEL: &[u8] = b"Cancel(uint32 a,uint64 o)";
+const SET_TEE: &[u8] = b"SetTee(address owner,uint64 nonce,bytes32 measurementHash)";
+const PAY_TEE: &[u8] = b"PayTee(address owner,uint64 nonce,uint32 leg,uint32 months)";
 
 /// What an owner can ask for. JSON: `{"type":"withdraw","leg":0,"amount":"5","hlTime":…}`.
 #[near(serializers = [json])]
@@ -39,6 +41,11 @@ pub enum OwnerIntent {
     Freeze { frozen: bool },
     /// HL L1 cancel of the leg's resting orders, signed with the leg's master key; allowed while frozen.
     CancelOrders { leg: u32, cancels: Vec<HlCancel> },
+    /// TEE mode: only an agent attested with this measurement may act for the owner. The zero hash leaves TEE mode.
+    #[serde(rename_all = "camelCase")]
+    SetTee { measurement_hash: String },
+    /// Pays `months` (1..=12) x the TEE price: a usdSend from `leg` to the TEE fee address; extends paid_until.
+    PayTee { leg: u32, months: u32 },
 }
 
 pub fn domain_separator(chain_tag: &str, contract_id: &str) -> [u8; 32] {
@@ -70,6 +77,11 @@ pub fn intent_digest(domain: [u8; 32], owner: &[u8; 20], nonce: u64, intent: &Ow
                 cancels.iter().flat_map(|c| hash_struct(CANCEL, &[word_u64(c.a as u64), word_u64(c.o)])).collect();
             hash_struct(CANCEL_ORDERS, &[o, n, word_u64(*leg as u64), keccak256_array(&items)])
         }
+        OwnerIntent::SetTee { measurement_hash } => {
+            let h: [u8; 32] = hex::decode(crate::tee::parse_hash(measurement_hash).trim_start_matches("0x")).unwrap().try_into().unwrap();
+            hash_struct(SET_TEE, &[o, n, h])
+        }
+        OwnerIntent::PayTee { leg, months } => hash_struct(PAY_TEE, &[o, n, word_u64(*leg as u64), word_u64(*months as u64)]),
     };
     typed_digest(domain, struct_hash)
 }
@@ -115,6 +127,6 @@ mod tests {
             assert_eq!(d, h32(c["digest"].as_str().unwrap()), "case {c}");
             assert_eq!(recover_signer(&d, c["signature"].as_str().unwrap()), owner, "ecrecover case {c}");
         }
-        assert_eq!(kinds.len(), 6, "every intent type has a vector");
+        assert_eq!(kinds.len(), 8, "every intent type has a vector");
     }
 }
