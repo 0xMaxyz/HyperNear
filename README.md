@@ -85,9 +85,9 @@ Expected: exit code 0 and these summary lines (live tests are skipped without cr
 
 ```
 packages/core test:       Tests  289 passed (289)
-packages/hypernear-client test:       Tests  35 passed | 1 skipped (36)
+packages/hypernear-client test:       Tests  44 passed | 1 skipped (45)
 validation test:       Tests  4 passed | 21 skipped (25)
-agent test:       Tests  300 passed | 6 skipped (306)
+agent test:       Tests  310 passed | 9 skipped (319)
 ```
 
 **3. Contract tests.**
@@ -96,7 +96,7 @@ agent test:       Tests  300 passed | 6 skipped (306)
 cd contract && cargo test && cd ..
 ```
 
-Expected: `test result: ok. 41 passed; 0 failed`. They cover the owner-intent digests against viem signatures, replay and burned nonces, the cap and cooldown, rebalance to a foreign address, freeze and the Hyperliquid digests.
+Expected: `test result: ok. 53 passed; 0 failed`. They cover the owner-intent digests against viem signatures, replay and burned nonces, the cap and cooldown, rebalance to a foreign address, freeze, the Hyperliquid digests and the L1 cancel digests against the SDK vectors.
 
 **4. Agent dry run (recorded testnet data, no keys, no network).**
 
