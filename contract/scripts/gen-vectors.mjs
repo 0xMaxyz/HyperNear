@@ -51,6 +51,9 @@ async function ownerVectors() {
     { type: "setPolicy", agent: "agent.leash.testnet", dailyCap: "100", cooldownSec: 600 },
     { type: "freeze", frozen: true },
     { type: "cancelOrders", leg: 0, cancels: [{ a: 3, o: 64820881296 }, { a: 10000, o: 5 }] },
+    { type: "setTee", measurementHash: "0x7b1c0f00a2c9e0e3d7d1d4b9a8a3f1e2c4b5a6978877665544332211ffeeddcc" },
+    { type: "setTee", measurementHash: "0x0000000000000000000000000000000000000000000000000000000000000000" },
+    { type: "payTee", leg: 2, months: 3 },
   ];
   const cases = [];
   for (const [i, intent] of intents.entries()) {

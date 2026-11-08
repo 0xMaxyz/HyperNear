@@ -1,0 +1,38 @@
+{
+  "claim": "T0",
+  "title": "The hypernear contract can verify a real Intel TDX (dstack/Phala) attestation on-chain, and at what cost",
+  "status": "✅",
+  "at": "2026-11-09",
+  "network": "testnet",
+  "numbers": {
+    "wasmBytesDefault": 289978,
+    "wasmBytesTee": 764273,
+    "verifyGasBurntTotalTgas": 187.21,
+    "verifyFunctionCallReceiptTgas": 186.79,
+    "argBytes": 50242,
+    "cargoTeeTests": 6,
+    "cargoDefaultTests": 53,
+    "cargoSpikeTests": 56
+  },
+  "refs": {
+    "verifyTx": "4QTqwXfGn9hfVohdyJZHPcaaoaSNju5FBwDA4HW4sC6f",
+    "contract": "leash-tee-t0-1108.testnet",
+    "method": "tee_verify_spike (feature tee): shade-attestation DstackAttestation::verify with only the fixture's own measurements and PPID accepted",
+    "wasmSha256": {
+      "default": "1cb39d94a141b5e78a2aa8dce9e861a718cc833096f6ed19622d00498c0e267c",
+      "tee": "3e5baaa17354a443e57a6da9b9d853a4cac3defc3167dba8a8a7cab4eb6fa956"
+    },
+    "build": "cargo near build non-reproducible-wasm [--features tee] (cargo-near 0.23.0, rustc 1.99.1, clang 14) in a rust:1.99-bookworm container: ring needs clang for wasm32, ci32 has none",
+    "fixture": "near/mpc crates/test-utils/assets/public_data.json @ 50328c652770c1f97609c25749b46c48ace592d6 (real dstack TDX quote, collateral, tcb_info); contract/tests/tee/attestation.json",
+    "fixturePpid": "d208dfb1002346ae1bb4ef2a3c055292",
+    "fixtureTimestamp": 1786622400,
+    "crate": "shade-attestation 0.2.0 vendored from NearDeFi/shade-agent-framework @ 3366bc988e19d66c31397a7669099f59091d2560 (src unmodified, pins relaxed; dcap-qvl =0.5.2)"
+  },
+  "notes": [
+    "Verified on-chain: the call returned the fixture's measurements and PPID.",
+    "Cargo tests (native): the recorded quote passes; a tampered quote, wrong RTMR2 / compose hash, wrong report_data, wrong PPID and a timestamp before issuance all fail.",
+    "Timestamp: the collateral has validity windows. The recorded fixture verifies only at its fixed time 1786622400; at 2026-11-08 it fails with DcapVerification(\"TCBInfo expired\"). T1 must pass the block time and take fresh collateral with each registration.",
+    "Gas 187 TGas of the 300 TGas per-call limit and 764 KB of wasm: under the gate (300 TGas) and under the 1.5 MB threshold, so verification goes in the main contract; no separate verifier was measured.",
+    "Dependency: crates.io shade-attestation 0.2.0 pins serde_with =3.17.0, near-sdk 5.30 needs ^3.20, hence the vendored copy under contract/vendor/shade-attestation."
+  ]
+}

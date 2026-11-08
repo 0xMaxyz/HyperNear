@@ -16,6 +16,7 @@ use near_sdk::{
 pub mod auth;
 pub mod eip712;
 pub mod l1;
+pub mod tee;
 use auth::OwnerIntent;
 use eip712::{parse_addr, parse_usd, HlAction};
 
@@ -51,11 +52,13 @@ fn charge_storage(before: u64, attached: NearToken, payer: &AccountId) {
 
 #[near(serializers = [borsh])]
 #[derive(BorshStorageKey)]
-enum Key {
+pub(crate) enum Key {
     Owners,
     Legs,
     LegOwner,
     AgentNames,
+    TeeOwners,
+    TeeAgents,
 }
 
 /// An HL agent name approved through the contract on one of the owner's legs (freeze re-points it to a burn address).
@@ -182,6 +185,16 @@ fn parse_hex<const N: usize>(s: &str, what: &str) -> [u8; N] {
         .unwrap_or_else(|| env::panic_str(&format!("{what}: expected {N} hex bytes")))
 }
 
+/// micro-USD -> plain decimal ("15", "7.5", "0.000001"), the form parse_usd and HL accept.
+pub fn fmt_usd(micro: u64) -> String {
+    let (int, frac) = (micro / 1_000_000, micro % 1_000_000);
+    if frac == 0 { int.to_string() } else { format!("{int}.{}", format!("{frac:06}").trim_end_matches('0')) }
+}
+
+fn tee_active(owner: &str) -> bool {
+    tee::owners().get(owner).is_some_and(|t| t.measurement_hash.is_some())
+}
+
 pub fn leg_path(owner: &str, leg: u32) -> String {
     format!("{owner}/leg{leg}")
 }
@@ -189,8 +202,13 @@ pub fn leg_path(owner: &str, leg: u32) -> String {
 #[near]
 impl Leash {
     #[init]
-    pub fn new(admin: AccountId, mpc_contract: AccountId, hl_mainnet: bool) -> Self {
-        Self::from_parts(admin, mpc_contract, hl_mainnet)
+    pub fn new(admin: AccountId, mpc_contract: AccountId, hl_mainnet: bool, tee_price_usd: Option<String>, tee_fee_address: Option<String>) -> Self {
+        let c = Self::from_parts(admin, mpc_contract, hl_mainnet);
+        if let (Some(p), Some(a)) = (tee_price_usd, tee_fee_address) {
+            parse_addr(&a);
+            tee::set_config(&tee::TeeConfig { price_micro: parse_usd(&p), fee_address: Some(a) });
+        }
+        c
     }
 
     // ---- owner (anyone may relay; the EIP-712 signature is the authentication) ----
@@ -221,6 +239,8 @@ impl Leash {
         let mut cancel = None;
         let to_sign = match intent {
             OwnerIntent::ApproveAgent { leg, agent, agent_name, hl_nonce } => {
+                // in TEE mode only the attested agent approves trading keys (tee_approve_agent)
+                require!(!tee_active(&owner), "owner is in TEE mode: trading keys are approved by the TEE agent (setTee zero to leave)");
                 let mut slots = agent_slots();
                 let list = slots.entry(owner.clone()).or_default();
                 let slot = AgentSlot { leg, name: agent_name.clone() };
@@ -256,6 +276,31 @@ impl Leash {
                 l1::check_cancels(&cancels);
                 cancel = Some((leg, cancels));
                 None
+            }
+            OwnerIntent::SetTee { measurement_hash } => {
+                let mut owners = tee::owners();
+                let t = owners.entry(owner.clone()).or_default();
+                let new = (measurement_hash != tee::ZERO_HASH).then_some(measurement_hash);
+                if t.measurement_hash != new {
+                    t.keys.clear(); // keys of the previous image are not this measurement's
+                }
+                t.measurement_hash = new;
+                owners.flush();
+                None
+            }
+            OwnerIntent::PayTee { leg, months } => {
+                require!((1..=tee::MAX_TEE_MONTHS).contains(&months), "months: 1 to 12");
+                let cfg = tee::config();
+                let fee = cfg.fee_address.filter(|_| cfg.price_micro > 0).unwrap_or_else(|| env::panic_str("TEE mode is not offered (no price / fee address)"));
+                require!(self.legs.contains_key(&leg_path(&owner, leg)), "leg not registered");
+                let mut owners = tee::owners();
+                let t = owners.get_mut(&owner).unwrap_or_else(|| env::panic_str("setTee first"));
+                let now = env::block_timestamp();
+                t.paid_until_ns = t.paid_until_ns.max(now) + months as u64 * tee::TEE_MONTH_NS;
+                t.months_paid += months;
+                owners.flush();
+                let amount = fmt_usd(cfg.price_micro * months as u64);
+                Some((leg, HlAction::UsdSend { destination: fee, amount, time: now / 1_000_000 }))
             }
         };
         self.owners.insert(owner.clone(), st);
@@ -472,8 +517,10 @@ impl Leash {
     }
 
     pub fn get_config(&self) -> near_sdk::serde_json::Value {
+        let t = tee::config();
         json!({ "admin": self.admin, "mpc_contract": self.mpc_contract, "hl_mainnet": self.hl_mainnet,
-                "chain_tag": self.chain_tag() })
+                "chain_tag": self.chain_tag(),
+                "tee_price_usd": (t.price_micro > 0).then(|| fmt_usd(t.price_micro)), "tee_fee_address": t.fee_address })
     }
 }
 
@@ -510,11 +557,33 @@ impl Leash {
         require!(caller == self.admin || caller == env::current_account_id(), "admin only");
     }
 
+    /// The caller may act as `owner`'s agent. In TEE mode the caller must instead be an unexpired TEE agent attested
+    /// with the owner's measurement (it registers from a fresh implicit account each boot, so the policy's `agent`
+    /// account is not compared); the policy itself (cap, cooldown, frozen) still applies.
     fn agent_state(&self, owner: &str) -> OwnerState {
         let st = self.owners.get(owner).cloned().unwrap_or_else(|| env::panic_str("unknown owner"));
-        require!(st.agent.as_ref() == Some(&env::predecessor_account_id()), "not this owner's agent");
+        if !self.assert_tee_agent(owner) {
+            require!(st.agent.as_ref() == Some(&env::predecessor_account_id()), "not this owner's agent");
+        }
         require!(!st.frozen, "frozen");
         st
+    }
+
+    /// False if `owner` is not in TEE mode. Otherwise panics unless the caller is a matching, unexpired TEE agent.
+    fn assert_tee_agent(&self, owner: &str) -> bool {
+        let Some(want) = tee::owners().get(owner).and_then(|t| t.measurement_hash.clone()) else { return false };
+        let agent = tee::agents().get(&env::predecessor_account_id()).cloned().unwrap_or_else(|| env::panic_str("owner is in TEE mode: caller is not a registered TEE agent"));
+        require!(agent.expires_ns > env::block_timestamp(), "TEE agent attestation expired: register again");
+        require!(agent.measurement_hash == want, "TEE agent measurement does not match the owner's");
+        true
+    }
+
+    fn store_tee_agent(&mut self, measurement_hash: String) -> tee::TeeAgent {
+        let a = tee::TeeAgent { measurement_hash, expires_ns: env::block_timestamp() + tee::TEE_AGENT_TTL_NS };
+        let mut agents = tee::agents();
+        agents.insert(env::predecessor_account_id(), a.clone());
+        agents.flush();
+        a
     }
 
     /// Freeze: MPC-sign approveAgent(burn address) for every agent name approved on the owner's legs, all in this
@@ -591,6 +660,14 @@ impl Leash {
         self.mpc_sign(path, parse_hex::<32>(&payload, "payload"), None, None, None)
     }
 
+    /// Local development only (dstack simulator / shade-agent-js fake attestations fail real verification): registers
+    /// the caller as a TEE agent for `measurements` with no quote. Never in the default (mainnet) build.
+    pub fn register_tee_agent_dev(&mut self, measurements: near_sdk::serde_json::Value) -> tee::TeeAgent {
+        assert_testnet(self.hl_mainnet);
+        let m = tee::parse_measurements(measurements);
+        self.store_tee_agent(tee::measurement_hash(&m))
+    }
+
     pub fn admin_sign_hl(&mut self, path: String, action: HlAction) -> Promise {
         self.assert_admin();
         self.sign_hl(path, action)
@@ -602,6 +679,70 @@ impl Leash {
     pub fn migrate() -> Self {
         let old: LeashV0 = env::state_read().unwrap_or_else(|| env::panic_str("no state"));
         Self::from_parts(old.admin, old.mpc_contract, old.hl_mainnet)
+    }
+}
+
+/// TEE mode (tee.rs). Owners not in TEE mode see no change.
+#[near]
+impl Leash {
+    /// A TEE agent proves it runs the image with `measurements` (dstack FullMeasurements, hex) in Intel TDX: the quote
+    /// must verify at the block time with these measurements as the only accepted set (any PPID), and its report_data
+    /// must be the caller's implicit-account ed25519 key, zero-padded to 64 bytes. Anyone may register; it grants
+    /// nothing until an owner names this measurement hash (setTee). Valid 7 days. No deposit: the contract pays the
+    /// small storage (one verification burns ~187 TGas, so spamming it costs the spammer more).
+    pub fn register_tee_agent(&mut self, attestation: near_sdk::serde_json::Value, measurements: near_sdk::serde_json::Value) -> tee::TeeAgent {
+        let a = tee::parse_attestation(attestation);
+        let m = tee::parse_measurements(measurements);
+        let ok = tee::verify_for_predecessor(&a, m).unwrap_or_else(|e| env::panic_str(&format!("attestation rejected: {e}")));
+        self.store_tee_agent(tee::measurement_hash(&ok.measurements))
+    }
+
+    /// Only the owner's TEE agent (owner in TEE mode, caller attested with the owner's measurement, not expired):
+    /// MPC-signs approveAgent(`hl_address`) on the leg under the fixed name "leash-tee", replacing the previous TEE key,
+    /// and records it in `keys`. A freeze revokes it like any other agent. No deposit (the contract pays storage).
+    pub fn tee_approve_agent(&mut self, owner: String, leg: u32, hl_address: String, hl_nonce: u64) -> Promise {
+        let st = self.owners.get(&owner).cloned().unwrap_or_else(|| env::panic_str("unknown owner"));
+        require!(!st.frozen, "frozen");
+        require!(self.assert_tee_agent(&owner), "owner is not in TEE mode");
+        require!(self.legs.contains_key(&leg_path(&owner, leg)), "leg not registered");
+        parse_addr(&hl_address);
+        let mut slots = agent_slots();
+        let list = slots.entry(owner.clone()).or_default();
+        let slot = AgentSlot { leg, name: tee::TEE_AGENT_NAME.into() };
+        if !list.contains(&slot) {
+            require!(list.len() < MAX_TRACKED_AGENTS, "too many agent names for one owner (freeze must fit one tx)");
+            list.push(slot);
+        }
+        slots.flush();
+        let mut owners = tee::owners();
+        owners.get_mut(&owner).unwrap().keys.insert(leg, hl_address.clone());
+        owners.flush();
+        self.sign_hl(
+            leg_path(&owner, leg),
+            HlAction::ApproveAgent { agent_address: hl_address, agent_name: tee::TEE_AGENT_NAME.into(), nonce: hl_nonce },
+        )
+    }
+
+    /// Admin only, before the lock (the lock deletes the keys that can call it): TEE price per month and fee address.
+    pub fn set_tee_config(&mut self, tee_price_usd: String, tee_fee_address: String) {
+        let caller = env::predecessor_account_id();
+        require!(caller == self.admin || caller == env::current_account_id(), "admin only");
+        parse_addr(&tee_fee_address);
+        tee::set_config(&tee::TeeConfig { price_micro: parse_usd(&tee_price_usd), fee_address: Some(tee_fee_address) });
+    }
+
+    pub fn get_tee(&self, owner: String) -> Option<tee::OwnerTee> {
+        tee::owners().get(&owner).cloned()
+    }
+
+    pub fn get_tee_agent(&self, account_id: AccountId) -> Option<tee::TeeAgent> {
+        tee::agents().get(&account_id).cloned()
+    }
+
+    /// The hash an owner signs in setTee for these measurements (same JSON as register_tee_agent takes).
+    /// sha256(borsh(FullMeasurements)) as 0x-hex (see tee::measurement_hash); `measurements` as in register_tee_agent.
+    pub fn measurement_hash(&self, measurements: near_sdk::serde_json::Value) -> String {
+        tee::measurement_hash(&tee::parse_measurements(measurements))
     }
 }
 
