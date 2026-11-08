@@ -60,7 +60,7 @@ const dataDir = `${homedir()}/.leash-tee-live`;
 const agentConfig = (seed: string) =>
   loadConfig({
     NEAR_NETWORK: 'testnet', NEAR_CONTRACT_ID: contractId, HYPERNEAR_RUN_MODE: 'tee', HYPERNEAR_TEE_DEV: '1', HYPERNEAR_TEE_DEV_SEED: seed,
-    HYPERNEAR_TEE_FUND_NEAR: '0.2', HYPERNEAR_RELAYER_ACCOUNT_ID: contractId, HYPERNEAR_RELAYER_PRIVATE_KEY: relayerKey, HYPERNEAR_DATA_DIR: dataDir,
+    HYPERNEAR_TEE_FUND_NEAR: '0.15', HYPERNEAR_RELAYER_ACCOUNT_ID: contractId, HYPERNEAR_RELAYER_PRIVATE_KEY: relayerKey, HYPERNEAR_DATA_DIR: dataDir,
   });
 
 const labAddr = privateKeyToAccount(labKey()).address.toLowerCase() as Hex;
@@ -208,7 +208,7 @@ await runClaim('C21', 'C21', 'TEE mode, dev-registered agent (register_tee_agent
   });
   let enrolled: any;
   await step('A enrols: fresh in-memory key per leg, tee_approve_agent, approveAgent posted to HL (3 legs)', async () => {
-    const r = await until(() => prepare(A), (x) => x.status !== 403, 'A serving the owner (fee in ledger, 5 s negative cache)', 90_000, 6000);
+    const r = await until(() => prepare(A), (x) => !(x.status === 403 && /not a paid TEE owner/.test(x.body.error)), 'A serving the owner (fee in ledger, 5 s negative cache)', 90_000, 6000);
     must(r.status === 200 && r.body.legs.length === 3 && r.body.legs.every((l: any) => l.ok), JSON.stringify(r.body));
     enrolled = r.body.legs;
     for (const l of enrolled) {
@@ -222,15 +222,9 @@ await runClaim('C21', 'C21', 'TEE mode, dev-registered agent (register_tee_agent
     return true;
   });
 
-  // ---- a TEE rebalance (agent_usd_class_transfer too, to give the leash-tee key margin)
+  // ---- a TEE rebalance (the legs hold their USDC in the perp account: a usdSend moves perp balance)
   await step('TEE rebalance accepted (leg0 -> leg1) and posted to HL', async () => {
     const out = (await A.tee.client.rebalance({ owner: ow, fromLeg: 0, toAddress: legAddr[1]!, amount: '1', hlTime: Date.now() })).value as SignOut;
-    const hl = (await A.deps.relayer.post!(exchangeBody(out, 'Testnet'))) as { status?: string };
-    must(hl.status === 'ok', JSON.stringify(hl));
-    return hl;
-  });
-  await step('TEE agent_usd_class_transfer spot -> perp on leg0', async () => {
-    const out = (await A.tee.client.agentUsdClassTransfer({ owner: ow, leg: 0, amount: '2', toPerp: true, hlNonce: Date.now() })).value as SignOut;
     const hl = (await A.deps.relayer.post!(exchangeBody(out, 'Testnet'))) as { status?: string };
     must(hl.status === 'ok', JSON.stringify(hl));
     return hl;
@@ -248,6 +242,7 @@ await runClaim('C21', 'C21', 'TEE mode, dev-registered agent (register_tee_agent
   });
 
   // ---- the leash-tee key trades now; setTee to zero burns it (3 keys in one tx) and the key's order is then rejected
+  rec.numbers.leg0PerpBeforeOrder = (await total(A.deps, legAddr[0]!)).perp;
   const universe = await A.deps.legs.snapshot(ow);
   const btc = universe.market.assets.find((a) => a.name === 'BTC')!;
   const px = roundPx(Number(universe.market.mids.BTC) * 0.5, btc.szDecimals);

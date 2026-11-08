@@ -196,7 +196,7 @@ export function handler(d: Deps) {
         if (d.tee) {
           // TEE mode: fresh in-memory keys, approved by the contract (tee_approve_agent); the owner signs nothing more
           const res = await enrollTeeOwner({ legs: d.legs, client: d.tee.client, post: d.relayer.post!, owner: cmd.owner }).catch((e) => {
-            throw new HttpError(403, (e as Error).message);
+            throw new HttpError(502, `TEE enrolment failed: ${(e as Error).message}`);
           });
           d.bus.emit('agents.prepared', { owner: cmd.owner, tee: true, legs: res.map((l) => ({ leg: l.leg, agent: l.agent, ok: l.ok })) });
           return reply(200, { owner: cmd.owner, tee: true, legs: res, pendingApprovals: [] });

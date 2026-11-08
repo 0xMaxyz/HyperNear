@@ -132,6 +132,8 @@ export function measurementsFrom(t: TcbInfoLike): TeeMeasurements {
   };
 }
 
+export const MIN_AGENT_NEAR = 0.35;
+
 export interface BootDeps {
   shade: { accountId(): string; getAttestation(): Promise<{ tcb_info: TcbInfoLike } & TeeAttestation>; balance?(): Promise<number>; fund?(near: number): Promise<void> };
   client: Pick<HyperNearClient, 'registerTeeAgent' | 'registerTeeAgentDev' | 'getTeeAgent'>;
@@ -145,8 +147,8 @@ export interface BootDeps {
 /** TEE boot, step 1: fund the agent account if a sponsor is set, then register the attestation. Returns the account and its measurement hash. */
 export async function bootTee(d: BootDeps) {
   const account = d.shade.accountId();
-  const fundNear = d.fundNear ?? 1;
-  if (d.shade.balance && d.shade.fund && (await d.shade.balance()) < fundNear / 2) await d.shade.fund(fundNear);
+  // a 300 TGas call reserves 0.3 NEAR up front on testnet (gas price 1e9): below that the contract calls fail
+  if (d.shade.balance && d.shade.fund && (await d.shade.balance()) < MIN_AGENT_NEAR) await d.shade.fund(d.fundNear ?? 1);
   const attestation = await d.shade.getAttestation();
   const measurements = measurementsFrom(attestation.tcb_info);
   if (d.dev) await d.client.registerTeeAgentDev({ measurements });
