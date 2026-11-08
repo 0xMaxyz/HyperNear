@@ -30,6 +30,8 @@ export interface ManagerOpts {
   /** see SpecContext.hedgeReserveUsd */
   hedgeReserveUsd?: number;
   intervalMs?: number;
+  /** Asked on every tick: false pauses the runner (the owner moved to TEE mode; this agent no longer serves them). */
+  served?: (owner: Hex) => Promise<boolean>;
   /** Where specs are saved (absent: nothing is persisted). */
   dataDir?: string;
   makePort?: (owner: Hex, leg: number) => Promise<TradingPort>;
@@ -165,8 +167,15 @@ export class StrategyManager {
 
   #schedule(e: Entry) {
     clearInterval(e.timer);
-    e.timer = setInterval(() => void e.runner.tick(), this.#o.intervalMs ?? 15_000);
-    void e.runner.tick();
+    const tick = async () => {
+      if (e.runner.state === 'running' && this.#o.served && !(await this.#o.served(e.owner))) {
+        await this.pause(e.owner, e.runner.spec.id, 'owner is no longer served by this agent (TEE mode)').catch(() => undefined);
+        return;
+      }
+      await e.runner.tick();
+    };
+    e.timer = setInterval(() => void tick(), this.#o.intervalMs ?? 15_000);
+    void tick();
   }
 
   /** Starts a validated spec; the identical spec of a paused strategy resumes it. */

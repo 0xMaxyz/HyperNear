@@ -17,7 +17,31 @@ export interface HyperNearConfig {
   mpc_contract: string;
   hl_mainnet: boolean;
   chain_tag: ChainTag;
+  /** TEE mode (contract >= T1); absent on older deployments. USD per month, and where the owner's payTee usdSend goes. */
+  tee_price_usd?: string | number;
+  tee_fee_address?: Hex | null;
 }
+
+/** An owner's TEE opt-in (`get_tee`): the measurement they chose, what they paid for, and the TEE-approved key per leg. */
+export interface TeeInfo {
+  measurement_hash: string;
+  paid_until_ns: string;
+  keys: Record<string, Hex>;
+}
+
+/** A registered TEE agent account (`get_tee_agent`). */
+export interface TeeAgentInfo {
+  measurement_hash: string;
+  expires_ns: string;
+}
+
+/** shade-agent-js's FullMeasurements and DstackAttestationForContract, as the contract's register methods take them. */
+export interface TeeMeasurements {
+  rtmrs: { mrtd: string; rtmr0: string; rtmr1: string; rtmr2: string };
+  key_provider_event_digest: string;
+  app_compose_hash_payload: string;
+}
+export type TeeAttestation = Record<string, unknown>;
 
 export interface OwnerState {
   nonce: number;
@@ -155,6 +179,20 @@ export class HyperNearClient {
     return (await this.#view<Hex | null>('get_leg', { owner: owner.toLowerCase(), leg })) ?? null;
   }
 
+  /** The owner's TEE opt-in, or null (also null on a contract that predates TEE mode: it has no `get_tee`). */
+  async getTee(owner: string): Promise<TeeInfo | null> {
+    try {
+      return (await this.#view<TeeInfo | null>('get_tee', { owner: owner.toLowerCase() })) ?? null;
+    } catch (e) {
+      if (/MethodNotFound|method .*not found|no such method/i.test(String((e as Error)?.message ?? e))) return null;
+      throw e;
+    }
+  }
+
+  async getTeeAgent(accountId: string): Promise<TeeAgentInfo | null> {
+    return (await this.#view<TeeAgentInfo | null>('get_tee_agent', { account_id: accountId })) ?? null;
+  }
+
   /** EVM address of the leg, from the MPC contract's `derived_public_key` view (works before registration). */
   async deriveLegAddress(owner: string, leg: number): Promise<Hex> {
     const cfg = await this.getConfig();
@@ -250,5 +288,25 @@ export class HyperNearClient {
       to_perp: args.toPerp,
       hl_nonce: args.hlNonce,
     });
+  }
+
+  /** TEE agent boot, called from the agent's own NEAR account: the contract verifies the quote (300 TGas). */
+  registerTeeAgent(args: { attestation: TeeAttestation; measurements: TeeMeasurements }) {
+    return this.backend.call<null>(this.contractId, 'register_tee_agent', args, { gasTgas: 300 });
+  }
+
+  /** Testnet spike only: registers without a quote. */
+  registerTeeAgentDev(args: { measurements: TeeMeasurements }) {
+    return this.backend.call<null>(this.contractId, 'register_tee_agent_dev', args, { gasTgas: 100 });
+  }
+
+  /** TEE agent: the contract signs HL approveAgent for `hlAddress` (fixed agent name) with the leg's key; post the result to HL. */
+  teeApproveAgent(args: { owner: Hex; leg: number; hlAddress: Hex; hlNonce: number }) {
+    return this.backend.call<SignOut>(this.contractId, 'tee_approve_agent', {
+      owner: args.owner.toLowerCase(),
+      leg: args.leg,
+      hl_address: args.hlAddress,
+      hl_nonce: args.hlNonce,
+    }, { gasTgas: 300 });
   }
 }

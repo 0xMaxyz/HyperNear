@@ -20,6 +20,10 @@ export {
   type OwnerState,
   type Revoked,
   type AgentSlot,
+  type TeeAgentInfo,
+  type TeeAttestation,
+  type TeeInfo,
+  type TeeMeasurements,
   type SignOut,
 } from './client';
 export {

@@ -100,7 +100,7 @@ export interface GuardLoopDeps {
   agentClient?: HyperNearClient;
   agentId?: string;
   bus: EventBus;
-  owners: () => Hex[];
+  owners: () => Hex[] | Promise<Hex[]>;
   /** per-strategy daily top-up budget left on a leg (manager.topUpLeft); undefined = no strategy there */
   budgetLeftUsd?: (owner: Hex, leg: number) => number | undefined;
   /** called after a top-up was posted to HL (manager.recordTopUp) */
@@ -123,7 +123,10 @@ export class GuardLoop {
 
   start() {
     this.#timer ??= setInterval(() => {
-      for (const o of this.d.owners()) void this.tick(o).catch((e) => this.d.bus.emit('guard.error', { owner: o, error: (e as Error).message }));
+      void Promise.resolve(this.d.owners()).then(
+        (owners) => owners.forEach((o) => void this.tick(o).catch((e) => this.d.bus.emit('guard.error', { owner: o, error: (e as Error).message }))),
+        (e) => this.d.bus.emit('guard.error', { owner: '', error: (e as Error).message }),
+      );
     }, this.cfg.intervalMs);
   }
 

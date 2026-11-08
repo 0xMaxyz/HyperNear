@@ -83,7 +83,7 @@ export interface DeciderDeps {
   executeStrategy?: (owner: Hex, strategyId: string, action: StrategyAction) => Promise<unknown>;
   /** throws HttpError(403) unless the owner opted this agent in and is not frozen */
   checkOwner: (owner: Hex) => Promise<void>;
-  owners: () => Hex[];
+  owners: () => Hex[] | Promise<Hex[]>;
   annualVol: number;
   /** when the hedge leg's position opened (ms), for the hedgeAge fact */
   openedAt?: (s: OwnerSnapshot, coin: string) => Promise<number>;
@@ -109,14 +109,16 @@ export class Decider {
 
   start() {
     this.#timer ??= setInterval(() => {
-      for (const o of this.d.owners()) {
-        void this.prepare(o)
-          .then((p) => ('input' in p ? this.run(p.input) : undefined))
-          .catch((e) => console.error(`decision for ${o} failed:`, (e as Error).message));
-        void this.prepareStrategies(o)
-          .then((p) => ('inputs' in p ? Promise.all(p.inputs.map((i) => this.runStrategy(i, false))) : undefined))
-          .catch((e) => console.error(`strategy decision for ${o} failed:`, (e as Error).message));
-      }
+      void Promise.resolve(this.d.owners()).then((owners) => {
+        for (const o of owners) {
+          void this.prepare(o)
+            .then((p) => ('input' in p ? this.run(p.input) : undefined))
+            .catch((e) => console.error(`decision for ${o} failed:`, (e as Error).message));
+          void this.prepareStrategies(o)
+            .then((p) => ('inputs' in p ? Promise.all(p.inputs.map((i) => this.runStrategy(i, false))) : undefined))
+            .catch((e) => console.error(`strategy decision for ${o} failed:`, (e as Error).message));
+        }
+      }, (e) => console.error('decision owners failed:', (e as Error).message));
     }, this.d.intervalMs ?? PROPOSE_INTERVAL_MS);
   }
 

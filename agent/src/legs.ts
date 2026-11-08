@@ -19,17 +19,24 @@ interface StoredAgent {
 }
 type Store = Record<string, Record<string, StoredAgent>>;
 
-/** Agent keys on disk: `<dataDir>/agent-keys.json`, dir 0700, file 0600. Keys never leave this class except as signers. */
+/**
+ * Agent keys on disk: `<dataDir>/agent-keys.json`, dir 0700, file 0600. Keys never leave this class except as signers.
+ * dataDir null (TEE mode): memory only, nothing is ever written; the keys die with the process.
+ */
 export class AgentKeyStore {
-  readonly #file: string;
-  constructor(dataDir: string) {
+  readonly #file?: string;
+  #mem: Store = {};
+  constructor(dataDir: string | null) {
+    if (dataDir === null) return;
     mkdirSync(dataDir, { recursive: true, mode: 0o700 });
     this.#file = join(dataDir, 'agent-keys.json');
   }
   #read(): Store {
+    if (!this.#file) return this.#mem;
     return existsSync(this.#file) ? (JSON.parse(readFileSync(this.#file, 'utf8')) as Store) : {};
   }
   #write(s: Store) {
+    if (!this.#file) return void (this.#mem = s);
     const tmp = `${this.#file}.tmp`;
     writeFileSync(tmp, JSON.stringify(s, null, 2), { mode: 0o600 });
     chmodSync(tmp, 0o600);
@@ -94,7 +101,7 @@ export class Legs {
   readonly network: 'testnet' | 'mainnet';
   readonly coins: string[];
 
-  constructor(o: { client: HyperNearClient; dataDir: string; network: 'testnet' | 'mainnet'; coins: string[]; hl?: HlClient }) {
+  constructor(o: { client: HyperNearClient; dataDir: string | null; network: 'testnet' | 'mainnet'; coins: string[]; hl?: HlClient }) {
     this.client = o.client;
     this.network = o.network;
     this.keys = new AgentKeyStore(o.dataDir);

@@ -42,6 +42,7 @@ import { proposeStrategyAction, type StrategyClients } from './strategy/decide.t
 import { claudeStrategyEscalator, jevAskStrategy } from './strategy/decideClients.ts';
 import { StartConflict, StrategyManager } from './strategy/manager.ts';
 import { specHash } from './strategy/spec.ts';
+import { bootTee, enrollTeeOwner, hlLedgerPort, OwnerScope, shadeBackend } from './tee.ts';
 
 export interface Deps {
   config: AgentConfig;
@@ -62,10 +63,20 @@ export interface Deps {
   /** plain language -> validated spec draft (needs ANTHROPIC_API_KEY) */
   drafter?: (owner: Hex, text: string) => Promise<Draft>;
   annualVol?: number;
+  /** which owners this process serves (server: not in TEE mode; tee: paid TEE owners of this image). Absent in the dry run. */
+  scope?: OwnerScope;
+  /** tee mode: the agent account's contract client (shade-agent-js signs), its account and registered measurement hash */
+  tee?: TeeRuntime;
   /** fills, fee rate, funding per leg for the break-even (default: read from HL) */
   pnlData?: (s: OwnerSnapshot) => Promise<LegPnlData[]>;
   /** --dry-run --serve: no NEAR/HL calls; commands are verified, then simulated */
   dryRun?: DryRunHooks;
+}
+
+export interface TeeRuntime {
+  client: HyperNearClient;
+  account: string;
+  measurementHash: string;
 }
 
 export interface DryRunHooks {
@@ -106,10 +117,22 @@ function ownerOf(v: unknown): Hex {
 
 /** The owner opted in when its contract policy names an agent (ours, when we know our NEAR agent account). */
 async function assertOptedIn(d: Deps, owner: Hex) {
+  await assertServed(d, owner);
   const st = await d.client.getOwner(owner);
   const ours = d.config.nearAgent?.accountId;
-  if (!st?.agent || (ours && st.agent !== ours)) throw new HttpError(403, 'owner has not opted this agent in (setPolicy)');
+  // a TEE agent's account is new on every boot, so the contract (not this check) decides who may rebalance for a TEE owner
+  const tee = d.scope?.mode === 'tee';
+  if (!st || (!tee && (!st.agent || (ours && st.agent !== ours)))) throw new HttpError(403, 'owner has not opted this agent in (setPolicy)');
   if (st.frozen) throw new HttpError(403, 'owner is frozen');
+}
+
+/** server mode refuses owners who chose TEE; tee mode refuses everyone who is not a paid TEE owner of this image. */
+async function assertServed(d: Deps, owner: Hex) {
+  if (!d.scope) return;
+  const ok = await d.scope.serves(owner).catch((e) => {
+    throw new HttpError(503, `cannot tell whether this agent serves ${owner}: ${(e as Error).message}`);
+  });
+  if (!ok) throw new HttpError(403, d.scope.mode === 'tee' ? 'owner is not a paid TEE owner of this image (setTee, payTee)' : 'owner runs in TEE mode: use the TEE agent');
 }
 
 const verifier = (d: Deps) => ({ chainTag: async () => (await d.client.getConfig()).chain_tag, contractId: d.client.contractId, cache: d.replay });
@@ -168,6 +191,15 @@ export function handler(d: Deps) {
       }
       if (req.method === 'POST' && url.pathname === '/agents/prepare') {
         const cmd = await verifyCommand(verifier(d), await readJson(req), 'prepareAgents');
+        await assertServed(d, cmd.owner);
+        if (d.tee) {
+          // TEE mode: fresh in-memory keys, approved by the contract (tee_approve_agent); the owner signs nothing more
+          const res = await enrollTeeOwner({ legs: d.legs, client: d.tee.client, post: d.relayer.post!, owner: cmd.owner }).catch((e) => {
+            throw new HttpError(403, (e as Error).message);
+          });
+          d.bus.emit('agents.prepared', { owner: cmd.owner, tee: true, legs: res.map((l) => ({ leg: l.leg, agent: l.agent, ok: l.ok })) });
+          return reply(200, { owner: cmd.owner, tee: true, legs: res, pendingApprovals: [] });
+        }
         const legs = await d.legs.prepare(cmd.owner).catch((e) => {
           throw new HttpError(403, (e as Error).message);
         });
@@ -291,21 +323,30 @@ export function handler(d: Deps) {
   };
 }
 
-export function buildDeps(config: AgentConfig): Deps {
+export function buildDeps(config: AgentConfig, tee?: TeeRuntime): Deps {
   const rpc = config.nearRpcUrl;
   const sender = config.relayer && nearAccount(config.relayer.accountId, config.relayer.secretKey, rpc ?? (config.network === 'mainnet' ? 'https://free.rpc.fastnear.com' : 'https://test.rpc.fastnear.com'));
   const client = new HyperNearClient({ contractId: config.contractId, network: config.network, rpcUrl: rpc, sender });
   const bus = new EventBus();
-  const legs = new Legs({ client, dataDir: config.dataDir, network: config.network, coins: config.policy.allowedCoins });
+  // tee mode: HL agent keys live in memory only
+  const legs = new Legs({ client, dataDir: tee ? null : config.dataDir, network: config.network, coins: config.policy.allowedCoins });
+  const scope = new OwnerScope({
+    mode: tee ? 'tee' : 'server',
+    client,
+    legAddresses: async (o) => (await legs.registered(o)).map((l) => l.address),
+    ledger: hlLedgerPort(legs.hl),
+    measurement: () => tee?.measurementHash,
+  });
+  const allOwners = () => [...new Set([...legs.keys.owners(), ...config.guard.watchOwners])] as Hex[];
   const guardConfig: GuardConfig = { ...DEFAULT_GUARD_CONFIG, marginFloorMultiple: config.guard.marginFloor, latencyP95Sec: config.guard.latencyP95Sec };
   // the guard signs rebalances with the NEAR agent's function-call key, never with the relayer's
   const agentSender = config.nearAgent && nearAccount(config.nearAgent.accountId, config.nearAgent.secretKey, rpc ?? (config.network === 'mainnet' ? 'https://free.rpc.fastnear.com' : 'https://test.rpc.fastnear.com'));
   const guardLoop = new GuardLoop({
     legs,
     bus,
-    agentId: config.nearAgent?.accountId,
-    agentClient: agentSender && new HyperNearClient({ contractId: config.contractId, network: config.network, rpcUrl: rpc, sender: agentSender }),
-    owners: () => [...new Set([...legs.keys.owners(), ...config.guard.watchOwners])] as Hex[],
+    agentId: tee ? undefined : config.nearAgent?.accountId,
+    agentClient: tee ? tee.client : agentSender && new HyperNearClient({ contractId: config.contractId, network: config.network, rpcUrl: rpc, sender: agentSender }),
+    owners: () => scope.filter(allOwners()),
     // a strategy leg is topped up only from the reserve leg and within the strategy's own daily budget
     budgetLeftUsd: (o, leg) => d.strategies?.topUpLeft(o, leg),
     onTopUp: (o, leg, usd) => d.strategies?.recordTopUp(o, leg, usd),
@@ -313,7 +354,7 @@ export function buildDeps(config: AgentConfig): Deps {
   });
   const hedger = new Hedger(legs, config.policy, bus);
   const d: Deps = {
-    config, client, legs, bus, guardConfig, guardLoop, annualVol: config.guard.annualVol, hedger,
+    config, client, legs, bus, guardConfig, guardLoop, scope, tee, annualVol: config.guard.annualVol, hedger,
     replay: new ReplayCache(),
     relayer: new Relayer(client, new RateLimiter(config.relayPerMinute), hlPoster(config.network), bus),
   };
@@ -324,7 +365,7 @@ export function buildDeps(config: AgentConfig): Deps {
     propose: (i) => (clients ? proposeAction(i.state, i.ctx, clients) : Promise.reject(new Error('decision layer off'))),
     execute: (owner, action, coin, orders) => hedger.runOrders(owner, action, coin, orders),
     checkOwner: (owner) => assertOptedIn(d, owner),
-    owners: () => [...new Set([...legs.keys.owners(), ...config.guard.watchOwners])] as Hex[],
+    owners: () => scope.filter(allOwners()),
     openedAt: async (s, coin) => openTime((await readPnlData(legs.hl, s)).find((x) => x.leg === 1)?.fills ?? [], coin),
     intervalMs: config.decide.intervalSec * 1000,
     // strategy decisions (propose only): accept pauses the strategy
@@ -333,7 +374,7 @@ export function buildDeps(config: AgentConfig): Deps {
     executeStrategy: (owner, id) => d.strategies!.pause(owner, id, 'accepted strategy proposal'),
   });
   const strategyClients: StrategyClients | undefined = clients && { ask: jevAskStrategy(), escalate: claudeStrategyEscalator() };
-  const strategies = new StrategyManager({ legs, client, policy: config.policy, agentId: config.nearAgent?.accountId, hedgeReserveUsd: config.guard.hedgeReserveUsd, dataDir: config.dataDir, emit: (t, data) => void bus.emit(t, data) });
+  const strategies = new StrategyManager({ legs, client, policy: config.policy, agentId: tee ? undefined : config.nearAgent?.accountId, hedgeReserveUsd: config.guard.hedgeReserveUsd, dataDir: config.dataDir, served: (o) => scope.stillServes(o), emit: (t, data) => void bus.emit(t, data) });
   d.strategies = strategies;
   if (config.relayer) d.sweeper = (owner) => sweepFrozen(owner, livePorts({ client, hl: legs.hl, network: config.network }));
   if (process.env.ANTHROPIC_API_KEY) {
@@ -351,6 +392,32 @@ export function buildDeps(config: AgentConfig): Deps {
   return d;
 }
 
+/** TEE boot: the agent's own NEAR account and attestation from shade-agent-js, registered with the contract. Nothing secret is stored. */
+async function bootTeeRuntime(config: AgentConfig): Promise<TeeRuntime> {
+  const { ShadeClient } = await import('@neardefi/shade-agent-js');
+  const shade = await ShadeClient.create({
+    networkId: config.network,
+    agentContractId: config.contractId,
+    sponsor: config.relayer && { accountId: config.relayer.accountId, privateKey: config.relayer.secretKey },
+  });
+  const rpc = config.nearRpcUrl ?? (config.network === 'mainnet' ? 'https://free.rpc.fastnear.com' : 'https://test.rpc.fastnear.com');
+  const client = new HyperNearClient({ contractId: config.contractId, network: config.network, backend: shadeBackend(shade as never, config.contractId, rpc) });
+  const { account, measurementHash } = await bootTee({ shade: shade as never, client, dev: config.tee.dev, expected: config.tee.measurement, fundNear: config.tee.fundNear });
+  console.log(`hypernear TEE agent ${account} registered, measurement ${measurementHash}${config.tee.dev ? ' (DEV: no quote)' : ''}`);
+  return { client, account, measurementHash };
+}
+
+/** TEE boot, step 2: owners named in HYPERNEAR_WATCH_OWNERS that are paid TEE owners get keys now; the others enrol through /agents/prepare. */
+async function enrollWatched(d: Deps) {
+  for (const owner of d.config.guard.watchOwners as Hex[]) {
+    if (!(await d.scope!.serves(owner).catch(() => false))) continue;
+    await enrollTeeOwner({ legs: d.legs, client: d.tee!.client, post: d.relayer.post!, owner }).then(
+      (r) => console.log(`TEE keys for ${owner}: ${r.map((l) => `leg${l.leg} ${l.ok ? 'approved' : 'FAILED'}`).join(', ')}`),
+      (e) => console.error(`TEE enrol of ${owner} failed:`, (e as Error).message),
+    );
+  }
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
   if (process.argv.includes('--dry-run') && process.argv.includes('--serve')) {
     const { buildDryRunDeps } = await import('./dryrun.ts');
@@ -362,14 +429,16 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     runDryRun();
   } else {
     const config = loadConfig();
-    const deps = buildDeps(config);
+    const tee = config.runMode === 'tee' ? await bootTeeRuntime(config) : undefined;
+    const deps = buildDeps(config, tee);
     const server = createServer(handler(deps));
     // saved strategies come back paused and their orphaned orders are cancelled; the owner resumes them with a signed start
     void deps.strategies?.restore().then((r) => r.length && console.log(`strategies restored (paused): ${JSON.stringify(r)}`), (e) => console.error('strategy restore failed:', (e as Error).message));
-    if (config.nearAgent) deps.guardLoop?.start();
+    if (tee) await enrollWatched(deps);
+    if (config.nearAgent || tee) deps.guardLoop?.start();
     if (config.decide.live) deps.decider?.start(); // its own timer: the guard never waits on it
     server.listen(config.port, () => {
-      console.log(`hypernear agent on :${config.port} (${config.network}, contract ${config.contractId}, relayer ${config.relayer ? 'set' : 'MISSING'}, ` +
+      console.log(`hypernear agent on :${config.port} (${config.runMode} mode, ${config.network}, contract ${config.contractId}, relayer ${config.relayer ? 'set' : 'MISSING'}, ` +
         `near agent ${config.nearAgent ? 'set, guard loop on' : 'MISSING, guard loop off'}, ` +
         `decisions ${config.decide.live ? `every ${config.decide.intervalSec} s` : 'off (TYPESAFE_API_KEY / ANTHROPIC_API_KEY not set)'})`);
     });

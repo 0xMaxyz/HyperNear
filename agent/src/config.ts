@@ -21,6 +21,16 @@ export interface AgentConfig {
   /** NEAR agent account (function-call key limited to rebalance / agent_usd_class_transfer). */
   nearAgent?: { accountId: string; secretKey: string };
   policy: OrderPolicy;
+  /** server (default): owners who did not opt in to TEE. tee: only TEE-mode owners; keys in memory, account from shade-agent-js. */
+  runMode: 'server' | 'tee';
+  tee: {
+    /** the published measurement hash of this image; boot refuses to serve if the registered one differs */
+    measurement?: string;
+    /** testnet spike: register_tee_agent_dev (no quote) */
+    dev: boolean;
+    /** NEAR sent to the agent's fresh account from the relayer when it is empty */
+    fundNear: number;
+  };
   /** POST /relay requests per IP per minute. */
   relayPerMinute: number;
   port: number;
@@ -62,6 +72,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AgentConfig {
       allowedCoins: (env.HYPERNEAR_ALLOWED_COINS ?? 'BTC,ETH').split(',').map((s) => s.trim()).filter(Boolean),
       slippage: num(env.HYPERNEAR_SLIPPAGE, 0.03),
     },
+    runMode: env.HYPERNEAR_RUN_MODE === 'tee' ? 'tee' : 'server',
+    tee: { measurement: env.HYPERNEAR_TEE_MEASUREMENT || undefined, dev: env.HYPERNEAR_TEE_DEV === '1', fundNear: num(env.HYPERNEAR_TEE_FUND_NEAR, 1) },
     relayPerMinute: num(env.HYPERNEAR_RELAY_PER_MINUTE, 20),
     port: num(env.PORT, 8787),
     decide: { live: Boolean(env.TYPESAFE_API_KEY && env.ANTHROPIC_API_KEY), intervalSec: num(env.HYPERNEAR_DECIDE_INTERVAL_SEC, 300) },
