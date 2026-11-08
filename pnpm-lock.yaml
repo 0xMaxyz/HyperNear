@@ -32,15 +32,24 @@ importers:
       '@hypernear/client':
         specifier: workspace:*
         version: link:../packages/hypernear-client
+      '@near-js/crypto':
+        specifier: 2.5.1
+        version: 2.5.1(@near-js/types@2.5.1)(@near-js/utils@2.5.1(@near-js/types@2.5.1))
       '@neardefi/shade-agent-js':
         specifier: 2.2.0
         version: 2.2.0(@near-js/keystores@2.5.1(@near-js/crypto@2.5.1(@near-js/types@2.5.1)(@near-js/utils@2.5.1(@near-js/types@2.5.1)))(@near-js/types@2.5.1))(@near-js/utils@2.5.1(@near-js/types@2.5.1))(@noble/hashes@1.8.0)(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@4.6.7)
       '@perps-platform/core':
         specifier: workspace:*
         version: link:../packages/core
+      '@phala/dstack-sdk':
+        specifier: 0.5.7
+        version: 0.5.7(@noble/hashes@1.8.0)(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@4.6.7)
       '@typesafe-ai/sdk':
         specifier: 0.7.0
         version: 0.7.0
+      near-seed-phrase:
+        specifier: 0.2.1
+        version: 0.2.1
       viem:
         specifier: 2.54.3
         version: 2.54.3(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@4.6.7)
