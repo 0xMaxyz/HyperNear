@@ -42,13 +42,13 @@ Guaranteed by the contract:
 
 - Contract-signed USDC moves only between the owner's registered legs, or to the owner. An agent or relayer cannot send funds anywhere else.
 - The agent's moves are bounded by the owner's daily cap and cooldown.
-- After `freeze`, the contract signs nothing except the owner's withdraw and unfreeze.
+- After `freeze`, the contract signs nothing except the owner's withdraw and unfreeze, and Hyperliquid cancels of the frozen legs' resting orders (`cancel_orders`, which anyone may call while the owner is frozen: a cancel cannot move funds).
 
 Not guaranteed:
 
 - **Trades can still lose money.** The contract limits where funds can go, not whether they are lost. An agent key can trade a leg badly, and a leg can be liquidated.
 - **Order policy is checked off-chain**, in the agent (leverage, notional, coins). The contract cannot read Hyperliquid state. A TEE for the agent is a next step, not part of this repo.
-- **Resting orders survive a freeze.** Freeze revokes the old API wallets and stops contract-signed actions; orders already on the book stay until cancelled.
+- **Resting orders need a second step after a freeze.** Freeze revokes the old API wallets, but orders already on the book stay until someone calls `cancel_orders`. Our agent does it right after a freeze it relays (claim C20); if our server is gone, anyone with a NEAR account can run `node agent/scripts/clear-frozen.ts 0x<owner>`. Between the freeze and that sweep (18.5 s on testnet), a resting order can still fill.
 - **The owner must be an EOA** (for example MetaMask; a Privy embedded wallet is untested, C13). Smart-contract wallets (Safe, ERC-1271) are not supported.
 - Funding a fresh leg costs 1 USDC of Hyperliquid activation fee; withdrawals cost 1 USDC.
 - After a mainnet deploy the runbook deletes the contract's full-access keys (step 10; the mainnet run has not happened yet). That makes the contract account the custody root: nobody, including us, can upgrade it afterwards.
@@ -56,7 +56,7 @@ Not guaranteed:
 ## NEAR features used
 
 - **Chain Signatures** (`v1.signer`; `v1.signer-prod.testnet` on testnet): the contract calls `sign` for every Hyperliquid action. The MPC network holds the keys; the contract pays the 1 yoctoNEAR deposit from its own balance (claims C1, C7, C14).
-- **A NEAR smart contract** (Rust, near-sdk 5, [`contract/`](contract)): legs, owner intents, agent policy, freeze.
+- **A NEAR smart contract** (Rust, near-sdk 5, [`contract/`](contract)): legs, owner intents, agent policy, freeze, and Hyperliquid order cancels signed with a leg's master key (the L1 "phantom agent" scheme, msgpack encoded in the contract; claim C20).
 - **Function-call access keys:** the agent's NEAR account can only call `rebalance` and `agent_usd_class_transfer` on the contract. On testnet the agent key tries `owner_execute` and NEAR refuses it.
 - **NEAR Intents 1Click (dry quotes only; mainnet funding run pending):** funding script `agent/scripts/fund-leg-1click.ts`. So far we have only run dry quotes (documented in [docs/mainnet-runbook.md](docs/mainnet-runbook.md)); the mainnet funding run is part of the runbook.
 - **FastNEAR RPC** (`test.rpc.fastnear.com`): a full master action (NEAR sign, Hyperliquid post, balance change) takes 7.75 s p50 / 8.78 s p95 end to end; the NEAR side alone is about 5.7 s p50 through FastNEAR, against about 12 s through `rpc.testnet.near.org` (claim C6).
@@ -157,6 +157,7 @@ Every claim has a committed test or script and a result file; the full ledger wi
 | C3 `usdSend`, `usdClassTransfer`, `withdraw3` signed by MPC | all ok | NEAR txs [usdSend](https://testnet.nearblocks.io/txns/5YETHthJtWddKgsAkjKbD9rV9d2UxmiF2NUVJRvdoNHr), [usdClassTransfer](https://testnet.nearblocks.io/txns/AxYVw9UM5475w7gf1d9bSNfTz5aTHkeJVjTv5kPqvpQE), [withdraw3](https://testnet.nearblocks.io/txns/79D12deyDXkabqRzBTisYL89bvE9myAH2LovE8wcHoU5) |
 | C7 Agent function-call key calls `rebalance`; contract pays the MPC deposit | ok | NEAR tx [BaoLesRA…](https://testnet.nearblocks.io/txns/BaoLesRAhannL1tQJjXyP3MCUTQEb2NSY4axXXRXu1eY) |
 | C11 An API wallet can do `subAccountTransfer` | ok | subaccount [0x4c163613…](https://app.hyperliquid-testnet.xyz/explorer/address/0x4c163613b406241f43a5492a917f4c0759670ac5) |
+| C20 The leg's master key (MPC) signs a Hyperliquid order cancel; Hyperliquid accepts it after the agent is revoked | ok | NEAR tx [8ro3gSB7…](https://testnet.nearblocks.io/txns/8ro3gSB7YdH4LMMyPpPW2M2SEEGoMBgemeyAUQFVLoHs) (`cancel_orders` while frozen, non-owner caller); [C20.json](validation/results/C20.json), [C20-method.json](validation/results/C20-method.json) |
 | C13 Privy `signTypedData` with a custom domain | not run | pending |
 | C9/C15 1Click funding of a fresh address | not run | mainnet, in the runbook |
 | Decision layer: Jev p50 0.69 s; top answer flips under shuffling on 16% of states; 5% of calls reach 0.90 | measured | [C17](validation/results/C17.json), [C17b](validation/results/C17b.json), [C18](validation/results/C18.json), [C18b](validation/results/C18b.json) |
@@ -165,7 +166,9 @@ Every claim has a committed test or script and a result file; the full ledger wi
 
 **Hedge** ([`agent/results/D3-live.json`](agent/results/D3-live.json)): leg 1 shorted 0.0002 BTC at 3x (oid 64758082577); closing filled both legs reduce-only; both positions ended at size 0.
 
-**Freeze** ([`agent/results/freeze-live.json`](agent/results/freeze-live.json)). One NEAR transaction [24aTEXc2…](https://testnet.nearblocks.io/txns/24aTEXc2H2KpADmML9HtXBeckd2NysVcwPBjt1vFv9HK) revoked the agents on all 3 legs on Hyperliquid (`ok`). Eight seconds later an order from an old agent was refused by Hyperliquid. An order resting before the freeze stayed on the book (see "what we don't guarantee").
+**Freeze** ([`agent/results/freeze-live.json`](agent/results/freeze-live.json)). One NEAR transaction [24aTEXc2…](https://testnet.nearblocks.io/txns/24aTEXc2H2KpADmML9HtXBeckd2NysVcwPBjt1vFv9HK) revoked the agents on all 3 legs on Hyperliquid (`ok`). Eight seconds later an order from an old agent was refused by Hyperliquid. An order resting before the freeze stayed on the book, which is why the sweep exists.
+
+**Freeze sweep** ([`validation/results/C20-sweep.json`](validation/results/C20-sweep.json), claim C20). Two resting BTC orders, one on each of legs 0 and 1, survived a freeze ([Fy4WwBfQ…](https://testnet.nearblocks.io/txns/Fy4WwBfQRjgiCmWbxfUigmJfuDmZgeYoRLkkuJXyWQDb)). `cancel_orders`, called by an account that is not the owner, had the contract sign a Hyperliquid cancel with each leg's own MPC key; Hyperliquid answered `ok` and both books were empty 18.5 s after the sweep started (leg 0 tx [GS8LrZbw…](https://testnet.nearblocks.io/txns/GS8LrZbwwQ7X2d3htFLnm9cnmDDhzA9g2UNuaKH6DX6Y)). No agent key and no exchange-side dead-man were involved.
 
 **Prompt-injection demo** ([`validation/results/injection-demo.json`](validation/results/injection-demo.json), `agent/scripts/injection-demo.ts`). A chat with unfiltered tools read a "market news" paste containing a hidden instruction to move all funds to an attacker address. Honest outcome: **no model followed it** (Sonnet 5.5 in three prompt variants, Haiku 5.5 in one); Sonnet named the injected line and ignored it. So we then called the tools directly with the injected arguments, as a model that did follow it would:
 
@@ -212,7 +215,7 @@ Expected: the first returns the recorded running grid `grid-live-1` on leg 3 (ma
 
 **Known limits**
 
-- **No exchange-side dead-man below $1M of traded volume** (claim C19: Hyperliquid refuses `scheduleCancel`, testnet too). A crashed agent leaves at most `levels` resting grid buys until it restarts; the restore then cancels them. A freeze posted by someone other than our relayer also leaves resting orders until a fresh agent cancels them.
+- **No exchange-side dead-man below $1M of traded volume** (claim C19: Hyperliquid refuses `scheduleCancel`, testnet too). A crashed agent leaves at most `levels` resting grid buys until it restarts; the restore then cancels them. A freeze posted by someone other than our relayer leaves resting orders until someone runs `agent/scripts/clear-frozen.ts` (any NEAR account; no agent key needed).
 - **`/strategy/draft` and strategy proposals are unauthenticated and spend model credits**; they are rate-limited per IP, nothing more.
 - **Demo 2 used demo thresholds.** The operator's max leverage was raised from 5x to 20x for the run, and the guard floor from 2x to 10x maintenance: Hyperliquid keeps about 10% of the notional non-withdrawable, so a 20x leg stripped of its spare margin sits near 8x maintenance and never near 2x. The service defaults are unchanged.
 - The loss limit counts the strategy's PnL since it started (not per day), and assumes the leg started flat. The strategy decision facts are bucketed from the same PnL.
