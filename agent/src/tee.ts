@@ -145,7 +145,8 @@ export interface BootDeps {
 /** TEE boot, step 1: fund the agent account if a sponsor is set, then register the attestation. Returns the account and its measurement hash. */
 export async function bootTee(d: BootDeps) {
   const account = d.shade.accountId();
-  if (d.shade.balance && d.shade.fund && (await d.shade.balance()) < 0.3) await d.shade.fund(d.fundNear ?? 1);
+  const fundNear = d.fundNear ?? 1;
+  if (d.shade.balance && d.shade.fund && (await d.shade.balance()) < fundNear / 2) await d.shade.fund(fundNear);
   const attestation = await d.shade.getAttestation();
   const measurements = measurementsFrom(attestation.tcb_info);
   if (d.dev) await d.client.registerTeeAgentDev({ measurements });

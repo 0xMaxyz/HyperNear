@@ -60,7 +60,7 @@ const dataDir = `${homedir()}/.leash-tee-live`;
 const agentConfig = (seed: string) =>
   loadConfig({
     NEAR_NETWORK: 'testnet', NEAR_CONTRACT_ID: contractId, HYPERNEAR_RUN_MODE: 'tee', HYPERNEAR_TEE_DEV: '1', HYPERNEAR_TEE_DEV_SEED: seed,
-    HYPERNEAR_TEE_FUND_NEAR: '0.5', HYPERNEAR_RELAYER_ACCOUNT_ID: contractId, HYPERNEAR_RELAYER_PRIVATE_KEY: relayerKey, HYPERNEAR_DATA_DIR: dataDir,
+    HYPERNEAR_TEE_FUND_NEAR: '0.2', HYPERNEAR_RELAYER_ACCOUNT_ID: contractId, HYPERNEAR_RELAYER_PRIVATE_KEY: relayerKey, HYPERNEAR_DATA_DIR: dataDir,
   });
 
 const labAddr = privateKeyToAccount(labKey()).address.toLowerCase() as Hex;
