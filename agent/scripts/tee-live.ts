@@ -283,7 +283,7 @@ await runClaim('C21', 'C21', 'TEE mode, dev-registered agent (register_tee_agent
     const server = new OwnerScope({ mode: 'server', client });
     must(t !== null && t.measurement_hash === null, `get_tee ${JSON.stringify(t)}`);
     must(await server.serves(ow), 'server scope still refuses');
-    return { months_paid: t.months_paid, paid_until_ns: t.paid_until_ns };
+    return { months_paid: t!.months_paid, paid_until_ns: t!.paid_until_ns };
   });
 
   rec.refs.agentATxns = await accountTxns(A.tee.account);
