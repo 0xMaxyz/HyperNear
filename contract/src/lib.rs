@@ -16,6 +16,8 @@ use near_sdk::{
 pub mod auth;
 pub mod eip712;
 pub mod l1;
+#[cfg(feature = "tee")]
+pub mod tee;
 use auth::OwnerIntent;
 use eip712::{parse_addr, parse_usd, HlAction};
 
@@ -602,6 +604,30 @@ impl Leash {
     pub fn migrate() -> Self {
         let old: LeashV0 = env::state_read().unwrap_or_else(|| env::panic_str("no state"));
         Self::from_parts(old.admin, old.mpc_contract, old.hl_mainnet)
+    }
+}
+
+/// T0 SPIKE (feature `tee`): one dstack attestation verification, to measure gas. Reads no state, grants nothing.
+/// `ts_sec` is caller-chosen only here (recorded fixtures verify at a fixed time); T1 uses the block time.
+#[cfg(feature = "tee")]
+#[near]
+impl Leash {
+    pub fn tee_verify_spike(
+        attestation: near_sdk::serde_json::Value,
+        report_data: String,
+        measurements: near_sdk::serde_json::Value,
+        ppid: String,
+        ts_sec: u64,
+    ) -> near_sdk::serde_json::Value {
+        let a = tee::parse_attestation(attestation);
+        let m: shade_attestation::measurements::FullMeasurementsHex = near_sdk::serde_json::from_value(measurements)
+            .unwrap_or_else(|e| env::panic_str(&format!("measurements: {e}")));
+        let ok = tee::verify(&a, tee::parse_hex(&report_data, "report_data"), ts_sec, m.into(), tee::parse_hex(&ppid, "ppid"))
+            .unwrap_or_else(|e| env::panic_str(&format!("attestation rejected: {e}")));
+        near_sdk::serde_json::json!({
+            "measurements": shade_attestation::measurements::FullMeasurementsHex::from(ok.measurements),
+            "ppid": hex::encode(ok.ppid.as_ref()),
+        })
     }
 }
 

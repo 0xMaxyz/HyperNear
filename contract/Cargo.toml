@@ -9,10 +9,13 @@ crate-type = ["cdylib", "rlib"]
 [features]
 # testnet-only admin signing (sign_raw, admin_sign_hl). Never enable for mainnet.
 spike = []
+# T0 spike: on-chain dstack (Intel TDX) attestation verification. Off by default until T1.
+tee = ["dep:shade-attestation"]
 
 [dependencies]
 near-sdk = { version = "5.30", features = ["unstable"] }  # unstable: env::ecrecover
 hex = "0.4"
+shade-attestation = { path = "vendor/shade-attestation", optional = true }  # vendored: crates.io 0.2.0 pins serde_with =3.17 (near-sdk 5.30 needs ^3.20)
 
 [dev-dependencies]
 near-sdk = { version = "5.30", features = ["unit-testing", "unstable"] }

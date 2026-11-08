@@ -1,0 +1,26 @@
+# Vendored copy of NearDeFi shade-attestation 0.2.0 (MIT, see LICENSE), source at
+# github.com/NearDeFi/shade-agent-framework @ 3366bc98 (shade-attestation/src, unmodified).
+# Only change: the exact `=` pins on serde/serde_with/serde_json/borsh/hex/... are relaxed to semver ranges,
+# because `serde_with =3.17.0` conflicts with near-sdk 5.30 (needs ^3.20). dcap-qvl stays exactly pinned.
+[package]
+name = "shade-attestation"
+version = "0.2.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[dependencies]
+borsh = { version = "1.5", features = ["derive"] }
+dcap-qvl = { version = "=0.5.2", default-features = false, features = ["contract", "borsh", "std", "ring", "default-x509"] }
+derive_more = { version = "2.1", features = ["from", "deref", "into", "as_ref", "constructor"] }
+dstack-sdk-types = { version = "=0.1.2", features = ["borsh"] }
+hex = { version = "0.4", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_with = { version = "3", features = ["hex"] }
+sha2 = "0.11"
+thiserror = "2"
+tracing = "0.1"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.2", features = ["custom"] }
