@@ -1,0 +1,59 @@
+{
+  "claim": "C20",
+  "title": "cancel_orders (anyone, while frozen) and the cancelOrders intent clear resting orders, default build",
+  "status": "✅",
+  "at": "2026-11-08T10:48:25.534Z",
+  "network": "testnet",
+  "numbers": {
+    "frozenSignAndPostMs": 8628
+  },
+  "refs": {
+    "frozenPath": {
+      "freezeTx": "9gC83ni3bWXX5he4uTqfgtRPBADgU4Euvu3dJPXdxjBW",
+      "cancelTx": "8ro3gSB7YdH4LMMyPpPW2M2SEEGoMBgemeyAUQFVLoHs",
+      "caller": "leash-spike-1107.testnet",
+      "order": {
+        "leg0": "0xfc5f38a75535cc6a864bb5ba14d9c7f29eecacac",
+        "asset": 3,
+        "oid": 64821543961
+      },
+      "nonce": 1794134848481,
+      "hl": {
+        "status": "ok",
+        "response": {
+          "type": "cancel",
+          "data": {
+            "statuses": [
+              "success"
+            ]
+          }
+        }
+      },
+      "openOrdersAfter": []
+    },
+    "intentPath": {
+      "ownerExecuteTx": "5Hkttyp5qTbN9ib1txQw49zzXV9aET6XhTVE2KrbKuBv",
+      "order": {
+        "leg0": "0xfc5f38a75535cc6a864bb5ba14d9c7f29eecacac",
+        "asset": 3,
+        "oid": 64821569056
+      },
+      "nonce": 1794134872223,
+      "hl": {
+        "status": "ok",
+        "response": {
+          "type": "cancel",
+          "data": {
+            "statuses": [
+              "success"
+            ]
+          }
+        }
+      },
+      "openOrdersAfter": []
+    }
+  },
+  "notes": [
+    "Default build (no spike methods) on leash-spike-1107.testnet. Path 1: the owner was frozen and the caller was not the owner. Path 2: the owner signed cancelOrders while not frozen."
+  ]
+}

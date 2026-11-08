@@ -244,7 +244,7 @@ fn nonce_stays_burned_when_mpc_callback_fails() {
     let sig0 = o.sign(0, &withdraw("1"));
     let _ = c.owner_execute(o.addr.clone(), 0, withdraw("1"), sig0.clone());
     ctx(CONTRACT, T0);
-    assert!(c.on_signed("00".repeat(32), None, None, Err(PromiseError::Failed)).is_none());
+    assert!(c.on_signed("00".repeat(32), None, None, None, Err(PromiseError::Failed)).is_none());
     ctx(RELAYER, T0);
     assert_eq!(c.get_owner(o.addr.clone()).unwrap().nonce, 1);
     expect_panic("bad nonce", || {
@@ -442,7 +442,7 @@ fn failed_mpc_sign_gives_back_rebalance_cap_and_cooldown() {
     let ok = on_signed_args();
     ctx(CONTRACT, day0 + 5);
     let refund: CapRefund = serde_json::from_value(ok["refund"].clone()).unwrap();
-    assert!(c.on_signed(ok["payload"].as_str().unwrap().into(), None, Some(refund), Ok(fake_mpc_sig())).is_some());
+    assert!(c.on_signed(ok["payload"].as_str().unwrap().into(), None, None, Some(refund), Ok(fake_mpc_sig())).is_some());
     let st = c.get_owner(o.addr.clone()).unwrap();
     assert_eq!((st.spent_today, st.last_rebalance_ns), (4_000_000, day0 * 1_000_000_000), "success keeps the spend");
 
@@ -452,7 +452,7 @@ fn failed_mpc_sign_gives_back_rebalance_cap_and_cooldown() {
     let failed = on_signed_args();
     ctx(CONTRACT, t1 + 5);
     let refund: CapRefund = serde_json::from_value(failed["refund"].clone()).unwrap();
-    assert!(c.on_signed(failed["payload"].as_str().unwrap().into(), None, Some(refund), Err(PromiseError::Failed)).is_none());
+    assert!(c.on_signed(failed["payload"].as_str().unwrap().into(), None, None, Some(refund), Err(PromiseError::Failed)).is_none());
     let st = c.get_owner(o.addr.clone()).unwrap();
     assert_eq!(st.spent_today, 4_000_000, "the failed 6 is given back");
     assert_eq!(st.last_rebalance_ns, day0 * 1_000_000_000, "cooldown restarts from the last successful rebalance");
@@ -750,4 +750,96 @@ fn on_revoked_returns_one_entry_per_agent_with_or_without_signature() {
     assert_eq!(out[0].signature.as_ref().unwrap().action, Some(act(0)));
     assert!(out[1].signature.is_none());
     let _ = &mut c;
+}
+
+// ---- C20: L1 cancel signed with the leg's master key ----
+
+const KEEPER: &str = "keeper.testnet";
+
+fn cancels(n: usize) -> Vec<l1::HlCancel> {
+    (0..n).map(|i| l1::HlCancel { a: 3, o: 64_820_881_296 + i as u64 }).collect()
+}
+
+/// owner(seed) with leg 0 registered and, if `frozen`, frozen (nonce 0 = the freeze).
+fn cancel_setup(seed: u8, frozen: bool) -> (Leash, Owner) {
+    let mut c = contract();
+    let o = owner(seed);
+    register(&mut c, &o, 0, seed.wrapping_add(100));
+    if frozen {
+        ctx(RELAYER, T0);
+        o.exec(&mut c, 0, OwnerIntent::Freeze { frozen: true });
+    }
+    (c, o)
+}
+
+#[test]
+fn cancel_orders_refused_when_not_frozen_and_not_owner_signed() {
+    let (mut c, o) = cancel_setup(61, false);
+    ctx(KEEPER, T0);
+    expect_panic("owner is not frozen", || {
+        let _ = c.cancel_orders(o.addr.clone(), 0, cancels(1));
+    });
+    // an owner the contract never saw is not frozen either
+    expect_panic("owner is not frozen", || {
+        let _ = c.cancel_orders(owner(62).addr, 0, cancels(1));
+    });
+    assert!(signed().is_empty());
+}
+
+#[test]
+fn cancel_orders_while_frozen_anyone_gets_the_l1_digest_signed_with_block_time_nonce() {
+    let (mut c, o) = cancel_setup(63, true);
+    ctx(KEEPER, T0 + 5); // a function-call key, 0 deposit: the contract pays the 1 yocto MPC deposit
+    let cs = cancels(2);
+    let _ = c.cancel_orders(o.addr.clone(), 0, cs.clone());
+    let nonce = (T0 + 5) * 1000;
+    assert_eq!(signed(), vec![(leg_path(&o.addr, 0), hex::encode(l1::cancel_digest(&cs, nonce, false)))]);
+    assert_eq!(c.l1_cancel_digest(cs.clone(), nonce), hex::encode(l1::cancel_digest(&cs, nonce, false)));
+    let cb = on_signed_args();
+    assert_eq!(cb["nonce"], nonce);
+    assert_eq!(cb["action"], serde_json::json!({ "type": "cancel", "cancels": [{ "a": 3, "o": 64_820_881_296u64 }, { "a": 3, "o": 64_820_881_297u64 }] }));
+}
+
+#[test]
+fn cancel_orders_refuses_unregistered_leg_and_the_cap() {
+    let (mut c, o) = cancel_setup(64, true);
+    ctx(KEEPER, T0);
+    expect_panic("leg not registered", || {
+        let _ = c.cancel_orders(o.addr.clone(), 1, cancels(1));
+    });
+    expect_panic("cancels: 1 to 16 per call", || {
+        let _ = c.cancel_orders(o.addr.clone(), 0, cancels(l1::MAX_CANCELS + 1));
+    });
+    expect_panic("cancels: 1 to 16 per call", || {
+        let _ = c.cancel_orders(o.addr.clone(), 0, vec![]);
+    });
+    let _ = c.cancel_orders(o.addr.clone(), 0, cancels(l1::MAX_CANCELS)); // the cap itself is fine
+    assert_eq!(signed().len(), 1);
+}
+
+#[test]
+fn cancel_orders_intent_works_any_time_and_while_frozen() {
+    let (mut c, o) = cancel_setup(65, false);
+    ctx(RELAYER, T0 + 1);
+    o.exec(&mut c, 0, OwnerIntent::CancelOrders { leg: 0, cancels: cancels(1) });
+    assert_eq!(signed(), vec![(leg_path(&o.addr, 0), hex::encode(l1::cancel_digest(&cancels(1), (T0 + 1) * 1000, false)))]);
+    ctx(RELAYER, T0 + 2);
+    o.exec(&mut c, 1, OwnerIntent::Freeze { frozen: true });
+    ctx(RELAYER, T0 + 3);
+    o.exec(&mut c, 2, OwnerIntent::CancelOrders { leg: 0, cancels: cancels(3) });
+    assert_eq!(signed().len(), 1);
+    assert_eq!(c.get_owner(o.addr.clone()).unwrap().nonce, 3);
+    expect_panic("cancels: 1 to 16 per call", || o.exec(&mut c, 3, OwnerIntent::CancelOrders { leg: 0, cancels: cancels(17) }));
+}
+
+#[test]
+fn user_signed_sign_out_has_no_nonce_field() {
+    let out = SignOut { payload: "00".into(), big_r: "02".into(), s: "11".into(), recovery_id: 0, action: None, nonce: None };
+    assert!(serde_json::to_value(&out).unwrap().get("nonce").is_none());
+}
+
+#[test]
+#[should_panic(expected = "cancel is an L1 action")]
+fn cancel_is_never_signed_as_a_user_signed_action() {
+    let _ = HlAction::Cancel { cancels: cancels(1) }.digest("Testnet");
 }

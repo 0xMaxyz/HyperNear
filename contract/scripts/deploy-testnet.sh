@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 # Run on ci32. Creates <account> via the testnet faucet (first time) and deploys hypernear to it.
 # Keys stay in ~/.near-credentials/testnet (legacy keychain). Output is filtered so no secret key is printed.
-# Usage: deploy-testnet.sh <account.testnet> [--redeploy | --migrate]   (--migrate runs `migrate` after deploy)
+# Usage: deploy-testnet.sh <account.testnet> [--redeploy | --migrate] [--default-build]
+#   --migrate runs `migrate` after deploy; --default-build deploys the mainnet build (no spike admin methods).
 set -euo pipefail
 . "$HOME/.cargo/env"
-ACC="$1"; MODE="${2:-}"
-# This script always builds with --features spike (admin signing for any path): testnet accounts only.
-case "$ACC" in *.testnet) ;; *) echo "refusing: $ACC is not a .testnet account and this build has --features spike" >&2; exit 1 ;; esac
+ACC="$1"; MODE=""; FEATURES="--features spike"
+for a in "${@:2}"; do case "$a" in --default-build) FEATURES="" ;; *) MODE="$a" ;; esac; done
+# Testnet accounts only, whichever build: the spike build signs for any path, and mainnet has its own script.
+case "$ACC" in *.testnet) ;; *) echo "refusing: $ACC is not a .testnet account (use deploy-mainnet.sh for mainnet)" >&2; exit 1 ;; esac
 cd "$(dirname "$0")/.."
 redact() { sed -E 's/(ed25519|secp256k1):[1-9A-HJ-NP-Za-km-z]{60,}/\1:<redacted>/g'; }
-cargo near build non-reproducible-wasm --features spike 2>&1 | tail -3   # testnet build: spike admin methods on
+cargo near build non-reproducible-wasm $FEATURES 2>&1 | tail -3   # default: spike admin methods on; --default-build: off
 if [ ! -f "$HOME/.near-credentials/testnet/$ACC.json" ]; then
   near account create-account sponsor-by-faucet-service "$ACC" autogenerate-new-keypair \
     save-to-legacy-keychain network-config testnet create 2>&1 | redact | tail -5

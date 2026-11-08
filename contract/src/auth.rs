@@ -4,6 +4,7 @@
 //! No chainId on purpose: NEAR has none, and wallets refuse a chainId that is not the active chain.
 
 use crate::eip712::{hash_struct, parse_addr, typed_digest, word_addr, word_bool, word_str, word_u64};
+use crate::l1::HlCancel;
 use near_sdk::env::{self, keccak256_array};
 use near_sdk::near;
 
@@ -16,6 +17,9 @@ const USD_CLASS_TRANSFER: &[u8] =
 const SET_POLICY: &[u8] =
     b"SetPolicy(address owner,uint64 nonce,string agent,string dailyCap,uint64 cooldownSec)";
 const FREEZE: &[u8] = b"Freeze(address owner,uint64 nonce,bool frozen)";
+const CANCEL_ORDERS: &[u8] =
+    b"CancelOrders(address owner,uint64 nonce,uint32 leg,Cancel[] cancels)Cancel(uint32 a,uint64 o)";
+const CANCEL: &[u8] = b"Cancel(uint32 a,uint64 o)";
 
 /// What an owner can ask for. JSON: `{"type":"withdraw","leg":0,"amount":"5","hlTime":…}`.
 #[near(serializers = [json])]
@@ -33,6 +37,8 @@ pub enum OwnerIntent {
     #[serde(rename_all = "camelCase")]
     SetPolicy { agent: String, daily_cap: String, cooldown_sec: u64 },
     Freeze { frozen: bool },
+    /// HL L1 cancel of the leg's resting orders, signed with the leg's master key; allowed while frozen.
+    CancelOrders { leg: u32, cancels: Vec<HlCancel> },
 }
 
 pub fn domain_separator(chain_tag: &str, contract_id: &str) -> [u8; 32] {
@@ -58,6 +64,12 @@ pub fn intent_digest(domain: [u8; 32], owner: &[u8; 20], nonce: u64, intent: &Ow
             hash_struct(SET_POLICY, &[o, n, word_str(agent), word_str(daily_cap), word_u64(*cooldown_sec)])
         }
         OwnerIntent::Freeze { frozen } => hash_struct(FREEZE, &[o, n, word_bool(*frozen)]),
+        OwnerIntent::CancelOrders { leg, cancels } => {
+            // EIP-712 array of structs: keccak256 of the concatenated struct hashes
+            let items: Vec<u8> =
+                cancels.iter().flat_map(|c| hash_struct(CANCEL, &[word_u64(c.a as u64), word_u64(c.o)])).collect();
+            hash_struct(CANCEL_ORDERS, &[o, n, word_u64(*leg as u64), keccak256_array(&items)])
+        }
     };
     typed_digest(domain, struct_hash)
 }
@@ -103,6 +115,6 @@ mod tests {
             assert_eq!(d, h32(c["digest"].as_str().unwrap()), "case {c}");
             assert_eq!(recover_signer(&d, c["signature"].as_str().unwrap()), owner, "ecrecover case {c}");
         }
-        assert_eq!(kinds.len(), 5, "every intent type has a vector");
+        assert_eq!(kinds.len(), 6, "every intent type has a vector");
     }
 }

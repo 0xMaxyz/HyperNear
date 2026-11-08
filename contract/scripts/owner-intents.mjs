@@ -15,7 +15,11 @@ export const OWNER_INTENT_TYPES = {
   usdClassTransfer: ["UsdClassTransfer", [...head, { name: "leg", type: "uint32" }, { name: "amount", type: "string" }, { name: "toPerp", type: "bool" }, { name: "hlNonce", type: "uint64" }]],
   setPolicy: ["SetPolicy", [...head, { name: "agent", type: "string" }, { name: "dailyCap", type: "string" }, { name: "cooldownSec", type: "uint64" }]],
   freeze: ["Freeze", [...head, { name: "frozen", type: "bool" }]],
+  // cancels = HL's own cancel entries {a: asset, o: oid}; allowed while frozen (a cancel cannot move funds)
+  cancelOrders: ["CancelOrders", [...head, { name: "leg", type: "uint32" }, { name: "cancels", type: "Cancel[]" }]],
 };
+/** Struct types referenced by an intent type (EIP-712 appends them to the type string). */
+export const OWNER_INTENT_SUBTYPES = { Cancel: [{ name: "a", type: "uint32" }, { name: "o", type: "uint64" }] };
 
 /** Typed data for viem signTypedData / hashTypedData. intent = {type, ...fields} as the contract takes it. */
 export function ownerIntentTypedData(chainTag, contractId, owner, nonce, intent) {
@@ -23,7 +27,7 @@ export function ownerIntentTypedData(chainTag, contractId, owner, nonce, intent)
   const { type, ...rest } = intent;
   return {
     domain: hypernearDomain(chainTag, contractId),
-    types: { [primaryType]: fields },
+    types: { [primaryType]: fields, ...(intent.type === "cancelOrders" ? { Cancel: OWNER_INTENT_SUBTYPES.Cancel } : {}) },
     primaryType,
     message: { agentName: "", ...rest, owner, nonce: BigInt(nonce) },
   };

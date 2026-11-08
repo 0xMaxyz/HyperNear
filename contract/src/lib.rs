@@ -15,6 +15,7 @@ use near_sdk::{
 
 pub mod auth;
 pub mod eip712;
+pub mod l1;
 use auth::OwnerIntent;
 use eip712::{parse_addr, parse_usd, HlAction};
 
@@ -159,6 +160,9 @@ pub struct SignOut {
     pub s: String,
     pub recovery_id: u8,
     pub action: Option<HlAction>,
+    /// L1 actions only (cancel): the /exchange `nonce`, chosen by the contract (user-signed actions carry theirs inside `action`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nonce: Option<u64>,
 }
 
 /// A `spike` build must never run on mainnet: refuse to init there, and refuse the admin methods.
@@ -210,10 +214,11 @@ impl Leash {
         require!(nonce == st.nonce, "bad nonce");
         st.nonce += 1;
         require!(
-            !st.frozen || matches!(intent, OwnerIntent::Withdraw { .. } | OwnerIntent::Freeze { .. }),
+            !st.frozen || matches!(intent, OwnerIntent::Withdraw { .. } | OwnerIntent::Freeze { .. } | OwnerIntent::CancelOrders { .. }),
             "frozen"
         );
         let mut revoke = false;
+        let mut cancel = None;
         let to_sign = match intent {
             OwnerIntent::ApproveAgent { leg, agent, agent_name, hl_nonce } => {
                 let mut slots = agent_slots();
@@ -247,6 +252,11 @@ impl Leash {
                 revoke = frozen; // unfreezing approves nothing: the owner approves fresh agents
                 None
             }
+            OwnerIntent::CancelOrders { leg, cancels } => {
+                l1::check_cancels(&cancels);
+                cancel = Some((leg, cancels));
+                None
+            }
         };
         self.owners.insert(owner.clone(), st);
         self.owners.flush();
@@ -256,10 +266,36 @@ impl Leash {
                 return PromiseOrValue::Promise(p);
             }
         }
+        if let Some((leg, cancels)) = cancel {
+            return PromiseOrValue::Promise(self.sign_cancel(leg_path(&owner, leg), cancels));
+        }
         match to_sign {
             Some((leg, action)) => PromiseOrValue::Promise(self.sign_hl(leg_path(&owner, leg), action)),
             None => PromiseOrValue::Value(near_sdk::serde_json::Value::Null),
         }
+    }
+
+    /// Anyone, but only while `owner` is frozen: signs an HL L1 `cancel` of resting orders on a registered leg with
+    /// the leg's master key, so a frozen account's book can be cleared without the agent server (owner's browser,
+    /// any keeper). The freeze was owner-signed and a cancel cannot move funds. At any other time the owner uses the
+    /// `cancelOrders` intent. The HL nonce is the block time (ms), never caller-chosen: a keeper must not be able
+    /// to fill the leg key's HL nonce window with future nonces. Returns the SignOut to POST as
+    /// `{action, nonce, signature, vaultAddress: null}` to /exchange.
+    pub fn cancel_orders(&mut self, owner: String, leg: u32, cancels: Vec<l1::HlCancel>) -> Promise {
+        parse_addr(&owner);
+        require!(
+            self.owners.get(&owner).is_some_and(|s| s.frozen),
+            "owner is not frozen: use the owner-signed cancelOrders intent"
+        );
+        let path = leg_path(&owner, leg);
+        require!(self.legs.contains_key(&path), "leg not registered");
+        l1::check_cancels(&cancels);
+        self.sign_cancel(path, cancels)
+    }
+
+    /// Digest (hex) of an L1 cancel with this nonce on this contract's HL chain (what the leg key signs).
+    pub fn l1_cancel_digest(&self, cancels: Vec<l1::HlCancel>, nonce: u64) -> String {
+        hex::encode(l1::cancel_digest(&cancels, nonce, self.hl_mainnet))
     }
 
     /// Freeze callback: one result per agent name (joined MPC signs, in `slots` order).
@@ -281,7 +317,7 @@ impl Leash {
                     leg: slot.leg,
                     name: slot.name,
                     burn_address: burn,
-                    signature: sig.map(|s| SignOut { payload, big_r: s.big_r.affine_point, s: s.s.scalar, recovery_id: s.recovery_id, action: Some(action) }),
+                    signature: sig.map(|s| SignOut { payload, big_r: s.big_r.affine_point, s: s.s.scalar, recovery_id: s.recovery_id, action: Some(action), nonce: None }),
                 }
             })
             .collect()
@@ -384,7 +420,7 @@ impl Leash {
         st.last_rebalance_ns = now;
         self.owners.insert(owner, st);
         let action = HlAction::UsdSend { destination: to_address, amount, time: hl_time };
-        self.mpc_sign(from_path, action.digest(self.hl_chain()), Some(action), Some(refund))
+        self.mpc_sign(from_path, action.digest(self.hl_chain()), Some(action), None, Some(refund))
     }
 
     // ---- callbacks and views ----
@@ -396,6 +432,7 @@ impl Leash {
         &mut self,
         payload: String,
         action: Option<HlAction>,
+        nonce: Option<u64>,
         refund: Option<CapRefund>,
         #[callback_result] res: Result<MpcSignature, PromiseError>,
     ) -> Option<SignOut> {
@@ -413,7 +450,7 @@ impl Leash {
             }
             return None;
         };
-        Some(SignOut { payload, big_r: sig.big_r.affine_point, s: sig.s.scalar, recovery_id: sig.recovery_id, action })
+        Some(SignOut { payload, big_r: sig.big_r.affine_point, s: sig.s.scalar, recovery_id: sig.recovery_id, action, nonce })
     }
 
     /// EIP-712 digest (hex) of `action` for this contract's HL chain.
@@ -518,10 +555,16 @@ impl Leash {
 
     fn sign_hl(&self, path: String, action: HlAction) -> Promise {
         let digest = action.digest(self.hl_chain());
-        self.mpc_sign(path, digest, Some(action), None)
+        self.mpc_sign(path, digest, Some(action), None, None)
     }
 
-    fn mpc_sign(&self, path: String, payload: [u8; 32], action: Option<HlAction>, refund: Option<CapRefund>) -> Promise {
+    fn sign_cancel(&self, path: String, cancels: Vec<l1::HlCancel>) -> Promise {
+        let nonce = env::block_timestamp_ms();
+        let digest = l1::cancel_digest(&cancels, nonce, self.hl_mainnet);
+        self.mpc_sign(path, digest, Some(HlAction::Cancel { cancels }), Some(nonce), None)
+    }
+
+    fn mpc_sign(&self, path: String, payload: [u8; 32], action: Option<HlAction>, nonce: Option<u64>, refund: Option<CapRefund>) -> Promise {
         let payload_hex = hex::encode(payload);
         let args = json!({ "request": {
             "path": path,
@@ -533,7 +576,7 @@ impl Leash {
             .then(
                 Self::ext(env::current_account_id())
                     .with_static_gas(ON_SIGNED_GAS)
-                    .on_signed(payload_hex, action, refund),
+                    .on_signed(payload_hex, action, nonce, refund),
             )
     }
 }
@@ -545,7 +588,7 @@ impl Leash {
 impl Leash {
     pub fn sign_raw(&mut self, path: String, payload: String) -> Promise {
         self.assert_admin();
-        self.mpc_sign(path, parse_hex::<32>(&payload, "payload"), None, None)
+        self.mpc_sign(path, parse_hex::<32>(&payload, "payload"), None, None, None)
     }
 
     pub fn admin_sign_hl(&mut self, path: String, action: HlAction) -> Promise {

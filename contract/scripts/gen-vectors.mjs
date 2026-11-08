@@ -50,6 +50,7 @@ async function ownerVectors() {
     { type: "usdClassTransfer", leg: 0, amount: "1", toPerp: false, hlNonce: 1794050000003 },
     { type: "setPolicy", agent: "agent.leash.testnet", dailyCap: "100", cooldownSec: 600 },
     { type: "freeze", frozen: true },
+    { type: "cancelOrders", leg: 0, cancels: [{ a: 3, o: 64820881296 }, { a: 10000, o: 5 }] },
   ];
   const cases = [];
   for (const [i, intent] of intents.entries()) {

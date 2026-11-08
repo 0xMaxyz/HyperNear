@@ -37,6 +37,9 @@ pub enum HlAction {
     Withdraw { destination: String, amount: String, time: u64 },
     #[serde(rename = "usdClassTransfer", rename_all = "camelCase")]
     UsdClassTransfer { amount: String, to_perp: bool, nonce: u64 },
+    /// L1 action (l1.rs): its digest is the phantom-agent one and its nonce travels beside the action.
+    #[serde(rename = "cancel")]
+    Cancel { cancels: Vec<crate::l1::HlCancel> },
 }
 
 pub fn word_u64(v: u64) -> [u8; 32] {
@@ -138,6 +141,7 @@ impl HlAction {
                 parse_usd(amount);
                 hash_struct(USD_CLASS_TRANSFER_TYPE, &[c, word_str(amount), word_bool(*to_perp), word_u64(*nonce)])
             }
+            HlAction::Cancel { .. } => env::panic_str("cancel is an L1 action: use l1::cancel_digest"),
         };
         typed_digest(hl_domain_separator(HL_SIGNATURE_CHAIN_ID), struct_hash)
     }

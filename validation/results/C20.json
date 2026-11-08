@@ -1,0 +1,51 @@
+{
+  "claim": "C20",
+  "title": "The contract signs a Hyperliquid L1 cancel with the leg master key (MPC); HL accepts it",
+  "status": "✅",
+  "at": "2026-11-08T10:34:43.419Z",
+  "network": "testnet",
+  "numbers": {
+    "signMs": 5765,
+    "orderGone": true
+  },
+  "refs": {
+    "restingOrder": {
+      "leg0": "0xfc5f38a75535cc6a864bb5ba14d9c7f29eecacac",
+      "asset": 3,
+      "oid": 64820881296,
+      "px": "37851",
+      "size": "0.00030"
+    },
+    "freezeTx": "7rQzvCT7krQvB3fSKoyjroHgx8wCiLnhdpkk7FEHmUbS",
+    "signTx": "FaXyPtuxDeQ6hax4avgaGy6HnzbRaHj2MihK72BXbDbr",
+    "l1": {
+      "action": {
+        "type": "cancel",
+        "cancels": [
+          {
+            "a": 3,
+            "o": 64820881296
+          }
+        ]
+      },
+      "nonce": 1794134049350,
+      "connectionId": "0xb5b293e03b88b94998a19e937efdc659f139974c5a14f19c449f4bc7da44e4c0",
+      "digest": "0xa705918097339c705d7a7c284de10921704680f9a060c1f609476e617bbf1ae4",
+      "source": "b"
+    },
+    "hl": {
+      "status": "ok",
+      "response": {
+        "type": "cancel",
+        "data": {
+          "statuses": [
+            "success"
+          ]
+        }
+      }
+    }
+  },
+  "notes": [
+    "Signed by the leg master key (recovered signer = leg0) after the agent was revoked by freeze; HL accepted the L1 cancel and the order left the book."
+  ]
+}

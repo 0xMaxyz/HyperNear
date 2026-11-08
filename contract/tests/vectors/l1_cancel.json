@@ -1,0 +1,291 @@
+{
+  "exchangeDomain": {
+    "name": "Exchange",
+    "version": "1",
+    "chainId": 1337,
+    "verifyingContract": "0x0000000000000000000000000000000000000000"
+  },
+  "cases": [
+    {
+      "action": {
+        "type": "cancel",
+        "cancels": [
+          {
+            "a": 3,
+            "o": 64820881296
+          }
+        ]
+      },
+      "nonce": 1794134049350,
+      "mainnet": false,
+      "connectionId": "0xb5b293e03b88b94998a19e937efdc659f139974c5a14f19c449f4bc7da44e4c0",
+      "digest": "0xa705918097339c705d7a7c284de10921704680f9a060c1f609476e617bbf1ae4"
+    },
+    {
+      "action": {
+        "type": "cancel",
+        "cancels": [
+          {
+            "a": 3,
+            "o": 64820881296
+          }
+        ]
+      },
+      "nonce": 1794134049350,
+      "mainnet": true,
+      "connectionId": "0xb5b293e03b88b94998a19e937efdc659f139974c5a14f19c449f4bc7da44e4c0",
+      "digest": "0x62b3aa8c947e8230aac794624886daf5d2f1f17bf2f20338dda3a8de5ffe5d39"
+    },
+    {
+      "action": {
+        "type": "cancel",
+        "cancels": [
+          {
+            "a": 0,
+            "o": 0
+          }
+        ]
+      },
+      "nonce": 1,
+      "mainnet": false,
+      "connectionId": "0xa43a0b4dd1e518e04168d13eb70b9729e5d4010216b7d0b8ad697a753b8beae7",
+      "digest": "0x28ca453db2290701af8e065f0c1c450bd6cb527625bc6d2f1fe86f83ea55dd7b"
+    },
+    {
+      "action": {
+        "type": "cancel",
+        "cancels": [
+          {
+            "a": 127,
+            "o": 127
+          }
+        ]
+      },
+      "nonce": 1794134049350,
+      "mainnet": false,
+      "connectionId": "0x81b1682d59b7527eab3771428c93d8727d7dba7c56c60cf653e2c2ec49b6cdfc",
+      "digest": "0xb2bd5abaf91475cd5282721c4cf6d1e6a7988fc223819c51ad5a854c4a7a2bd6"
+    },
+    {
+      "action": {
+        "type": "cancel",
+        "cancels": [
+          {
+            "a": 200,
+            "o": 255
+          }
+        ]
+      },
+      "nonce": 1794134049350,
+      "mainnet": false,
+      "connectionId": "0x96e4a77d83818a4c058a424ce631f5d6e16b89f28afff1692ea39909dc147744",
+      "digest": "0xf793b198103757a9b4d9b06b6dbf5477860b19a1c2f7c0056c814fa67e181a35"
+    },
+    {
+      "action": {
+        "type": "cancel",
+        "cancels": [
+          {
+            "a": 10000,
+            "o": 65535
+          }
+        ]
+      },
+      "nonce": 1794134049350,
+      "mainnet": false,
+      "connectionId": "0x35baa412ed6579764d30a2251a8d2ae6fa35619ec1c3aa0409960e26aebf5892",
+      "digest": "0x3613a1cf27cd5d0480b30cb5c5b408ee08207d17b7342c66d7899771c81f7e6a"
+    },
+    {
+      "action": {
+        "type": "cancel",
+        "cancels": [
+          {
+            "a": 110000,
+            "o": 4294967295
+          }
+        ]
+      },
+      "nonce": 1794134049350,
+      "mainnet": false,
+      "connectionId": "0xf95264014b12306731b405ca0364af465c261cfbc4b41944dbb0b4276faa1879",
+      "digest": "0x9997654082e626f13e75b5644b200b132b10449d68a64a712bba80a9dbf3f0e3"
+    },
+    {
+      "action": {
+        "type": "cancel",
+        "cancels": [
+          {
+            "a": 4,
+            "o": 4294967296
+          }
+        ]
+      },
+      "nonce": 1794134049350,
+      "mainnet": false,
+      "connectionId": "0x53c08d154a38f4fec53d3c4142fe8f0114aaabf4ac75ba0634a61fa03165ec82",
+      "digest": "0xeb16aa1dedffc789d5308e15a0bbc709dfa1dedd1df9795a7d6e5af666527991"
+    },
+    {
+      "action": {
+        "type": "cancel",
+        "cancels": [
+          {
+            "a": 0,
+            "o": 64820881296
+          },
+          {
+            "a": 37,
+            "o": 64820881297
+          },
+          {
+            "a": 74,
+            "o": 64820881298
+          },
+          {
+            "a": 111,
+            "o": 64820881299
+          },
+          {
+            "a": 148,
+            "o": 64820881300
+          },
+          {
+            "a": 185,
+            "o": 64820881301
+          },
+          {
+            "a": 222,
+            "o": 64820881302
+          },
+          {
+            "a": 259,
+            "o": 64820881303
+          },
+          {
+            "a": 296,
+            "o": 64820881304
+          },
+          {
+            "a": 333,
+            "o": 64820881305
+          },
+          {
+            "a": 370,
+            "o": 64820881306
+          },
+          {
+            "a": 407,
+            "o": 64820881307
+          },
+          {
+            "a": 444,
+            "o": 64820881308
+          },
+          {
+            "a": 481,
+            "o": 64820881309
+          },
+          {
+            "a": 518,
+            "o": 64820881310
+          }
+        ]
+      },
+      "nonce": 1794134049350,
+      "mainnet": true,
+      "connectionId": "0x91147fb3e4acc676e9b9d113bbb51b391fcdb237aec5a0c1f26570f6af83e00f",
+      "digest": "0x8d6dad0f3f440c6089dbc5ed5db17b9c07c87a9bab7216552c81d951aad6cd36"
+    },
+    {
+      "action": {
+        "type": "cancel",
+        "cancels": [
+          {
+            "a": 0,
+            "o": 64820881296
+          },
+          {
+            "a": 37,
+            "o": 64820881297
+          },
+          {
+            "a": 74,
+            "o": 64820881298
+          },
+          {
+            "a": 111,
+            "o": 64820881299
+          },
+          {
+            "a": 148,
+            "o": 64820881300
+          },
+          {
+            "a": 185,
+            "o": 64820881301
+          },
+          {
+            "a": 222,
+            "o": 64820881302
+          },
+          {
+            "a": 259,
+            "o": 64820881303
+          },
+          {
+            "a": 296,
+            "o": 64820881304
+          },
+          {
+            "a": 333,
+            "o": 64820881305
+          },
+          {
+            "a": 370,
+            "o": 64820881306
+          },
+          {
+            "a": 407,
+            "o": 64820881307
+          },
+          {
+            "a": 444,
+            "o": 64820881308
+          },
+          {
+            "a": 481,
+            "o": 64820881309
+          },
+          {
+            "a": 518,
+            "o": 64820881310
+          },
+          {
+            "a": 555,
+            "o": 64820881311
+          }
+        ]
+      },
+      "nonce": 1794134049350,
+      "mainnet": false,
+      "connectionId": "0xf1df95d600ff3367606acc4d8ea362afa6f7ebbd91f03dab4f9ecbd2951d39b4",
+      "digest": "0x21546f488da4e67c7cb45d2fb18efffc7defa238fe95bffa03f66f352f008f80"
+    }
+  ],
+  "hlAccepted": {
+    "action": {
+      "type": "cancel",
+      "cancels": [
+        {
+          "a": 3,
+          "o": 64820881296
+        }
+      ]
+    },
+    "nonce": 1794134049350,
+    "mainnet": false,
+    "connectionId": "0xb5b293e03b88b94998a19e937efdc659f139974c5a14f19c449f4bc7da44e4c0",
+    "digest": "0xa705918097339c705d7a7c284de10921704680f9a060c1f609476e617bbf1ae4"
+  }
+}
