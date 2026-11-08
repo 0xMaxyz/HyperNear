@@ -26,6 +26,8 @@ export interface HyperNearConfig {
 export interface TeeInfo {
   /** null after the owner left TEE mode (the entry stays to keep the paid time): "in TEE mode" means measurement_hash != null */
   measurement_hash: string | null;
+  /** the owner's TEE instance (its NEAR account); only it may act, and only while attested with measurement_hash */
+  agent_account: string | null;
   paid_until_ns: string;
   /** cumulative months the owner paid through payTee (the fee must have landed in HL's ledger for all of them) */
   months_paid: number;
@@ -195,6 +197,13 @@ export class HyperNearClient {
   /** The hash an owner signs in setTee for these measurements: the contract's `measurement_hash` view (0x + sha256 of borsh). */
   async measurementHash(measurements: TeeMeasurements): Promise<string> {
     return this.#view<string>('measurement_hash', { measurements });
+  }
+
+  /** A payTee intent with the price and fee address the owner must sign, read from get_config (the contract refuses any other). */
+  async payTeeIntent(leg: number, months: number): Promise<Extract<OwnerIntent, { type: 'payTee' }>> {
+    const c = await this.getConfig();
+    if (!c.tee_price_usd || !c.tee_fee_address) throw new HyperNearError('TEE mode is not offered by this contract (no price / fee address)');
+    return { type: 'payTee', leg, months, priceMicro: Math.round(Number(c.tee_price_usd) * 1e6), feeAddress: c.tee_fee_address };
   }
 
   async getTeeAgent(accountId: string): Promise<TeeAgentInfo | null> {

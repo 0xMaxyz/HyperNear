@@ -337,6 +337,7 @@ export function buildDeps(config: AgentConfig, tee?: TeeRuntime): Deps {
     legAddresses: async (o) => (await legs.registered(o)).map((l) => l.address),
     ledger: hlLedgerPort(legs.hl),
     measurement: () => tee?.measurementHash,
+    account: () => tee?.account,
   });
   const allOwners = () => [...new Set([...legs.keys.owners(), ...config.guard.watchOwners])] as Hex[];
   const guardConfig: GuardConfig = { ...DEFAULT_GUARD_CONFIG, marginFloorMultiple: config.guard.marginFloor, latencyP95Sec: config.guard.latencyP95Sec };

@@ -15,10 +15,13 @@ export type OwnerIntent =
   | { type: 'freeze'; frozen: boolean }
   /** Cancels on a leg, signed by the leg's key as an HL L1 action. Allowed at any time, frozen or not. */
   | { type: 'cancelOrders'; leg: number; cancels: HlCancel[] }
-  /** TEE mode: only an agent attested with this measurement acts for the owner. `measurementHash` = 0x + 64 hex; all zeros leaves TEE mode. */
-  | { type: 'setTee'; measurementHash: Hex }
-  /** Pays `months` (1..12) x the TEE price: the contract signs a usdSend of it from `leg` to the TEE fee address (post it to HL). */
-  | { type: 'payTee'; leg: number; months: number };
+  /**
+   * TEE mode: only `agentAccount` (the owner's TEE instance, its stable NEAR account), attested with `measurementHash`
+   * (0x + 64 hex), acts for the owner. Leaving: the zero hash AND an empty agentAccount; any other mix is refused.
+   */
+  | { type: 'setTee'; measurementHash: Hex; agentAccount: string }
+  /** Pays `months` (1..12) x `priceMicro` (micro-USD per month) to `feeAddress`: the owner signs exactly what is paid; both must equal get_config. The contract signs a usdSend from `leg` (post it to HL). */
+  | { type: 'payTee'; leg: number; months: number; priceMicro: number; feeAddress: Hex };
 
 /** HL's own cancel entry: a = asset index, o = order id. */
 export interface HlCancel {
@@ -55,8 +58,8 @@ export const OWNER_INTENT_TYPES: Record<OwnerIntentType, readonly [string, reado
   setPolicy: ['SetPolicy', [...head, { name: 'agent', type: 'string' }, { name: 'dailyCap', type: 'string' }, { name: 'cooldownSec', type: 'uint64' }]],
   freeze: ['Freeze', [...head, { name: 'frozen', type: 'bool' }]],
   cancelOrders: ['CancelOrders', [...head, { name: 'leg', type: 'uint32' }, { name: 'cancels', type: 'Cancel[]' }]],
-  setTee: ['SetTee', [...head, { name: 'measurementHash', type: 'bytes32' }]],
-  payTee: ['PayTee', [...head, { name: 'leg', type: 'uint32' }, { name: 'months', type: 'uint32' }]],
+  setTee: ['SetTee', [...head, { name: 'measurementHash', type: 'bytes32' }, { name: 'agentAccount', type: 'string' }]],
+  payTee: ['PayTee', [...head, { name: 'leg', type: 'uint32' }, { name: 'months', type: 'uint32' }, { name: 'priceMicro', type: 'uint64' }, { name: 'feeAddress', type: 'address' }]],
 };
 
 /** Struct types an intent type refers to (EIP-712 appends them to the type string). */

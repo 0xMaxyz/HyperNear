@@ -45,6 +45,8 @@ export interface ScopeDeps {
   ledger?: TeeLedgerPort;
   /** tee mode: the measurement hash this process runs as (known after boot); undefined = serve nobody */
   measurement?: () => string | undefined;
+  /** tee mode: this process's own NEAR account; an owner names exactly one instance in setTee */
+  account?: () => string | undefined;
   ttlMs?: number;
   now?: () => number;
 }
@@ -78,6 +80,9 @@ export class OwnerScope {
     if (!tee || !inTee) return false;
     const own = this.#d.measurement?.();
     if (!own || tee.measurement_hash!.toLowerCase() !== own.toLowerCase()) return false;
+    // the owner names one instance: the same image under another account (a stranger) is not theirs
+    const me = this.#d.account?.();
+    if (!me || tee.agent_account !== me) return false;
     if (BigInt(tee.paid_until_ns) <= BigInt(now) * 1_000_000n) return false;
     const cfg = await this.#d.client.getConfig();
     if (!cfg.tee_fee_address || !this.#d.ledger || !this.#d.legAddresses) return false;

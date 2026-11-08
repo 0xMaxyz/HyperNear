@@ -36,7 +36,8 @@ const FEE = '0x1111111111111111111111111111111111111111';
 const MEAS = 'ab'.repeat(32);
 const ownerKey = privateKeyToAccount('0x4c0883a69102937d6231471b5dbb6204fe5129617082792ae468d01a3f362318');
 const signed = async (command: Command) => ({ command, sig: await ownerKey.signTypedData(commandTypedData('near-testnet', 'leash.testnet', command) as never) });
-const TEE = (o: Partial<{ measurement_hash: string; paid_until_ns: string; months_paid: number }> = {}) => ({ measurement_hash: MEAS, months_paid: 1, paid_until_ns: String((Date.now() + 86_400_000) * 1_000_000), keys: {}, ...o });
+const ME = 'a'.repeat(64);
+const TEE = (o: Partial<{ measurement_hash: string; agent_account: string | null; paid_until_ns: string; months_paid: number }> = {}) => ({ measurement_hash: MEAS, agent_account: ME, months_paid: 1, paid_until_ns: String((Date.now() + 86_400_000) * 1_000_000), keys: {}, ...o });
 const SIGN_OUT = (agent: string): SignOut => ({ payload: 'ab', big_r: `02${'11'.repeat(32)}`, s: '22'.repeat(32), recovery_id: 0, action: { type: 'approveAgent', agentAddress: agent, agentName: 'leash-tee', nonce: 1 } });
 
 /** Contract mock that logs every view/call/HL post in order. */
@@ -71,7 +72,7 @@ function world(o: { tee?: unknown; teeAgent?: unknown; fee?: string | null; ledg
 }
 
 const scope = (w: ReturnType<typeof world>, mode: 'server' | 'tee', over: Partial<ConstructorParameters<typeof OwnerScope>[0]> = {}) =>
-  new OwnerScope({ mode, client: w.client, legAddresses: async () => [LEG0], ledger: w.ledger, measurement: () => MEAS, ...over });
+  new OwnerScope({ mode, client: w.client, legAddresses: async () => [LEG0], ledger: w.ledger, measurement: () => MEAS, account: () => ME, ...over });
 
 describe('OwnerScope, server mode', () => {
   it('skips an owner whose get_tee is set and serves the others; the lookup is cached for 60 s', async () => {
@@ -129,11 +130,16 @@ describe('OwnerScope, tee mode', () => {
   it.each([
     ['not in TEE mode', { tee: null }],
     ['another measurement', { tee: TEE({ measurement_hash: 'cd'.repeat(32) }) }],
+    ['the owner named another instance of the same image (stranger)', { tee: TEE({ agent_account: 'b'.repeat(64) }) }],
+    ['no agent account named', { tee: TEE({ agent_account: null }) }],
     ['paid_until in the past', { tee: TEE({ paid_until_ns: '1000' }) }],
     ['no fee address in the contract config', { fee: null }],
     ['fee not in the HL ledger', { ledger: false }],
   ])('refuses %s', async (_n, o) => {
     expect(await scope(ok(o as never), 'tee').serves(OWNER)).toBe(false);
+  });
+  it('serves nobody before it knows its own account', async () => {
+    expect(await scope(ok(), 'tee', { account: () => undefined }).serves(OWNER)).toBe(false);
   });
   it('serves nobody before it knows its own measurement', async () => {
     expect(await scope(ok(), 'tee', { measurement: () => undefined }).serves(OWNER)).toBe(false);
@@ -315,7 +321,7 @@ describe('POST /agents/prepare by run mode', () => {
 describe('setTee / payTee intents through the relayer', () => {
   const sig = `0x${'ab'.repeat(65)}`;
   it('parseRelayBody accepts setTee and payTee', () => {
-    expect(parseRelayBody({ owner: OWNER, nonce: 1, sig, intent: { type: 'setTee', measurementHash: `0x${'00'.repeat(32)}` } }).intent.type).toBe('setTee');
+    expect(parseRelayBody({ owner: OWNER, nonce: 1, sig, intent: { type: 'setTee', measurementHash: `0x${'00'.repeat(32)}`, agentAccount: '' } }).intent.type).toBe('setTee');
     expect(parseRelayBody({ owner: OWNER, nonce: 2, sig, intent: { type: 'payTee', leg: 0, months: 1 } }).intent.type).toBe('payTee');
   });
 
@@ -326,6 +332,24 @@ describe('setTee / payTee intents through the relayer', () => {
     expect(out).toMatchObject({ kind: 'payTee', leg: 0, months: 1, ok: true });
     expect(w.posts[0].action).toMatchObject({ type: 'usdSend', destination: FEE, amount: '1', hyperliquidChain: 'Testnet' });
     expect(w.log.indexOf('call:owner_execute')).toBeLessThan(w.log.indexOf('hl:post'));
+  });
+
+  it('setTee that burns the old leash-tee keys is a teeSwitch (not a freeze): posted to HL and sent over SSE', async () => {
+    const burn = [{ leg: 0, name: 'leash-tee', burn_address: '0x000000000000000000000000000000000000dEaD', signature: SIGN_OUT('0x000000000000000000000000000000000000dead') }];
+    const w = world({ ownerExecute: burn });
+    const bus = new EventBus();
+    const out = await new Relayer(w.client, new RateLimiter(5), w.post, bus).relay('ip', { owner: OWNER, nonce: 3, sig, intent: { type: 'setTee', measurementHash: `0x${'00'.repeat(32)}`, agentAccount: '' } });
+    expect(out).toMatchObject({ kind: 'teeSwitch', owner: OWNER, revoked: [{ leg: 0, name: 'leash-tee', ok: true }] });
+    expect(w.posts).toHaveLength(1);
+    expect(bus.since(0).map((e) => e.type)).toEqual(expect.arrayContaining(['agents.revoked', 'tee.switched']));
+    // a freeze with the same answer shape stays a freeze
+    const f = await new Relayer(world({ ownerExecute: burn }).client, new RateLimiter(5), w.post).relay('ip', { owner: OWNER, nonce: 4, sig, intent: { type: 'freeze', frozen: true } });
+    expect(f.kind).toBe('freeze');
+  });
+
+  it('payTeeIntent reads the price and fee address from get_config (micro-USD)', async () => {
+    expect(await world().client.payTeeIntent(0, 2)).toEqual({ type: 'payTee', leg: 0, months: 2, priceMicro: 5_000_000, feeAddress: FEE });
+    await expect(world({ fee: null }).client.payTeeIntent(0, 1)).rejects.toThrow(/not offered/);
   });
 });
 

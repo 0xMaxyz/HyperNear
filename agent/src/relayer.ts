@@ -150,7 +150,13 @@ export class Relayer {
       }
       const { txHash, value } = await this.client.relaySubmit({ owner, nonce: b.nonce!, intent: b.intent }, b.sig as Hex);
       if (Array.isArray(value)) {
-        return { kind: 'freeze' as const, owner, txHash, revoked: await this.postRevocations(owner, value) };
+        const revoked = await this.postRevocations(owner, value);
+        // setTee that changes image/instance or leaves TEE mode burns the old leash-tee keys: not a freeze (no sweep, owner not frozen)
+        if (b.intent.type === 'setTee') {
+          this.bus?.emit('tee.switched', { owner, legs: revoked });
+          return { kind: 'teeSwitch' as const, owner, txHash, revoked };
+        }
+        return { kind: 'freeze' as const, owner, txHash, revoked };
       }
       if (b.intent.type === 'approveAgent' && value) {
         return { kind: 'approveAgent' as const, owner, txHash, hlSignature: signOutToHex(value), ...(await this.postApproval(owner, b.intent, value)) };
