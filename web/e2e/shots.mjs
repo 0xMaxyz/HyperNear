@@ -62,7 +62,7 @@ await withAgent('hedged', async () => {
   const { page, errors, ctx } = await open();
   await demo(page, 48000);
   check('dry-run badge shown', await page.getByText('dry-run data').isVisible());
-  check('legs table lists the three legs with roles', (await page.locator('tbody tr').count()) === 3 && (await page.getByText('reserve, source for the guard').count()) === 1, `${await page.locator('tbody tr').count()} rows; ${(await page.locator('tbody').allInnerTexts()).join(' | ').replace(/\s+/g, ' ').slice(0, 300)}`);
+  check('legs table lists the three legs with roles', (await page.locator('table').first().locator('tbody tr').count()) === 3 && (await page.getByText('reserve, source for the guard').count()) === 1, `${await page.locator('table').first().locator('tbody tr').count()} rows; ${(await page.locator('table').first().locator('tbody').allInnerTexts()).join(' | ').replace(/\s+/g, ' ').slice(0, 300)}`);
   check('break-even card shows a price from the agent', /\$7\d,\d{3}/.test(await page.locator('.kv dd.big').first().innerText()), await page.locator('.kv dd.big').first().innerText());
   const proposals = await page.locator('.log li .tag', { hasText: 'decision.proposed' }).count();
   check('5 recorded proposals reached the log', proposals === 5, String(proposals));
@@ -225,13 +225,17 @@ await withAgent('hedged', async () => {
     }
     await route.fulfill({ response: res, json: j });
   });
+  await page.route('**/agents/prepare', async (route) => {
+    const res = await route.fetch();
+    if (res.status() === 200) { prepared = await res.json(); stage = 'prepared'; }
+    await route.fulfill({ response: res });
+  });
   page.on('response', async (r) => {
     if (r.request().method() !== 'POST') return;
     const path = new URL(r.url()).pathname;
     const body = JSON.parse(r.request().postData() ?? '{}');
     const out = await r.json().catch(() => ({}));
     posts.push({ path, body, status: r.status(), out });
-    if (path === '/agents/prepare' && r.status() === 200) { prepared = out; stage = 'prepared'; }
     if (path === '/relay' && body.intent?.type === 'approveAgent' && posts.filter((p) => p.body.intent?.type === 'approveAgent').length >= (prepared?.pendingApprovals.length ?? 99)) stage = 'approved';
   });
   await page.getByRole('button', { name: /Log in with/ }).click();
@@ -239,7 +243,7 @@ await withAgent('hedged', async () => {
   await page.locator('#headlessui-portal-root').getByText('MetaMask').first().click({ timeout: 15000 });
   await page.getByText(/Create legs/).first().waitFor({ timeout: 40000 });
   await page.waitForTimeout(2500);
-  check('logged in as the demo owner and its legs load', (await page.locator('tbody tr').count()) === 3 && (await page.locator('.who .addr').innerText()).toLowerCase().startsWith(owner.slice(0, 6)), `${await page.locator('tbody tr').count()} rows; ${await page.locator('.who .addr').innerText()}`);
+  check('logged in as the demo owner and its legs load', (await page.locator('table').first().locator('tbody tr').count()) === 3 && (await page.locator('.who .addr').innerText()).toLowerCase().startsWith(owner.slice(0, 6)), `${await page.locator('table').first().locator('tbody tr').count()} rows; ${await page.locator('.who .addr').innerText()}`);
   check('staged view: Prepare agents is open, Approve agent is not yet', (await page.getByRole('button', { name: 'Prepare agents' }).isEnabled()) && (await page.getByRole('button', { name: 'Approve agent' }).isDisabled()));
   await shot(page, '10-demo-owner-unprepared');
   const note = async () => { await page.locator('.notice').first().waitFor({ timeout: 25000 }); await page.waitForTimeout(900); return page.locator('.notice').first().innerText(); };
