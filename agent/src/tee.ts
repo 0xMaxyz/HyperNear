@@ -99,7 +99,7 @@ export function shadeBackend(shade: { call: (p: { methodName: string; args: Reco
   const view = nearApiBackend({ rpcUrl }).view;
   return {
     view,
-    async call<T>(cid: string, method: string, args: Record<string, unknown>, o = {}) {
+    async call<T>(cid: string, method: string, args: Record<string, unknown>, o: { deposit?: bigint; gasTgas?: number } = {}) {
       if (cid !== contractId) throw new Error(`the TEE agent account only calls ${contractId}, not ${cid}`);
       const value = (await shade.call({ methodName: method, args, deposit: o.deposit, gas: BigInt(o.gasTgas ?? 100) * 10n ** 12n, waitUntil: 'EXECUTED_OPTIMISTIC' })) as T;
       return { txHash: '', value };
