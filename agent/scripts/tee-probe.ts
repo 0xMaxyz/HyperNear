@@ -16,6 +16,13 @@ const quoteBytes = att.quote.length;
 console.log("quote bytes       :", quoteBytes, quoteBytes > 0 ? "(REAL quote)" : "(EMPTY: fake attestation, no TEE)");
 console.log("attestation keys  :", Object.keys(att).join(", "));
 console.log("collateral fields :", Object.entries(att.collateral).map(([k, v]) => `${k}(${String(v).length})`).join(", "));
+if (quoteBytes > 0) {
+  // TDX quote v4: 48-byte header, then the TD report; report_data is its last 64 bytes (offset 48 + 520). Must be pubkey || 32 zero bytes.
+  const rd = Buffer.from(att.quote.slice(568, 632)).toString("hex");
+  const want = client.accountId() + "0".repeat(64);
+  console.log("quote version     :", att.quote[0] | (att.quote[1] << 8), " tee type:", att.quote[4]);
+  console.log("report_data       :", rd === want ? "OK = account pubkey + 32 zero bytes" : `MISMATCH ${rd.slice(0, 16)}...`);
+}
 const t = att.tcb_info;
 console.log("tcb_info keys     :", Object.keys(t).join(", "));
 for (const k of ["mrtd", "rtmr0", "rtmr1", "rtmr2", "rtmr3", "os_image_hash", "compose_hash", "device_id"] as const) {
