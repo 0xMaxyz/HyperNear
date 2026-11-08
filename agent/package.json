@@ -12,9 +12,12 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^1.6.0",
     "@hypernear/client": "workspace:*",
+    "@near-js/crypto": "2.5.1",
     "@neardefi/shade-agent-js": "2.2.0",
+    "@phala/dstack-sdk": "0.5.7",
     "@perps-platform/core": "workspace:*",
     "@typesafe-ai/sdk": "0.7.0",
+    "near-seed-phrase": "0.2.1",
     "viem": "2.54.3"
   }
 }

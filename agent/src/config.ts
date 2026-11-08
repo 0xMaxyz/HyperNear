@@ -28,6 +28,8 @@ export interface AgentConfig {
     measurement?: string;
     /** testnet spike: register_tee_agent_dev (no quote) */
     dev: boolean;
+    /** dev only: the NEAR account is derived from this (in a real CVM it comes from dstack getKey) */
+    devSeed?: string;
     /** NEAR sent to the agent's fresh account from the relayer when it is empty */
     fundNear: number;
   };
@@ -73,7 +75,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AgentConfig {
       slippage: num(env.HYPERNEAR_SLIPPAGE, 0.03),
     },
     runMode: env.HYPERNEAR_RUN_MODE === 'tee' ? 'tee' : 'server',
-    tee: { measurement: env.HYPERNEAR_TEE_MEASUREMENT || undefined, dev: env.HYPERNEAR_TEE_DEV === '1', fundNear: num(env.HYPERNEAR_TEE_FUND_NEAR, 1) },
+    tee: { measurement: env.HYPERNEAR_TEE_MEASUREMENT || undefined, dev: env.HYPERNEAR_TEE_DEV === '1', devSeed: env.HYPERNEAR_TEE_DEV_SEED || undefined, fundNear: num(env.HYPERNEAR_TEE_FUND_NEAR, 1) },
     relayPerMinute: num(env.HYPERNEAR_RELAY_PER_MINUTE, 20),
     port: num(env.PORT, 8787),
     decide: { live: Boolean(env.TYPESAFE_API_KEY && env.ANTHROPIC_API_KEY), intervalSec: num(env.HYPERNEAR_DECIDE_INTERVAL_SEC, 300) },

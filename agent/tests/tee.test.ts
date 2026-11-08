@@ -26,6 +26,7 @@ import { Hedger } from '../src/hedge.ts';
 import { AgentKeyStore, Legs } from '../src/legs.ts';
 import { parseRelayBody, RateLimiter, Relayer } from '../src/relayer.ts';
 import { handler, type Deps } from '../src/server.ts';
+import { accountFromSeed, pinAccount, teeAccount } from '../src/teeAccount.ts';
 import { bootTee, enrollTeeOwner, hlLedgerPort, measurementsFrom, OwnerScope, shadeBackend, type TeeLedgerPort } from '../src/tee.ts';
 import { ch, OWNER, snap } from './agent-helpers.ts';
 
@@ -325,5 +326,40 @@ describe('setTee / payTee intents through the relayer', () => {
     expect(out).toMatchObject({ kind: 'payTee', leg: 0, months: 1, ok: true });
     expect(w.posts[0].action).toMatchObject({ type: 'usdSend', destination: FEE, amount: '1', hyperliquidChain: 'Testnet' });
     expect(w.log.indexOf('call:owner_execute')).toBeLessThan(w.log.indexOf('hl:post'));
+  });
+});
+
+describe('stable TEE account', () => {
+  it('the same seed gives the same implicit account and key; another seed another one', () => {
+    const a = accountFromSeed('seed-1');
+    expect(accountFromSeed('seed-1')).toEqual(a);
+    expect(accountFromSeed('seed-2').accountId).not.toBe(a.accountId);
+    expect(a.accountId).toMatch(/^[0-9a-f]{64}$/); // a NEAR implicit account: the hex ed25519 public key
+    expect(a.secretKey).toMatch(/^ed25519:/);
+  });
+
+  it('dstack: the key from getKey at the fixed path decides the account (same app key, same account across boots)', async () => {
+    const paths: string[] = [];
+    const dstack = (k: number) => ({ getKey: async (p: string) => (paths.push(p), { key: new Uint8Array(32).fill(k) }) });
+    const a = await teeAccount({ dev: false, dstack: dstack(7) });
+    expect(await teeAccount({ dev: false, dstack: dstack(7) })).toEqual(a);
+    expect((await teeAccount({ dev: false, dstack: dstack(8) })).accountId).not.toBe(a.accountId);
+    expect(new Set(paths)).toEqual(new Set(['hypernear/near-account/v1']));
+  });
+
+  it('dev derives from HYPERNEAR_TEE_DEV_SEED, never from a dstack key, and refuses to run without a seed', async () => {
+    const dev = await teeAccount({ dev: true, devSeed: 'lab' });
+    expect(dev).toEqual(await teeAccount({ dev: true, devSeed: 'lab' }));
+    expect(dev.accountId).not.toBe((await teeAccount({ dev: false, dstack: { getKey: async () => ({ key: Buffer.from('lab') }) } })).accountId);
+    await expect(teeAccount({ dev: true })).rejects.toThrow(/HYPERNEAR_TEE_DEV_SEED/);
+  });
+
+  it('pinAccount swaps the account shade-agent-js would sign and attest with, and fails loudly if the layout changes', () => {
+    const a = accountFromSeed('seed-1');
+    const shade = { agentAccountId: 'random', agentPrivateKeys: ['ed25519:x'], accountId() { return this.agentAccountId; } };
+    pinAccount(shade, a);
+    expect(shade.accountId()).toBe(a.accountId);
+    expect(shade.agentPrivateKeys).toEqual([a.secretKey]);
+    expect(() => pinAccount({ accountId: () => 'renamed' }, a)).toThrow(/layout changed/);
   });
 });

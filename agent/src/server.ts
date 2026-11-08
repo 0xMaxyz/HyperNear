@@ -43,6 +43,7 @@ import { claudeStrategyEscalator, jevAskStrategy } from './strategy/decideClient
 import { StartConflict, StrategyManager } from './strategy/manager.ts';
 import { specHash } from './strategy/spec.ts';
 import { bootTee, enrollTeeOwner, hlLedgerPort, OwnerScope, shadeBackend } from './tee.ts';
+import { pinAccount, teeAccount } from './teeAccount.ts';
 
 export interface Deps {
   config: AgentConfig;
@@ -393,13 +394,17 @@ export function buildDeps(config: AgentConfig, tee?: TeeRuntime): Deps {
 }
 
 /** TEE boot: the agent's own NEAR account and attestation from shade-agent-js, registered with the contract. Nothing secret is stored. */
-async function bootTeeRuntime(config: AgentConfig): Promise<TeeRuntime> {
+export async function bootTeeRuntime(config: AgentConfig): Promise<TeeRuntime> {
   const { ShadeClient } = await import('@neardefi/shade-agent-js');
   const shade = await ShadeClient.create({
     networkId: config.network,
     agentContractId: config.contractId,
     sponsor: config.relayer && { accountId: config.relayer.accountId, privateKey: config.relayer.secretKey },
   });
+  // the account is stable across boots of this app (dstack getKey); the owner names it in setTee, so print it before anything can fail
+  const acct = await teeAccount({ dev: config.tee.dev, devSeed: config.tee.devSeed });
+  pinAccount(shade, acct);
+  console.log(`hypernear TEE account ${acct.accountId} (name this in setTee)`);
   const rpc = config.nearRpcUrl ?? (config.network === 'mainnet' ? 'https://free.rpc.fastnear.com' : 'https://test.rpc.fastnear.com');
   const client = new HyperNearClient({ contractId: config.contractId, network: config.network, backend: shadeBackend(shade as never, config.contractId, rpc) });
   const { account, measurementHash } = await bootTee({ shade: shade as never, client, dev: config.tee.dev, expected: config.tee.measurement, fundNear: config.tee.fundNear });

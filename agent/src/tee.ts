@@ -65,7 +65,8 @@ export class OwnerScope {
     const hit = this.#cache.get(owner);
     if (hit && now - hit.at < (this.#d.ttlMs ?? 60_000)) return hit.ok;
     const ok = await this.#decide(owner, now);
-    this.#cache.set(owner, { at: now, ok });
+    // a "no" is kept briefly only: right after payTee the owner must not wait a full minute to be served
+    this.#cache.set(owner, { at: ok ? now : now - Math.max(0, (this.#d.ttlMs ?? 60_000) - 5_000), ok });
     return ok;
   }
 
