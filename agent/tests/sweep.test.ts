@@ -42,7 +42,9 @@ function stubHl(answer: (n: number) => unknown) {
   return posts;
 }
 const ok = (n: number) => ({ status: 'ok', response: { type: 'cancel', data: { statuses: Array(n).fill('success') } } });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 const live = (be: ReturnType<typeof backend>, perByLeg: Parameters<typeof book>[0]) =>
   livePorts({ client: new HyperNearClient({ contractId: 'leash.testnet', backend: be.b }), hl: book(perByLeg) as never, network: 'testnet' });
