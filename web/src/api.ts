@@ -241,3 +241,30 @@ export async function specHashOf(spec: StrategySpec): Promise<Hex> {
   const d = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
   return `0x${[...d].map((b) => b.toString(16).padStart(2, '0')).join('')}` as Hex;
 }
+
+/** orders.swept (agent/src/sweep.ts sweptEvent): the clean-up after a relayed freeze, contract-signed Hyperliquid cancels. */
+export interface SweepLeg {
+  leg: number;
+  address: Hex;
+  found: number;
+  skipped: number;
+  cancelled: number;
+  txHashes: string[];
+  /** one entry per batch: 'ok', 'err: ...' or 'post failed: ...' */
+  hl: string[];
+  error?: string;
+}
+export interface Swept {
+  owner: Hex;
+  trigger: 'freeze';
+  legs: SweepLeg[];
+  cancelled: number;
+  ms: number;
+  /** with legs: [] the whole sweep failed */
+  error?: string;
+}
+/** Problems of a sweep, in plain words; empty when every batch was posted ok and no leg failed. */
+export function sweepProblems(w: Swept): string[] {
+  if (w.error) return [w.error];
+  return w.legs.flatMap((l) => [...(l.error ? [`leg ${l.leg}: ${l.error}`] : []), ...l.hl.filter((h) => h !== 'ok').map((h) => `leg ${l.leg}: ${h}`)]);
+}

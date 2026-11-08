@@ -3,6 +3,7 @@
 // Output: screenshots/*.png and a PASS/FAIL line per check on stdout.
 import { chromium } from '@playwright/test';
 import { spawn } from 'node:child_process';
+import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -59,7 +60,7 @@ const demo = async (page, ms = 3500) => { await page.getByRole('button', { name:
 // 2. recorded data from the real dry-run agent: hedged fixture, with its scripted replay: guard demo, then 5 recorded proposals (23 to 33 s after connect), then agents.revoked (about 35 s)
 await withAgent('hedged', async () => {
   const { page, errors, ctx } = await open();
-  await demo(page, 42000);
+  await demo(page, 48000);
   check('dry-run badge shown', await page.getByText('dry-run data').isVisible());
   check('legs table lists the three legs with roles', (await page.locator('tbody tr').count()) === 3 && (await page.getByText('reserve, source for the guard').count()) === 1);
   check('break-even card shows a price from the agent', /\$7\d,\d{3}/.test(await page.locator('.kv dd.big').first().innerText()), await page.locator('.kv dd.big').first().innerText());
@@ -74,6 +75,12 @@ await withAgent('hedged', async () => {
   check('guard replay reached the log, in words', (await page.locator('.log li', { hasText: 'rebalance posted to Hyperliquid' }).count()) >= 1);
   check('signing buttons are disabled when only viewing', await page.getByRole('button', { name: 'Open hedge' }).isDisabled());
   check('freeze copy mentions revoked trading keys', (await page.getByText(/revokes the agents' Hyperliquid trading keys/).count()) === 1);
+  // the freeze sweep (orders.swept, replayed after agents.revoked): one log row with per-leg NEAR tx links, and the two freeze steps
+  const sweepRow = page.locator('.log li', { hasText: 'Freeze sweep: 2 resting orders cancelled on 2 legs (18.5 s)' });
+  check('orders.swept in the log, in words', (await sweepRow.count()) === 1);
+  check('sweep row links each leg tx to the NEAR testnet explorer', (await sweepRow.locator('a[href^="https://testnet.nearblocks.io/txns/"]').count()) === 2);
+  check('freeze step: trading keys revoked', (await page.locator('.freeze-steps li', { hasText: 'Trading keys: revoked on 3 of 3 legs' }).count()) === 1);
+  check('freeze step: resting orders cleared (2)', (await page.locator('.freeze-steps li', { hasText: 'Resting orders: cleared (2)' }).count()) === 1);
   await shot(page, '03-hedged-light');
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(500);
@@ -92,6 +99,44 @@ await withAgent('hedged', async () => {
   check('no page errors (hedged)', errors.length === 0, errors.join(' | '));
   await ctx.close();
 });
+// 2b. the freeze steps when the sweep is still pending, and when it failed: events injected through a tiny SSE server, /owner patched to frozen
+{
+  const frames = (evs) => evs.map((e) => `id: ${e.id}
+event: ${e.type}
+data: ${JSON.stringify(e)}
+
+`).join('');
+  const revoked = { id: 1, at: Date.now(), type: 'agents.revoked', data: { legs: [0, 1, 2].map((leg) => ({ leg, ok: true })) } };
+  const leg = (n, extra) => ({ leg: n, address: '0x' + String(n).repeat(40), found: 1, skipped: 0, cancelled: 0, txHashes: [], hl: [], ...extra });
+  const cases = [
+    ['pending', [revoked], /Resting orders: pending/, '13-sweep-pending'],
+    ['whole sweep failed', [revoked, { id: 2, at: Date.now(), type: 'orders.swept', data: { trigger: 'freeze', legs: [], cancelled: 0, ms: 1200, error: 'NEAR RPC timeout' } }], /Resting orders: failed: NEAR RPC timeout \(anyone can retry: see README\)/, '14-sweep-failed'],
+    ['one leg failed', [revoked, { id: 2, at: Date.now(), type: 'orders.swept', data: { trigger: 'freeze', cancelled: 1, ms: 9100, legs: [leg(0, { cancelled: 1, txHashes: ['9xTzQ4pL2a'], hl: ['ok'] }), leg(1, { hl: ['err: order not found'] }), leg(2, { found: 0 })] } }], /Resting orders: failed: leg 1: err: order not found/, '15-sweep-leg-failed'],
+  ];
+  let cur = [];
+  const sse = createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/event-stream', 'access-control-allow-origin': '*' }); res.write(frames(cur)); });
+  await new Promise((r) => sse.listen(9797, r));
+  await withAgent('hedged', async () => {
+    for (const [name, evs, want, file] of cases) {
+      cur = evs;
+      const { page, ctx } = await open();
+      await page.route('**/events', (route) => route.continue({ url: 'http://localhost:9797/events' }));
+      await page.route(/\/owner\/0x/, async (route) => {
+        const r = await route.fetch();
+        const j = await r.json();
+        await route.fulfill({ response: r, json: { ...j, policy: { ...(j.policy ?? { agent: null, daily_cap: 0, spent_today: 0, cooldown_sec: 0, nonce: 0 }), frozen: true } } });
+      });
+      await demo(page, 3000);
+      const t = (await page.locator('.freeze-steps').innerText().catch(() => '')).replace(/\s+/g, ' ');
+      check(`freeze steps (${name}): ${t.slice(0, 150)}`, want.test(t.replace(/Trading keys.*?Resting/, 'Resting')));
+      if (name === 'one leg failed') check('failed leg is named in the log row', (await page.locator('.log li.flag', { hasText: 'Freeze sweep' }).count()) === 1 && (await page.locator('.log ul.sub li', { hasText: 'Leg 1' }).count()) === 1);
+      await shot(page, file);
+      await ctx.close();
+    }
+  });
+  sse.closeAllConnections();
+  sse.close();
+}
 await withAgent('near-liquidation', async () => {
   const { page, ctx } = await open();
   await demo(page);

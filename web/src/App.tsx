@@ -3,7 +3,7 @@ import type { Hex } from 'viem';
 import { commandTypedData, newCommand, ownerIntentTypedData, type Command, type OwnerIntent, type OwnerIntentTypedData } from '@hypernear/client';
 import { AGENT_ACCOUNT, AGENT_URL, CHAIN_TAG, CONTRACT_ID, DEMO_OWNER, getOwner, pendingDecision, post, streamEvents, type AgentEvent, type DecisionMode, type OwnerView } from './api';
 import { LegPanel } from './legpanel';
-import { Activity, BreakevenCard, DecisionPanel, LegsTable, short } from './panels';
+import { Activity, BreakevenCard, DecisionPanel, FreezeSteps, LegsTable, nearScan, short } from './panels';
 import { StrategiesPanel } from './strategies';
 
 export interface Auth {
@@ -310,12 +310,13 @@ export function App({ auth }: { auth: Auth }) {
               <div className="freeze">
                 <div>
                   <strong>{policy?.frozen ? 'Account is frozen' : 'Emergency stop'}</strong>
-                  <p className="muted small">Halts everything the contract signs and revokes the agents' Hyperliquid trading keys. Resting orders stay until cancelled. Withdrawals to you still work.</p>
+                  <p className="muted small">Halts everything the contract signs and revokes the agents' Hyperliquid trading keys. The agent then cancels the resting orders on those legs. Withdrawals to you still work.</p>
                 </div>
                 <button className={policy?.frozen ? '' : 'danger'} disabled={locked || legs.length === 0} title={why} onClick={toggleFreeze}>
                   {busy === 'freeze' ? 'Waiting for signature…' : policy?.frozen ? 'Unfreeze' : 'Freeze'}
                 </button>
               </div>
+              <FreezeSteps events={mine} show={Boolean(policy?.frozen) || (dry && mine.some((e) => e.type === 'agents.revoked' || e.type === 'orders.swept'))} />
             </section>
 
             <div className="col">
@@ -348,7 +349,7 @@ export function App({ auth }: { auth: Auth }) {
 
           <StrategiesPanel owner={owner} canSign={canSign} events={mine} sign={signCommand} tick={view?.snapshot.at} />
 
-          <Activity events={mine.filter((e) => !e.type.startsWith('strategy.'))} stream={stream} />
+          <Activity events={mine.filter((e) => !e.type.startsWith('strategy.'))} stream={stream} scan={nearScan(chainTag)} />
         </main>
       )}
     </>
