@@ -12,7 +12,18 @@ export type OwnerIntent =
   | { type: 'usdClassTransfer'; leg: number; amount: string; toPerp: boolean; hlNonce: number }
   /** `agent` = NEAR account id allowed to call rebalance / agent_usd_class_transfer; "" revokes. */
   | { type: 'setPolicy'; agent: string; dailyCap: string; cooldownSec: number }
-  | { type: 'freeze'; frozen: boolean };
+  | { type: 'freeze'; frozen: boolean }
+  /** Cancels on a leg, signed by the leg's key as an HL L1 action. Allowed at any time, frozen or not. */
+  | { type: 'cancelOrders'; leg: number; cancels: HlCancel[] };
+
+/** HL's own cancel entry: a = asset index, o = order id. */
+export interface HlCancel {
+  a: number;
+  o: number;
+}
+
+/** Most cancels one `cancel_orders` call or `cancelOrders` intent may carry (contract limit). */
+export const MAX_CANCELS_PER_CALL = 16;
 
 export type OwnerIntentType = OwnerIntent['type'];
 
@@ -39,7 +50,11 @@ export const OWNER_INTENT_TYPES: Record<OwnerIntentType, readonly [string, reado
   usdClassTransfer: ['UsdClassTransfer', [...head, { name: 'leg', type: 'uint32' }, { name: 'amount', type: 'string' }, { name: 'toPerp', type: 'bool' }, { name: 'hlNonce', type: 'uint64' }]],
   setPolicy: ['SetPolicy', [...head, { name: 'agent', type: 'string' }, { name: 'dailyCap', type: 'string' }, { name: 'cooldownSec', type: 'uint64' }]],
   freeze: ['Freeze', [...head, { name: 'frozen', type: 'bool' }]],
+  cancelOrders: ['CancelOrders', [...head, { name: 'leg', type: 'uint32' }, { name: 'cancels', type: 'Cancel[]' }]],
 };
+
+/** Struct types an intent type refers to (EIP-712 appends them to the type string). */
+export const OWNER_INTENT_SUBTYPES = { Cancel: [{ name: 'a', type: 'uint32' }, { name: 'o', type: 'uint64' }] } as const;
 
 export function hypernearDomain(chainTag: ChainTag, contractId: string) {
   return { name: 'Leash', version: '1', salt: keccak256(toHex(`${chainTag}:${contractId}`)) } as const;
@@ -68,7 +83,7 @@ export function ownerIntentTypedData(args: {
   const { type: _type, ...rest } = intent;
   return {
     domain: hypernearDomain(chainTag, contractId),
-    types: { [primaryType]: fields },
+    types: { [primaryType]: fields, ...(intent.type === 'cancelOrders' ? { Cancel: OWNER_INTENT_SUBTYPES.Cancel } : {}) },
     primaryType,
     message: { ...(intent.type === 'approveAgent' ? { agentName: '' } : {}), ...rest, owner: owner.toLowerCase(), nonce },
   };

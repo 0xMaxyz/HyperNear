@@ -1,7 +1,7 @@
 import { keccak256, type Hex } from 'viem';
 import { PublicKey, type Account } from 'near-api-js';
 import { HyperNearContractError, HyperNearError, HyperNearRelayRefusedError } from './errors';
-import type { ChainTag, OwnerIntent } from './intents';
+import { MAX_CANCELS_PER_CALL, type ChainTag, type HlCancel, type OwnerIntent } from './intents';
 import { DEFAULT_RPC, nearApiBackend, type NearBackend } from './near';
 
 export const MPC_CONTRACT: Record<'testnet' | 'mainnet', string> = {
@@ -37,6 +37,8 @@ export interface SignOut {
   s: string;
   recovery_id: number;
   action: Record<string, unknown> | null;
+  /** HL L1 actions (cancels): the nonce the leg key signed, the block time in ms. Absent for user-signed actions. */
+  nonce?: number;
 }
 
 /** One agent name a freeze re-pointed to a keyless burn address (signature null if that MPC sign failed). */
@@ -61,6 +63,38 @@ export function exchangeBody(out: SignOut, hyperliquidChain: 'Mainnet' | 'Testne
   if (type === 'approveAgent' && !action.agentName) delete action.agentName; // HL's unnamed agent (signed as "")
   const nonce = (fields.time ?? fields.nonce) as number;
   return { action, nonce, signature: { r: `0x${out.big_r.slice(2)}`, s: `0x${out.s}`, v: 27 + out.recovery_id } };
+}
+
+/** HL's mainnet and testnet API roots. */
+export const HL_API: Record<'mainnet' | 'testnet', string> = { mainnet: 'https://api.hyperliquid.xyz', testnet: 'https://api.hyperliquid-testnet.xyz' };
+
+/**
+ * The HL /exchange body for a contract-signed L1 action (a cancel). Not `exchangeBody`: an L1 action must not carry
+ * signatureChainId or hyperliquidChain, and it is posted with `vaultAddress: null`.
+ */
+export function l1ExchangeBody(out: SignOut) {
+  if (!out.action || typeof out.nonce !== 'number') throw new HyperNearError('SignOut is not an L1 action (no action or nonce)');
+  return { action: out.action, nonce: out.nonce, signature: { r: `0x${out.big_r.slice(2)}`, s: `0x${out.s}`, v: 27 + out.recovery_id }, vaultAddress: null };
+}
+
+/** POSTs a contract-signed L1 action to HL /exchange and returns HL's JSON (never throws on status "err"). */
+export async function postL1(out: SignOut, network: 'mainnet' | 'testnet', fetchImpl: typeof fetch = fetch): Promise<HlExchangeResponse> {
+  const r = await fetchImpl(`${HL_API[network]}/exchange`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(l1ExchangeBody(out)) });
+  const text = await r.text();
+  try {
+    return JSON.parse(text) as HlExchangeResponse;
+  } catch {
+    return { status: 'err', response: `HTTP ${r.status}: ${text.slice(0, 200)}` };
+  }
+}
+
+export type HlExchangeResponse = { status: 'ok'; response?: { data?: { statuses?: unknown[] } } & Record<string, unknown> } | { status: 'err'; response: string };
+
+/** One `cancel_orders` transaction: the cancels it carried, its NEAR tx and the signed L1 cancel to post. */
+export interface CancelBatch {
+  cancels: HlCancel[];
+  txHash: string;
+  out: SignOut;
 }
 
 export interface HyperNearClientOptions {
@@ -152,6 +186,24 @@ export class HyperNearClient {
       }
       throw e;
     }
+  }
+
+  /**
+   * `cancel_orders`: while the owner is frozen, anyone may have the contract sign HL L1 cancels for a registered leg
+   * (a cancel cannot move funds). More than 16 cancels go in several calls, one NEAR transaction each, in order; each
+   * result is returned as soon as it exists in `onBatch` so a failure in a later batch loses nothing already signed.
+   */
+  async cancelFrozen(args: { owner: Hex; leg: number; cancels: HlCancel[]; onBatch?: (b: CancelBatch) => void | Promise<void> }): Promise<CancelBatch[]> {
+    const out: CancelBatch[] = [];
+    for (let i = 0; i < args.cancels.length; i += MAX_CANCELS_PER_CALL) {
+      const cancels = args.cancels.slice(i, i + MAX_CANCELS_PER_CALL);
+      // 300 TGas: the call joins an MPC signature
+      const { txHash, value } = await this.backend.call<SignOut>(this.contractId, 'cancel_orders', { owner: args.owner.toLowerCase(), leg: args.leg, cancels }, { gasTgas: 300 });
+      const batch = { cancels, txHash, out: value };
+      out.push(batch);
+      await args.onBatch?.(batch);
+    }
+    return out;
   }
 
   /** Raw `owner_execute`; prefer relaySubmit (checks) or NearMasterSigner (maps HL payloads). */

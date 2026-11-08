@@ -5,11 +5,16 @@ export { hlPayloadDigest } from './hlDigest';
 export { DEFAULT_RPC, nearAccount, nearApiBackend, type CallOptions, type NearBackend } from './near';
 export {
   exchangeBody,
+  HL_API,
+  l1ExchangeBody,
+  postL1,
   HyperNearClient,
   legPath,
   MPC_CONTRACT,
   OWNER_EXECUTE_DEPOSIT,
   REGISTER_LEG_DEPOSIT,
+  type CancelBatch,
+  type HlExchangeResponse,
   type HyperNearClientOptions,
   type HyperNearConfig,
   type OwnerState,
