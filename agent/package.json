@@ -12,6 +12,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^1.6.0",
     "@hypernear/client": "workspace:*",
+    "@neardefi/shade-agent-js": "2.2.0",
     "@perps-platform/core": "workspace:*",
     "@typesafe-ai/sdk": "0.7.0",
     "viem": "2.54.3"
