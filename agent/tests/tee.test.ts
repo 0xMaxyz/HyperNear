@@ -24,7 +24,7 @@ import { DEFAULT_GUARD_CONFIG } from '../src/guard.ts';
 import { EventBus } from '../src/events.ts';
 import { Hedger } from '../src/hedge.ts';
 import { AgentKeyStore, Legs } from '../src/legs.ts';
-import { RateLimiter, Relayer } from '../src/relayer.ts';
+import { parseRelayBody, RateLimiter, Relayer } from '../src/relayer.ts';
 import { handler, type Deps } from '../src/server.ts';
 import { bootTee, enrollTeeOwner, hlLedgerPort, measurementsFrom, OwnerScope, shadeBackend, type TeeLedgerPort } from '../src/tee.ts';
 import { ch, OWNER, snap } from './agent-helpers.ts';
@@ -39,7 +39,7 @@ const TEE = (o: Partial<{ measurement_hash: string; paid_until_ns: string; month
 const SIGN_OUT = (agent: string): SignOut => ({ payload: 'ab', big_r: `02${'11'.repeat(32)}`, s: '22'.repeat(32), recovery_id: 0, action: { type: 'approveAgent', agentAddress: agent, agentName: 'leash-tee', nonce: 1 } });
 
 /** Contract mock that logs every view/call/HL post in order. */
-function world(o: { tee?: unknown; teeAgent?: unknown; fee?: string | null; ledger?: boolean } = {}) {
+function world(o: { tee?: unknown; teeAgent?: unknown; fee?: string | null; ledger?: boolean; ownerExecute?: unknown } = {}) {
   const log: string[] = [];
   const calls: { method: string; args: any; opts?: any }[] = [];
   const backend: NearBackend = {
@@ -55,7 +55,7 @@ function world(o: { tee?: unknown; teeAgent?: unknown; fee?: string | null; ledg
     async call<T>(_c: string, method: string, args: Record<string, unknown>, opts?: any) {
       log.push(`call:${method}`);
       calls.push({ method, args, opts });
-      return { txHash: 'tx', value: (method === 'tee_approve_agent' ? SIGN_OUT(args.hl_address as string) : null) as T };
+      return { txHash: 'tx', value: (method === 'tee_approve_agent' ? SIGN_OUT(args.hl_address as string) : method === 'owner_execute' ? (o.ownerExecute ?? null) : null) as T };
     },
   };
   const client = new HyperNearClient({ contractId: 'leash.testnet', backend });
@@ -96,6 +96,12 @@ describe('OwnerScope, server mode', () => {
     expect(await s.filter([OWNER, other, '0x0000000000000000000000000000000000000003'] as any)).toEqual([OWNER]);
     fail = false;
     expect(await s.filter([OWNER, other] as any)).toEqual([OWNER, other]);
+  });
+
+  it('an owner who left TEE mode (entry kept, measurement_hash null) is a server owner again, and not a TEE-mode one', async () => {
+    const left = TEE({ measurement_hash: null as never });
+    expect(await scope(world({ tee: left }), 'server').serves(OWNER)).toBe(true);
+    expect(await scope(world({ tee: left }), 'tee').serves(OWNER)).toBe(false);
   });
 
   it('a contract without get_tee (older deployment) means nobody is in TEE mode', async () => {
@@ -302,5 +308,22 @@ describe('POST /agents/prepare by run mode', () => {
     expect(w.posts).toHaveLength(2);
     expect(JSON.stringify(r)).not.toMatch(/0x[0-9a-f]{64}\b/); // no private key in the answer
     expect(fsSpy.writes).toEqual([]);
+  });
+});
+
+describe('setTee / payTee intents through the relayer', () => {
+  const sig = `0x${'ab'.repeat(65)}`;
+  it('parseRelayBody accepts setTee and payTee', () => {
+    expect(parseRelayBody({ owner: OWNER, nonce: 1, sig, intent: { type: 'setTee', measurementHash: `0x${'00'.repeat(32)}` } }).intent.type).toBe('setTee');
+    expect(parseRelayBody({ owner: OWNER, nonce: 2, sig, intent: { type: 'payTee', leg: 0, months: 1 } }).intent.type).toBe('payTee');
+  });
+
+  it('payTee: the contract-signed usdSend goes to HL and the answer says whether it landed', async () => {
+    const usdSend = { payload: 'ab', big_r: `02${'11'.repeat(32)}`, s: '22'.repeat(32), recovery_id: 1, action: { type: 'usdSend', destination: FEE, amount: '1', time: 5 } };
+    const w = world({ ownerExecute: usdSend });
+    const out = await new Relayer(w.client, new RateLimiter(5), w.post).relay('ip', { owner: OWNER, nonce: 2, sig, intent: { type: 'payTee', leg: 0, months: 1 } });
+    expect(out).toMatchObject({ kind: 'payTee', leg: 0, months: 1, ok: true });
+    expect(w.posts[0].action).toMatchObject({ type: 'usdSend', destination: FEE, amount: '1', hyperliquidChain: 'Testnet' });
+    expect(w.log.indexOf('call:owner_execute')).toBeLessThan(w.log.indexOf('hl:post'));
   });
 });

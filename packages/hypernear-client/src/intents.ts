@@ -14,7 +14,11 @@ export type OwnerIntent =
   | { type: 'setPolicy'; agent: string; dailyCap: string; cooldownSec: number }
   | { type: 'freeze'; frozen: boolean }
   /** Cancels on a leg, signed by the leg's key as an HL L1 action. Allowed at any time, frozen or not. */
-  | { type: 'cancelOrders'; leg: number; cancels: HlCancel[] };
+  | { type: 'cancelOrders'; leg: number; cancels: HlCancel[] }
+  /** TEE mode: only an agent attested with this measurement acts for the owner. `measurementHash` = 0x + 64 hex; all zeros leaves TEE mode. */
+  | { type: 'setTee'; measurementHash: Hex }
+  /** Pays `months` (1..12) x the TEE price: the contract signs a usdSend of it from `leg` to the TEE fee address (post it to HL). */
+  | { type: 'payTee'; leg: number; months: number };
 
 /** HL's own cancel entry: a = asset index, o = order id. */
 export interface HlCancel {
@@ -51,6 +55,8 @@ export const OWNER_INTENT_TYPES: Record<OwnerIntentType, readonly [string, reado
   setPolicy: ['SetPolicy', [...head, { name: 'agent', type: 'string' }, { name: 'dailyCap', type: 'string' }, { name: 'cooldownSec', type: 'uint64' }]],
   freeze: ['Freeze', [...head, { name: 'frozen', type: 'bool' }]],
   cancelOrders: ['CancelOrders', [...head, { name: 'leg', type: 'uint32' }, { name: 'cancels', type: 'Cancel[]' }]],
+  setTee: ['SetTee', [...head, { name: 'measurementHash', type: 'bytes32' }]],
+  payTee: ['PayTee', [...head, { name: 'leg', type: 'uint32' }, { name: 'months', type: 'uint32' }]],
 };
 
 /** Struct types an intent type refers to (EIP-712 appends them to the type string). */

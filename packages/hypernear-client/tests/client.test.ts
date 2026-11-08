@@ -34,7 +34,7 @@ describe('ownerIntentTypedData', () => {
       expect(hashTypedData(td as never)).toBe(c.digest);
       expect(await ownerAccount.signTypedData(td as never)).toBe(c.signature);
     }
-    expect(kinds.size).toBe(6); // approveAgent, withdraw, usdClassTransfer, setPolicy, freeze, cancelOrders
+    expect(kinds.size).toBe(8); // approveAgent, withdraw, usdClassTransfer, setPolicy, freeze, cancelOrders, setTee, payTee
   });
 });
 

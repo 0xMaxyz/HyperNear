@@ -71,10 +71,12 @@ export class OwnerScope {
 
   async #decide(owner: Hex, now: number): Promise<boolean> {
     const tee = await this.#d.client.getTee(owner);
-    if (this.mode === 'server') return tee === null;
-    if (!tee) return false;
+    // a left TEE mode keeps its entry (paid time) with measurement_hash null: only a set hash means "in TEE mode"
+    const inTee = tee?.measurement_hash != null;
+    if (this.mode === 'server') return !inTee;
+    if (!tee || !inTee) return false;
     const own = this.#d.measurement?.();
-    if (!own || tee.measurement_hash.toLowerCase() !== own.toLowerCase()) return false;
+    if (!own || tee.measurement_hash!.toLowerCase() !== own.toLowerCase()) return false;
     if (BigInt(tee.paid_until_ns) <= BigInt(now) * 1_000_000n) return false;
     const cfg = await this.#d.client.getConfig();
     if (!cfg.tee_fee_address || !this.#d.ledger || !this.#d.legAddresses) return false;

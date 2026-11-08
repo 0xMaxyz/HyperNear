@@ -24,7 +24,8 @@ export interface HyperNearConfig {
 
 /** An owner's TEE opt-in (`get_tee`): the measurement they chose, what they paid for, and the TEE-approved key per leg. */
 export interface TeeInfo {
-  measurement_hash: string;
+  /** null after the owner left TEE mode (the entry stays to keep the paid time): "in TEE mode" means measurement_hash != null */
+  measurement_hash: string | null;
   paid_until_ns: string;
   /** cumulative months the owner paid through payTee (the fee must have landed in HL's ledger for all of them) */
   months_paid: number;
@@ -189,6 +190,11 @@ export class HyperNearClient {
       if (/MethodNotFound|method .*not found|no such method/i.test(String((e as Error)?.message ?? e))) return null;
       throw e;
     }
+  }
+
+  /** The hash an owner signs in setTee for these measurements: the contract's `measurement_hash` view (0x + sha256 of borsh). */
+  async measurementHash(measurements: TeeMeasurements): Promise<string> {
+    return this.#view<string>('measurement_hash', { measurements });
   }
 
   async getTeeAgent(accountId: string): Promise<TeeAgentInfo | null> {

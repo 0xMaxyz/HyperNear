@@ -54,7 +54,7 @@ export class HttpError extends Error {
 
 const ADDR = /^0x[0-9a-f]{40}$/;
 const SIG = /^0x[0-9a-fA-F]{130}$/;
-const INTENT_TYPES = new Set(['approveAgent', 'withdraw', 'usdClassTransfer', 'setPolicy', 'freeze']);
+const INTENT_TYPES = new Set(['approveAgent', 'withdraw', 'usdClassTransfer', 'setPolicy', 'freeze', 'setTee', 'payTee']);
 
 export interface RelayBody {
   owner: string;
@@ -131,6 +131,15 @@ export class Relayer {
     return r;
   }
 
+  /** Posts the contract-signed usdSend of a payTee (owner leg -> TEE fee address) to HL; emits 'tee.paid'. */
+  async postPayment(owner: Hex, intent: Extract<OwnerIntent, { type: 'payTee' }>, out: SignOut) {
+    const chain = (await this.client.getConfig()).hl_mainnet ? 'Mainnet' : 'Testnet';
+    const hl = this.post ? await this.post(exchangeBody(out, chain)).catch((e) => ({ status: 'err', response: String(e) })) : 'not posted';
+    const r = { leg: intent.leg, months: intent.months, ok: (hl as { status?: string })?.status === 'ok', hl };
+    this.bus?.emit('tee.paid', { owner, ...r });
+    return r;
+  }
+
   async relay(ip: string, raw: unknown) {
     if (!this.limiter.allow(ip)) throw new HttpError(429, 'rate limited');
     const b = parseRelayBody(raw);
@@ -145,6 +154,9 @@ export class Relayer {
       }
       if (b.intent.type === 'approveAgent' && value) {
         return { kind: 'approveAgent' as const, owner, txHash, hlSignature: signOutToHex(value), ...(await this.postApproval(owner, b.intent, value)) };
+      }
+      if (b.intent.type === 'payTee' && value) {
+        return { kind: 'payTee' as const, owner, txHash, hlSignature: signOutToHex(value as SignOut), ...(await this.postPayment(owner, b.intent, value as SignOut)) };
       }
       return { kind: 'ownerExecute' as const, txHash, result: value, hlSignature: value ? signOutToHex(value as SignOut) : null };
     } catch (e) {
