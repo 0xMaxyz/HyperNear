@@ -1,0 +1,5 @@
+# Overlay: run the same image on the recorded fixtures (no keys, no network): the /owner/<demo owner> answer and the UI data.
+#   docker compose -f docker-compose.tee.yml -f docker-compose.tee.dryrun.yml up --build
+services:
+  agent:
+    command: ["node", "agent/src/server.ts", "--dry-run", "--serve"]

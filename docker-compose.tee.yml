@@ -1,0 +1,54 @@
+# The HyperNear agent server for a TEE (Phala dstack) or any container host.
+#
+# MEASURED: everything in this file is part of the app-compose hash the TEE attests, so the policy limits below cannot be
+# changed by the operator without changing the measurement an owner opted in to. Change a value, change the measurement.
+# UNMEASURED: the secrets at the bottom come from the environment at start (Phala: encrypted env, readable by the host
+# operator; use spend-capped keys). They are not part of the measurement.
+#
+#   docker compose -f docker-compose.tee.yml up --build
+#   docker compose -f docker-compose.tee.yml -f docker-compose.tee.dryrun.yml up --build   # recorded data, no keys, no network
+#
+# For a deployment replace `build` + `image` by the pushed image pinned by digest: image: <registry>/hypernear-agent@sha256:<digest>
+
+services:
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: hypernear-agent-tee:local
+    ports:
+      - "8787:8787"
+    # no volume at all: nothing secret may outlive the container. Agent keys (server mode) go to a RAM-only tmpfs.
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777
+      - /data:uid=1000,gid=1000,mode=0700
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    environment:
+      # ---- MEASURED: network and contract
+      NEAR_NETWORK: testnet
+      NEAR_CONTRACT_ID: leash-spike-1107.testnet
+      PORT: "8787"
+      HYPERNEAR_DATA_DIR: /data
+      # ---- MEASURED: order policy (the agent refuses anything outside it before signing)
+      HYPERNEAR_MAX_LEVERAGE: "5"
+      HYPERNEAR_MAX_NOTIONAL_USD: "100"
+      HYPERNEAR_ALLOWED_COINS: BTC,ETH
+      HYPERNEAR_SLIPPAGE: "0.03"
+      # ---- MEASURED: guard and decision loops
+      HYPERNEAR_GUARD_INTERVAL_SEC: "10"
+      HYPERNEAR_GUARD_MARGIN_FLOOR: "2"
+      HYPERNEAR_GUARD_LATENCY_SEC: "9"
+      HYPERNEAR_GUARD_ANNUAL_VOL: "0.6"
+      HYPERNEAR_HEDGE_RESERVE_USD: "20"
+      HYPERNEAR_DECIDE_INTERVAL_SEC: "300"
+      HYPERNEAR_RELAY_PER_MINUTE: "20"
+      # ---- UNMEASURED secrets (empty = that feature is off). Set them in the shell or in the host's secret store, never here.
+      HYPERNEAR_RELAYER_ACCOUNT_ID: "${HYPERNEAR_RELAYER_ACCOUNT_ID:-}"
+      HYPERNEAR_RELAYER_PRIVATE_KEY: "${HYPERNEAR_RELAYER_PRIVATE_KEY:-}"
+      HYPERNEAR_AGENT_ACCOUNT_ID: "${HYPERNEAR_AGENT_ACCOUNT_ID:-}"
+      HYPERNEAR_AGENT_PRIVATE_KEY: "${HYPERNEAR_AGENT_PRIVATE_KEY:-}"
+      TYPESAFE_API_KEY: "${TYPESAFE_API_KEY:-}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
