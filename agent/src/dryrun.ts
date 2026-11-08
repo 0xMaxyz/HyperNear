@@ -87,6 +87,8 @@ const DRY_AGENT = 'agent.dry-run';
 /** The recorded freeze (agents.revoked) and the recorded live proposals (C18b: Jev factors -> Claude). */
 export const FREEZE_LIVE = new URL('../results/freeze-live.json', import.meta.url);
 export const C18B = new URL('../../validation/results/C18b.json', import.meta.url);
+/** The recorded freeze sweep (C20): `refs.event` is the orders.swept payload. */
+export const SWEEP_LIVE = new URL('../../validation/results/C20-sweep.json', import.meta.url);
 /** Recorded Phase 2 runs: the grid and the TWAP on leg 3, and the strategy builder's drafts (live Claude). */
 export const GRID_LIVE = new URL('../results/grid-live.json', import.meta.url);
 export const TWAP_LIVE = new URL('../results/twap-live.json', import.meta.url);
@@ -207,6 +209,7 @@ export function buildDryRunDeps(fixtureName = 'hedged', opts: { replayStartMs?: 
   const recorded = JSON.parse(readFileSync(GUARD_DEMO, 'utf8')) as { timeline: { t: number; event: string; detail?: Record<string, unknown> }[] };
   const revoked = (JSON.parse(readFileSync(FREEZE_LIVE, 'utf8')) as { events: { type: string; data: Record<string, unknown> }[] }).events;
   const proposals = recordedProposals();
+  const swept = readJson<{ refs: { event: Record<string, unknown> } }>(SWEEP_LIVE).refs.event;
   // the agent account the fixture policy names, so /owner's config.agentAccount passes the opt-in check (no key: nothing signs here)
   const dryConfig = { ...config, contractId: DRY_CONTRACT_ID, nearAgent: { accountId: DRY_AGENT, secretKey: '' } };
   const decider = new Decider({
@@ -284,8 +287,10 @@ export function buildDryRunDeps(fixtureName = 'hedged', opts: { replayStartMs?: 
         let id = 1_000_000;
         const tEnd = recorded.timeline.at(-1)?.t ?? t0;
         // guard demo, then the recorded decision proposals (C18b), then the recorded freeze revocation, 2 s apart
+        const sweptAt = tEnd + 2000 * (replayedProposals.length + revoked.length + 1); // right after the revocations
         const strategyStart = tEnd + 2000 * (replayedProposals.length + revoked.length + 2);
         const script = [
+          { t: sweptAt, type: 'orders.swept', data: { ...swept, owner: snap.owner, recorded: true } },
           ...recordedStrategyEvents(snap.owner).map((e) => ({ t: strategyStart + e.t, type: e.type, data: e.data })),
           ...recorded.timeline.map((x) => ({ t: x.t, type: x.event, data: { ...x.detail, owner: snap.owner, recordedOffsetMs: x.t } })),
           ...replayedProposals.map((r, i) => ({ t: tEnd + 2000 * (i + 1), type: DECISION_EVENTS.proposed, data: proposalEvent(r) })),

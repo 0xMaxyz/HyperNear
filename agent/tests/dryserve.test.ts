@@ -65,7 +65,7 @@ describe('--dry-run --serve', () => {
     let text = '';
     while (!text.includes('event: agents.revoked\n')) text += new TextDecoder().decode((await reader.read()).value);
     ctrl.abort();
-    const types = [...text.matchAll(/event: (\S+)/g)].map((m) => m[1]!).filter((t) => !t.startsWith('strategy.')); // the strategy replay follows
+    const types = [...text.matchAll(/event: (\S+)/g)].map((m) => m[1]!).filter((t) => !t.startsWith('strategy.') && t !== 'orders.swept'); // the sweep and the strategy replay follow
     expect(types).toEqual([
       'guard.ok', 'stress.marginMoved', 'stress.posted', 'guard.trigger', 'guard.rebalance.start', 'guard.rebalance.signed', 'guard.rebalance.posted', 'guard.ok',
       ...Array(5).fill('decision.proposed'),
@@ -98,6 +98,23 @@ describe('--dry-run --serve', () => {
     expect(r.result.simulatedFills.map((f: any) => f.leg)).toEqual([0, 1]);
     const p = await post(`${base}/decision/propose`, { owner: OWNER });
     expect(p.status).toBe(202);
+  });
+});
+
+describe('--dry-run --serve: the freeze sweep', () => {
+  it('replays the recorded orders.swept after the revocations, with the payload the web shows', async () => {
+    const base = await serve('hedged');
+    const ctl = new AbortController();
+    const reader = (await fetch(`${base}/events`, { signal: ctl.signal })).body!.getReader();
+    let text = '';
+    while (!text.includes('event: orders.swept\n')) text += new TextDecoder().decode((await reader.read()).value);
+    ctl.abort();
+    const events = [...text.matchAll(/^data: (.*)$/gm)].map((m) => JSON.parse(m[1]!));
+    const i = events.findIndex((e) => e.type === 'agents.revoked');
+    const j = events.findIndex((e) => e.type === 'orders.swept');
+    expect(i).toBeGreaterThanOrEqual(0);
+    expect(j).toBeGreaterThan(i);
+    expect(events[j].data).toMatchObject({ owner: OWNER, trigger: 'freeze', recorded: true, dryRun: true, cancelled: 2, legs: expect.arrayContaining([expect.objectContaining({ leg: 0, found: 1, cancelled: 1, hl: ['ok'] })]) });
   });
 });
 

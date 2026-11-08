@@ -1,0 +1,129 @@
+{
+  "claim": "C20",
+  "title": "after a freeze the sweep clears resting orders on every leg (cancel_orders, no agent server)",
+  "status": "✅",
+  "at": "2026-11-08T10:58:02.120Z",
+  "network": "testnet",
+  "numbers": {
+    "sweepMs": 18464,
+    "cancelled": 2
+  },
+  "refs": {
+    "resting": {
+      "0": {
+        "address": "0xfc5f38a75535cc6a864bb5ba14d9c7f29eecacac",
+        "oid": 64822016608
+      },
+      "1": {
+        "address": "0x8056c4fa3aad69cf04c2ade906c58489e76c9986",
+        "oid": 64822017974
+      }
+    },
+    "freezeTx": "Fy4WwBfQRjgiCmWbxfUigmJfuDmZgeYoRLkkuJXyWQDb",
+    "sweep": [
+      {
+        "leg": 0,
+        "address": "0xfc5f38a75535cc6a864bb5ba14d9c7f29eecacac",
+        "found": 1,
+        "skipped": 0,
+        "cancelled": 1,
+        "txHashes": [
+          "GS8LrZbwwQ7X2d3htFLnm9cnmDDhzA9g2UNuaKH6DX6Y"
+        ],
+        "hl": [
+          "ok"
+        ]
+      },
+      {
+        "leg": 1,
+        "address": "0x8056c4fa3aad69cf04c2ade906c58489e76c9986",
+        "found": 1,
+        "skipped": 0,
+        "cancelled": 1,
+        "txHashes": [
+          "ABbE7EzoDB6ot3pHse78YHLdPZC8G7uqnnxt6UA3be9J"
+        ],
+        "hl": [
+          "ok"
+        ]
+      },
+      {
+        "leg": 2,
+        "address": "0x2a32c77d9b5e3e0ed8780e9fc5def0aa629c62ab",
+        "found": 0,
+        "skipped": 0,
+        "cancelled": 0,
+        "txHashes": [],
+        "hl": []
+      },
+      {
+        "leg": 3,
+        "address": "0x5cba8512a2933a08fc3d33874871fe430b6e3d91",
+        "found": 0,
+        "skipped": 0,
+        "cancelled": 0,
+        "txHashes": [],
+        "hl": []
+      }
+    ],
+    "openOrdersAfter": {
+      "0": [],
+      "1": []
+    },
+    "event": {
+      "owner": "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23",
+      "trigger": "freeze",
+      "legs": [
+        {
+          "leg": 0,
+          "address": "0xfc5f38a75535cc6a864bb5ba14d9c7f29eecacac",
+          "found": 1,
+          "skipped": 0,
+          "cancelled": 1,
+          "txHashes": [
+            "GS8LrZbwwQ7X2d3htFLnm9cnmDDhzA9g2UNuaKH6DX6Y"
+          ],
+          "hl": [
+            "ok"
+          ]
+        },
+        {
+          "leg": 1,
+          "address": "0x8056c4fa3aad69cf04c2ade906c58489e76c9986",
+          "found": 1,
+          "skipped": 0,
+          "cancelled": 1,
+          "txHashes": [
+            "ABbE7EzoDB6ot3pHse78YHLdPZC8G7uqnnxt6UA3be9J"
+          ],
+          "hl": [
+            "ok"
+          ]
+        },
+        {
+          "leg": 2,
+          "address": "0x2a32c77d9b5e3e0ed8780e9fc5def0aa629c62ab",
+          "found": 0,
+          "skipped": 0,
+          "cancelled": 0,
+          "txHashes": [],
+          "hl": []
+        },
+        {
+          "leg": 3,
+          "address": "0x5cba8512a2933a08fc3d33874871fe430b6e3d91",
+          "found": 0,
+          "skipped": 0,
+          "cancelled": 0,
+          "txHashes": [],
+          "hl": []
+        }
+      ],
+      "cancelled": 2,
+      "ms": 18464
+    }
+  },
+  "notes": [
+    "Owner 0x2c7536e3605d9c16a7a3d7b1898e529396a65c23 (the public test owner), legs 0 and 1 of leash-spike-1107.testnet. The caller was the contract account (any NEAR account works: cancel_orders only checks that the owner is frozen). Cleanup: unfroze and approved fresh agents on legs 0-2, so the owner ends unfrozen."
+  ]
+}
