@@ -214,6 +214,15 @@ describe('TEE boot', () => {
     expect(w.calls[0]!.args).not.toHaveProperty('attestation');
   });
 
+  it('tops the agent account up only below 0.35 NEAR (a 300 TGas call reserves 0.3)', async () => {
+    const rich = world();
+    await bootTee({ shade: { ...shade(rich.log), balance: async () => 0.4 }, client: rich.client, dev: true, fundNear: 0.15 });
+    expect(rich.log).not.toContain('shade:fund');
+    const poor = world();
+    await bootTee({ shade: { ...shade(poor.log), balance: async () => 0.25 }, client: poor.client, dev: true, fundNear: 0.15 });
+    expect(poor.log).toContain('shade:fund');
+  });
+
   it('refuses to serve when the registered measurement is not the published one, or registration left no record', async () => {
     await expect(bootTee({ shade: shade([]), client: world().client, dev: false, expected: 'cd'.repeat(32) })).rejects.toThrow(/refusing to serve/);
     await expect(bootTee({ shade: shade([]), client: world({ teeAgent: null }).client, dev: false })).rejects.toThrow(/empty/);
