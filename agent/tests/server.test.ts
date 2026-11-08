@@ -123,6 +123,28 @@ describe('HTTP API', () => {
     expect(r2).toMatchObject({ kind: 'registerLeg', address: LEG0 });
   });
 
+  it('POST /relay freeze: the sweep runs after the answer, reports orders.swept, and a slow or failing sweep never delays or fails the freeze', async () => {
+    const { d } = deps({ value: [] }); // owner_execute returns the revoked agents: kind "freeze"
+    let release!: () => void;
+    d.sweeper = () => new Promise((r) => (release = () => r([{ leg: 0, address: LEG0, found: 1, skipped: 0, cancelled: 1, txHashes: ['t1'], hl: ['ok'] }] as never)));
+    const base = await serve(d);
+    const r = await post(`${base}/relay`, { owner: OWNER, nonce: 3, intent: { type: 'freeze', frozen: true }, sig: SIG });
+    expect(r.status).toBe(200); // answered while the sweep is still pending
+    expect((await r.json()).kind).toBe('freeze');
+    expect(d.bus.since(0).some((e) => e.type === 'orders.swept')).toBe(false);
+    release();
+    await new Promise((res) => setTimeout(res, 20));
+    expect(d.bus.since(0).find((e) => e.type === 'orders.swept')!.data).toMatchObject({ owner: OWNER, trigger: 'freeze', cancelled: 1, legs: [{ leg: 0, cancelled: 1 }] });
+
+    d.sweeper = async () => {
+      throw new Error('NEAR RPC down');
+    };
+    const r2 = await post(`${base}/relay`, { owner: OWNER, nonce: 4, intent: { type: 'freeze', frozen: true }, sig: SIG });
+    expect(r2.status).toBe(200);
+    await new Promise((res) => setTimeout(res, 20));
+    expect(d.bus.since(0).filter((e) => e.type === 'orders.swept').at(-1)!.data).toMatchObject({ error: 'NEAR RPC down', legs: [], cancelled: 0 });
+  });
+
   it('POST /relay refuses an owner with no registered leg (403), bad bodies (400), floods (429)', async () => {
     const { d, calls } = deps({ legs: {} });
     const base = await serve(d);

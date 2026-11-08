@@ -14,6 +14,7 @@
 //   POST /strategy/pause|stop {command, sig}: action pauseStrategy|stopStrategy, command.coin = strategy id (kill switch)
 //   GET  /strategies/:owner  the owner's strategies (state, held levels, resting orders, dead-man status)
 //   POST /strategy/draft  {owner, text}: plain language -> {spec, specHash, diff, warnings} (Claude drafts, spec.ts validates; starts nothing)
+//   (after a relayed freeze the server clears resting orders through the contract's cancel_orders and emits orders.swept)
 //   GET  /events        SSE: hedge, guard and decision log
 // The guard loop (guardLoop.ts) runs in the same process when the NEAR agent key is set.
 // Run: node agent/src/server.ts            (keys from env, see config.ts)
@@ -35,6 +36,7 @@ import { Decider, DECISION_MODES, DecisionModes, proposalEvent, type DecisionMod
 import { jevAsk } from './jev.ts';
 import { breakevens, openTime, readPnlData, type LegPnlData } from './pnl.ts';
 import { hlPoster, HttpError, RateLimiter, Relayer } from './relayer.ts';
+import { livePorts, sweepFrozen, sweptEvent, type LegSweep } from './sweep.ts';
 import { claudeAsk, drafter, MAX_DRAFT_TEXT, type Draft } from './strategy/builder.ts';
 import { proposeStrategyAction, type StrategyClients } from './strategy/decide.ts';
 import { claudeStrategyEscalator, jevAskStrategy } from './strategy/decideClients.ts';
@@ -55,6 +57,8 @@ export interface Deps {
   decider?: Decider;
   /** Phase 2 strategy runners (absent in the dry run) */
   strategies?: StrategyManager;
+  /** after a relayed freeze: clear every leg's resting orders through the contract's cancel_orders (absent: no sweep) */
+  sweeper?: (owner: Hex) => Promise<LegSweep[]>;
   /** plain language -> validated spec draft (needs ANTHROPIC_API_KEY) */
   drafter?: (owner: Hex, text: string) => Promise<Draft>;
   annualVol?: number;
@@ -149,6 +153,14 @@ export function handler(d: Deps) {
         }
         const out = await d.relayer.relay(ip, await readJson(req));
         d.bus.emit('relay', out);
+        // the sweep for orders that survived the revocation: after the freeze answer is built, off the response path, reported on /events
+        if (out.kind === 'freeze' && d.sweeper) {
+          const t0 = Date.now();
+          d.sweeper(out.owner).then(
+            (legs) => d.bus.emit('orders.swept', sweptEvent(out.owner, legs, Date.now() - t0)),
+            (e) => d.bus.emit('orders.swept', sweptEvent(out.owner, [], Date.now() - t0, (e as Error).message)),
+          );
+        }
         if (out.kind === 'approveAgent' && out.ok && d.legs.keys.get(out.owner, out.leg)?.address === out.agent) d.legs.keys.markApproved(out.owner, out.leg);
         // a revoked key is never approved again: the next /owner shows a fresh key to approve
         if (out.kind === 'freeze') for (const r of out.revoked) if (r.ok && d.legs.keys.get(out.owner, r.leg)) d.legs.keys.ensure(out.owner, r.leg, true);
@@ -323,6 +335,7 @@ export function buildDeps(config: AgentConfig): Deps {
   const strategyClients: StrategyClients | undefined = clients && { ask: jevAskStrategy(), escalate: claudeStrategyEscalator() };
   const strategies = new StrategyManager({ legs, client, policy: config.policy, agentId: config.nearAgent?.accountId, hedgeReserveUsd: config.guard.hedgeReserveUsd, dataDir: config.dataDir, emit: (t, data) => void bus.emit(t, data) });
   d.strategies = strategies;
+  if (config.relayer) d.sweeper = (owner) => sweepFrozen(owner, livePorts({ client, hl: legs.hl, network: config.network }));
   if (process.env.ANTHROPIC_API_KEY) {
     d.drafter = drafter({
       ask: claudeAsk(),
