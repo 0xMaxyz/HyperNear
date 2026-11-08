@@ -244,7 +244,7 @@ fn nonce_stays_burned_when_mpc_callback_fails() {
     let sig0 = o.sign(0, &withdraw("1"));
     let _ = c.owner_execute(o.addr.clone(), 0, withdraw("1"), sig0.clone());
     ctx(CONTRACT, T0);
-    assert!(c.on_signed("00".repeat(32), None, None, None, Err(PromiseError::Failed)).is_none());
+    assert!(c.on_signed("00".repeat(32), None, None, None, None, Err(PromiseError::Failed)).is_none());
     ctx(RELAYER, T0);
     assert_eq!(c.get_owner(o.addr.clone()).unwrap().nonce, 1);
     expect_panic("bad nonce", || {
@@ -442,7 +442,7 @@ fn failed_mpc_sign_gives_back_rebalance_cap_and_cooldown() {
     let ok = on_signed_args();
     ctx(CONTRACT, day0 + 5);
     let refund: CapRefund = serde_json::from_value(ok["refund"].clone()).unwrap();
-    assert!(c.on_signed(ok["payload"].as_str().unwrap().into(), None, None, Some(refund), Ok(fake_mpc_sig())).is_some());
+    assert!(c.on_signed(ok["payload"].as_str().unwrap().into(), None, None, Some(refund), None, Ok(fake_mpc_sig())).is_some());
     let st = c.get_owner(o.addr.clone()).unwrap();
     assert_eq!((st.spent_today, st.last_rebalance_ns), (4_000_000, day0 * 1_000_000_000), "success keeps the spend");
 
@@ -452,7 +452,7 @@ fn failed_mpc_sign_gives_back_rebalance_cap_and_cooldown() {
     let failed = on_signed_args();
     ctx(CONTRACT, t1 + 5);
     let refund: CapRefund = serde_json::from_value(failed["refund"].clone()).unwrap();
-    assert!(c.on_signed(failed["payload"].as_str().unwrap().into(), None, None, Some(refund), Err(PromiseError::Failed)).is_none());
+    assert!(c.on_signed(failed["payload"].as_str().unwrap().into(), None, None, Some(refund), None, Err(PromiseError::Failed)).is_none());
     let st = c.get_owner(o.addr.clone()).unwrap();
     assert_eq!(st.spent_today, 4_000_000, "the failed 6 is given back");
     assert_eq!(st.last_rebalance_ns, day0 * 1_000_000_000, "cooldown restarts from the last successful rebalance");
@@ -849,6 +849,7 @@ fn cancel_is_never_signed_as_a_user_signed_action() {
 const TEE_ACC: &str = "abababababababababababababababababababababababababababababababab"; // implicit account
 const OTHER_TEE: &str = "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd";
 const FEE: &str = "0x00000000000000000000000000000000000000fe";
+const PRICE: u64 = 5_000_000;
 
 fn tee_contract() -> Leash {
     ctx(RELAYER, T0);
@@ -859,9 +860,9 @@ fn tee_contract() -> Leash {
 fn register_tee(c: &mut Leash, acc: &str, ts_sec: u64) -> String {
     tee::TEST_VERIFY_OVERRIDE.with(|o| o.set(Some((tee::fixture::TS, tee::fixture::report_data()))));
     ctx(acc, ts_sec);
-    let a = c.register_tee_agent(tee::fixture::attestation_json(), tee::fixture::measurements_json());
+    let r = catch_unwind(AssertUnwindSafe(|| c.register_tee_agent(tee::fixture::attestation_json(), tee::fixture::measurements_json())));
     tee::TEST_VERIFY_OVERRIDE.with(|o| o.set(None));
-    a.measurement_hash
+    r.unwrap_or_else(|e| std::panic::resume_unwind(e)).measurement_hash
 }
 
 /// The fixture's hash with one RTMR byte flipped: a measurement no registered agent has.
@@ -880,19 +881,31 @@ fn tee_owner(c: &mut Leash, seed: u8) -> (Owner, String) {
     (o, leg1)
 }
 
-fn set_tee(c: &mut Leash, o: &Owner, hash: &str) {
+fn set_tee(c: &mut Leash, o: &Owner, hash: &str, account: &str) {
     let nonce = c.get_owner(o.addr.clone()).unwrap().nonce;
     ctx(RELAYER, T0);
-    o.exec(c, nonce, OwnerIntent::SetTee { measurement_hash: hash.into() });
+    o.exec(c, nonce, OwnerIntent::SetTee { measurement_hash: hash.into(), agent_account: account.into() });
+}
+
+fn pay(months: u32) -> OwnerIntent {
+    OwnerIntent::PayTee { leg: 1, months, price_micro: PRICE, fee_address: FEE.into() }
 }
 
 #[test]
-fn register_tee_agent_with_a_recorded_tdx_quote() {
+fn register_tee_agent_with_a_recorded_tdx_quote_once() {
     let mut c = tee_contract();
     let h = register_tee(&mut c, TEE_ACC, T0);
     assert_eq!(h, c.measurement_hash(tee::fixture::measurements_json()));
     let a = c.get_tee_agent(TEE_ACC.parse().unwrap()).unwrap();
     assert_eq!(a, tee::TeeAgent { measurement_hash: h, expires_ns: T0 * 1_000_000_000 + tee::TEE_AGENT_TTL_NS });
+    // the same quote cannot extend the expiry (nor register another account)
+    expect_panic("quote already used", || {
+        register_tee(&mut c, TEE_ACC, T0 + 6 * 86_400);
+    });
+    expect_panic("quote already used", || {
+        register_tee(&mut c, OTHER_TEE, T0);
+    });
+    assert_eq!(c.get_tee_agent(TEE_ACC.parse().unwrap()).unwrap().expires_ns, T0 * 1_000_000_000 + tee::TEE_AGENT_TTL_NS);
 }
 
 #[test]
@@ -927,22 +940,22 @@ fn register_tee_agent_refuses_bad_attestations() {
 }
 
 #[test]
-fn tee_owner_refuses_the_server_agent_and_accepts_its_tee_agent() {
+fn tee_owner_refuses_the_server_agent_and_accepts_its_own_tee_agent() {
     let mut c = tee_contract();
     let h = register_tee(&mut c, TEE_ACC, T0);
     let (o, leg1) = tee_owner(&mut c, 71);
-    // before setTee: the server agent works, the TEE agent is nobody
+    // before setTee: the server agent works
     ctx(AGENT, T0);
     let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "1".into(), 1);
-    set_tee(&mut c, &o, &h);
+    set_tee(&mut c, &o, &h, TEE_ACC);
     ctx(AGENT, T0 + 100);
-    expect_panic("caller is not a registered TEE agent", || {
+    expect_panic("not the owner's TEE agent", || {
         let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "1".into(), 2);
     });
-    expect_panic("caller is not a registered TEE agent", || {
+    expect_panic("not the owner's TEE agent", || {
         let _ = c.agent_usd_class_transfer(o.addr.clone(), 0, "1".into(), true, 2);
     });
-    // the attested agent may, and cap / cooldown still apply
+    // the owner's attested instance may, and cap / cooldown still apply
     ctx(TEE_ACC, T0 + 100);
     let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "1".into(), 3);
     assert_eq!(signed().len(), 1);
@@ -958,37 +971,52 @@ fn tee_owner_refuses_the_server_agent_and_accepts_its_tee_agent() {
 }
 
 #[test]
-fn tee_agent_with_another_measurement_is_refused() {
+fn a_stranger_running_the_same_image_is_refused() {
     let mut c = tee_contract();
-    register_tee(&mut c, TEE_ACC, T0);
+    let h = register_tee(&mut c, TEE_ACC, T0);
     let (o, leg1) = tee_owner(&mut c, 72);
-    set_tee(&mut c, &o, &other_hash());
+    // the owner named another instance: TEE_ACC has the right measurement but is not the owner's account
+    set_tee(&mut c, &o, &h, OTHER_TEE);
+    ctx(TEE_ACC, T0);
+    expect_panic("not the owner's TEE agent", || {
+        let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "1".into(), 1);
+    });
+    expect_panic("not the owner's TEE agent", || {
+        let _ = c.tee_approve_agent(o.addr.clone(), 0, owner(80).addr, 1);
+    });
+    // and the named account must also be attested with the owner's measurement
+    set_tee(&mut c, &o, &other_hash(), TEE_ACC);
     ctx(TEE_ACC, T0);
     expect_panic("does not match the owner's", || {
         let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "1".into(), 1);
     });
-    ctx(TEE_ACC, T0);
-    expect_panic("does not match the owner's", || {
-        let _ = c.tee_approve_agent(o.addr.clone(), 0, owner(80).addr, 1);
+    set_tee(&mut c, &o, &h, OTHER_TEE);
+    ctx(OTHER_TEE, T0);
+    expect_panic("not a registered TEE agent", || {
+        let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "1".into(), 1);
     });
 }
 
 #[test]
-fn tee_approve_agent_signs_the_fixed_name_records_the_key_and_freeze_revokes_it() {
+fn set_tee_needs_an_account_with_a_hash_and_none_with_zero() {
+    let mut c = tee_contract();
+    let (o, _) = tee_owner(&mut c, 78);
+    ctx(RELAYER, T0);
+    expect_panic("agentAccount", || o.exec(&mut c, 1, OwnerIntent::SetTee { measurement_hash: other_hash(), agent_account: "".into() }));
+    expect_panic("agentAccount", || o.exec(&mut c, 1, OwnerIntent::SetTee { measurement_hash: tee::ZERO_HASH.into(), agent_account: TEE_ACC.into() }));
+}
+
+#[test]
+fn tee_approve_agent_signs_the_fixed_name_records_the_key() {
     let mut c = tee_contract();
     let h = register_tee(&mut c, TEE_ACC, T0);
     let (o, _) = tee_owner(&mut c, 73);
     let key = owner(81).addr;
-    // not in TEE mode yet
     ctx(TEE_ACC, T0);
     expect_panic("not in TEE mode", || {
         let _ = c.tee_approve_agent(o.addr.clone(), 0, key.clone(), 1);
     });
-    set_tee(&mut c, &o, &h);
-    ctx(OTHER_TEE, T0);
-    expect_panic("not a registered TEE agent", || {
-        let _ = c.tee_approve_agent(o.addr.clone(), 0, key.clone(), 1);
-    });
+    set_tee(&mut c, &o, &h, TEE_ACC);
     ctx(TEE_ACC, T0);
     expect_panic("leg not registered", || {
         let _ = c.tee_approve_agent(o.addr.clone(), 3, key.clone(), 1);
@@ -997,7 +1025,7 @@ fn tee_approve_agent_signs_the_fixed_name_records_the_key_and_freeze_revokes_it(
     let want = hl(HlAction::ApproveAgent { agent_address: key.clone(), agent_name: tee::TEE_AGENT_NAME.into(), nonce: 7 });
     assert_eq!(signed(), vec![(leg_path(&o.addr, 0), want)]);
     let t = c.get_tee(o.addr.clone()).unwrap();
-    assert_eq!((t.measurement_hash, t.keys.get(&0)), (Some(h.clone()), Some(&key)));
+    assert_eq!((t.measurement_hash, t.agent_account.map(|a| a.to_string()), t.keys.get(&0)), (Some(h), Some(TEE_ACC.to_string()), Some(&key)));
     assert!(c.get_agent_slots(o.addr.clone()).contains(&AgentSlot { leg: 0, name: tee::TEE_AGENT_NAME.into() }));
     ctx(TEE_ACC, T0 + 8 * 86_400);
     expect_panic("expired", || {
@@ -1006,71 +1034,109 @@ fn tee_approve_agent_signs_the_fixed_name_records_the_key_and_freeze_revokes_it(
 }
 
 #[test]
+fn changing_or_leaving_tee_burns_the_old_instances_keys() {
+    let mut c = tee_contract();
+    let h = register_tee(&mut c, TEE_ACC, T0);
+    let (o, _) = tee_owner(&mut c, 79);
+    set_tee(&mut c, &o, &h, TEE_ACC);
+    ctx(TEE_ACC, T0);
+    let _ = c.tee_approve_agent(o.addr.clone(), 0, owner(83).addr, 1);
+    let _ = c.tee_approve_agent(o.addr.clone(), 1, owner(84).addr, 2);
+    // same hash and account again: nothing to burn
+    set_tee(&mut c, &o, &h, TEE_ACC);
+    assert!(signed().is_empty());
+    assert_eq!(c.get_tee(o.addr.clone()).unwrap().keys.len(), 2);
+    // another instance: one joined revocation of "leash-tee" on both legs, keys cleared
+    set_tee(&mut c, &o, &h, OTHER_TEE);
+    let want: Vec<(String, String)> = (0..2)
+        .map(|leg| {
+            let path = leg_path(&o.addr, leg);
+            (path.clone(), hl(HlAction::ApproveAgent { agent_address: burn_address(&path), agent_name: tee::TEE_AGENT_NAME.into(), nonce: T0 * 1000 + leg as u64 }))
+        })
+        .collect();
+    assert_eq!(signed(), want);
+    assert!(c.get_tee(o.addr.clone()).unwrap().keys.is_empty());
+    // leaving with no keys left signs nothing
+    set_tee(&mut c, &o, tee::ZERO_HASH, "");
+    assert!(signed().is_empty());
+    let t = c.get_tee(o.addr.clone()).unwrap();
+    assert_eq!((t.measurement_hash, t.agent_account), (None, None));
+}
+
+#[test]
 fn owner_approve_agent_is_refused_in_tee_mode_and_allowed_after_leaving() {
     let mut c = tee_contract();
     let h = register_tee(&mut c, TEE_ACC, T0);
     let (o, _) = tee_owner(&mut c, 74);
-    set_tee(&mut c, &o, &h); // nonce 1
+    set_tee(&mut c, &o, &h, TEE_ACC); // nonce 1
     ctx(RELAYER, T0);
     expect_panic("owner is in TEE mode", || o.exec(&mut c, 2, approve(&owner(82).addr)));
-    set_tee(&mut c, &o, tee::ZERO_HASH); // leave
-    assert_eq!(c.get_tee(o.addr.clone()).unwrap().measurement_hash, None);
+    set_tee(&mut c, &o, tee::ZERO_HASH, ""); // leave
     ctx(RELAYER, T0);
     o.exec(&mut c, 3, approve(&owner(82).addr));
     assert_eq!(signed().len(), 1);
-    // and the server agent works again
     ctx(AGENT, T0);
     let leg1 = c.get_leg(o.addr.clone(), 1).unwrap();
     let _ = c.rebalance(o.addr.clone(), 0, leg1, "1".into(), 1);
 }
 
 #[test]
-fn pay_tee_sends_price_times_months_to_the_fee_address_and_extends_paid_until() {
+fn pay_tee_signs_the_signed_price_to_the_signed_address_and_commits_on_signature() {
     let mut c = tee_contract();
     let (o, _) = tee_owner(&mut c, 75);
     ctx(RELAYER, T0);
-    expect_panic("setTee first", || o.exec(&mut c, 1, OwnerIntent::PayTee { leg: 0, months: 1 }));
-    set_tee(&mut c, &o, &other_hash()); // nonce 1
+    expect_panic("setTee first", || o.exec(&mut c, 1, pay(1)));
+    set_tee(&mut c, &o, &other_hash(), TEE_ACC); // nonce 1
     for months in [0, 13] {
         ctx(RELAYER, T0);
-        expect_panic("months: 1 to 12", || o.exec(&mut c, 2, OwnerIntent::PayTee { leg: 0, months }));
+        expect_panic("months: 1 to 12", || o.exec(&mut c, 2, pay(months)));
     }
     ctx(RELAYER, T0);
-    o.exec(&mut c, 2, OwnerIntent::PayTee { leg: 1, months: 3 });
+    expect_panic("differ from the TEE config", || {
+        o.exec(&mut c, 2, OwnerIntent::PayTee { leg: 1, months: 1, price_micro: 1, fee_address: FEE.into() })
+    });
+    expect_panic("differ from the TEE config", || {
+        o.exec(&mut c, 2, OwnerIntent::PayTee { leg: 1, months: 1, price_micro: PRICE, fee_address: owner(85).addr })
+    });
+    ctx(RELAYER, T0);
+    o.exec(&mut c, 2, pay(3));
     let want = hl(HlAction::UsdSend { destination: FEE.into(), amount: "15".into(), time: T0 * 1000 });
     assert_eq!(signed(), vec![(leg_path(&o.addr, 1), want)]);
+    // nothing is committed until the MPC signature exists
+    assert_eq!(c.get_tee(o.addr.clone()).unwrap().months_paid, 0);
+    let cb = on_signed_args();
+    let pay_rec: tee::TeePayment = serde_json::from_value(cb["tee_pay"].clone()).unwrap();
+    ctx(CONTRACT, T0);
+    assert!(c.on_signed(cb["payload"].as_str().unwrap().into(), None, None, None, Some(pay_rec), Ok(fake_mpc_sig())).is_some());
     let paid = T0 * 1_000_000_000 + 3 * tee::TEE_MONTH_NS;
-    assert_eq!(c.get_tee(o.addr.clone()).unwrap().paid_until_ns, paid);
-    // paying again extends from paid_until, not from now; 12 months is the most per call
-    ctx(RELAYER, T0 + 10);
-    o.exec(&mut c, 3, OwnerIntent::PayTee { leg: 0, months: 12 });
+    let t = c.get_tee(o.addr.clone()).unwrap();
+    assert_eq!((t.paid_until_ns, t.months_paid), (paid, 3));
+    // a failed signature commits nothing
+    ctx(CONTRACT, T0);
+    assert!(c.on_signed("00".repeat(32), None, None, None, Some(tee::TeePayment { owner: o.addr.clone(), months: 12 }), Err(PromiseError::Failed)).is_none());
+    assert_eq!(c.get_tee(o.addr.clone()).unwrap().months_paid, 3);
+    // a second payment extends from paid_until
+    ctx(CONTRACT, T0 + 10);
+    let _ = c.on_signed("00".repeat(32), None, None, None, Some(tee::TeePayment { owner: o.addr.clone(), months: 12 }), Ok(fake_mpc_sig()));
     let t = c.get_tee(o.addr.clone()).unwrap();
     assert_eq!((t.paid_until_ns, t.months_paid), (paid + 12 * tee::TEE_MONTH_NS, 15));
-    assert_eq!(on_signed_args()["action"]["amount"], "60");
 }
 
 #[test]
-fn pay_tee_needs_a_configured_price_and_admin_sets_it() {
-    let mut c = contract(); // no TEE price
+fn pay_tee_needs_a_configured_price() {
+    let mut c = contract(); // no TEE price at init
     let (o, _) = tee_owner(&mut c, 76);
-    set_tee(&mut c, &o, &other_hash());
+    set_tee(&mut c, &o, &other_hash(), TEE_ACC);
     ctx(RELAYER, T0);
-    expect_panic("not offered", || o.exec(&mut c, 2, OwnerIntent::PayTee { leg: 0, months: 1 }));
+    expect_panic("not offered", || o.exec(&mut c, 2, pay(1)));
     let cfg = c.get_config();
     assert_eq!((cfg["tee_price_usd"].clone(), cfg["tee_fee_address"].clone()), (Value::Null, Value::Null));
-    ctx(RELAYER, T0);
-    expect_panic("admin only", || c.set_tee_config("7.5".into(), FEE.into()));
-    ctx("admin.testnet", T0);
-    c.set_tee_config("7.5".into(), FEE.into());
-    let cfg = c.get_config();
-    assert_eq!((cfg["tee_price_usd"].as_str(), cfg["tee_fee_address"].as_str()), (Some("7.5"), Some(FEE)));
-    ctx(RELAYER, T0);
-    o.exec(&mut c, 2, OwnerIntent::PayTee { leg: 0, months: 2 });
-    assert_eq!(on_signed_args()["action"]["amount"], "15");
+    let cfg = tee_contract().get_config();
+    assert_eq!((cfg["tee_price_usd"].as_str(), cfg["tee_fee_address"].as_str()), (Some("5"), Some(FEE)));
 }
 
 #[test]
-fn non_tee_owner_state_has_no_tee_entry() {
+fn non_tee_owner_has_no_tee_entry() {
     let mut c = tee_contract();
     let (o, _) = tee_owner(&mut c, 77);
     assert!(c.get_tee(o.addr.clone()).is_none());
@@ -1080,9 +1146,14 @@ fn non_tee_owner_state_has_no_tee_entry() {
 
 #[cfg(feature = "spike")]
 #[test]
-fn register_tee_agent_dev_takes_no_quote_on_testnet() {
+fn spike_dev_registration_and_admin_tee_config() {
     let mut c = tee_contract();
     ctx(OTHER_TEE, T0);
     let a = c.register_tee_agent_dev(tee::fixture::measurements_json());
     assert_eq!(a.measurement_hash, c.measurement_hash(tee::fixture::measurements_json()));
+    ctx(RELAYER, T0);
+    expect_panic("admin only", || c.set_tee_config("7.5".into(), FEE.into()));
+    ctx("admin.testnet", T0);
+    c.set_tee_config("7.5".into(), FEE.into());
+    assert_eq!(c.get_config()["tee_price_usd"].as_str(), Some("7.5"));
 }

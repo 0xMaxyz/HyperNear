@@ -2,7 +2,8 @@
 # MAINNET deploy of the hypernear contract. The user runs this; nothing here runs unattended.
 #   deploy-mainnet.sh <account.near> --plan   prints every step and command, runs none
 #   deploy-mainnet.sh <account.near>          builds, checks, asks for the account id typed back, deploys + init
-# Default build only (NO --features spike): the ABI must not contain sign_raw / admin_sign_hl / migrate.
+# Default build only (NO --features spike): the ABI must not contain sign_raw / admin_sign_hl / migrate /
+# register_tee_agent_dev / set_tee_config (mainnet TEE price and fee address are init args, fixed).
 # Init: new(admin = <account>, mpc_contract = v1.signer, hl_mainnet = true)  ->  chain_tag "near-mainnet", HL "Mainnet".
 # It STOPS before deleting the full-access key: that is lock-contract.sh, run after the mainnet run is verified.
 # Key: ~/.near-credentials/mainnet/<account>.json (legacy keychain), never printed.
@@ -30,9 +31,9 @@ step "1. default build (no spike feature)"
 run cargo near build non-reproducible-wasm
 
 step "2. ABI must not contain the spike-only methods"
-printf '+ grep sign_raw|admin_sign_hl|migrate in %s (expect none)\n' "$ABI"
+printf '+ grep sign_raw|admin_sign_hl|migrate|register_tee_agent_dev|set_tee_config in %s (expect none)\n' "$ABI"
 if [ "$PLAN" = 0 ]; then
-  if grep -qE '"name": *"(sign_raw|admin_sign_hl|migrate)"' "$ABI"; then echo "ABORT: spike methods in the build" >&2; exit 1; fi
+  if grep -qE '"name": *"(sign_raw|admin_sign_hl|migrate|register_tee_agent_dev|set_tee_config)"' "$ABI"; then echo "ABORT: spike methods in the build" >&2; exit 1; fi
   echo "ok: no spike methods"
 fi
 
