@@ -26,6 +26,8 @@ export interface HyperNearConfig {
 export interface TeeInfo {
   measurement_hash: string;
   paid_until_ns: string;
+  /** cumulative months the owner paid through payTee (the fee must have landed in HL's ledger for all of them) */
+  months_paid: number;
   keys: Record<string, Hex>;
 }
 

@@ -17,8 +17,7 @@ export interface TeeLedgerPort {
 
 /**
  * Reads HL's userNonFundingLedgerUpdates of the owner's legs and adds up usdSends (ledger type internalTransfer, or a
- * `send`) to the fee address. shortcut: the sum must reach one month's price, not months x price (the contract holds
- * paid_until); tighten when the contract exposes the amount paid.
+ * `send`) to the fee address; the caller requires months_paid x tee_price_usd, so a payTee whose usdSend never landed gets no service.
  */
 export function hlLedgerPort(hl: Pick<HlClient, 'userNonFundingLedgerUpdates'>): TeeLedgerPort {
   return {
@@ -79,7 +78,7 @@ export class OwnerScope {
     if (BigInt(tee.paid_until_ns) <= BigInt(now) * 1_000_000n) return false;
     const cfg = await this.#d.client.getConfig();
     if (!cfg.tee_fee_address || !this.#d.ledger || !this.#d.legAddresses) return false;
-    return this.#d.ledger.feePaid({ legAddresses: await this.#d.legAddresses(owner), feeAddress: cfg.tee_fee_address, minUsd: Number(cfg.tee_price_usd ?? 0) });
+    return this.#d.ledger.feePaid({ legAddresses: await this.#d.legAddresses(owner), feeAddress: cfg.tee_fee_address, minUsd: tee.months_paid * Number(cfg.tee_price_usd ?? 0) });
   }
 
   /** The owners this process serves now; one whose lookup fails is left out this round (fail closed, retried next time). */

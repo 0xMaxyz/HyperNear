@@ -35,7 +35,7 @@ const FEE = '0x1111111111111111111111111111111111111111';
 const MEAS = 'ab'.repeat(32);
 const ownerKey = privateKeyToAccount('0x4c0883a69102937d6231471b5dbb6204fe5129617082792ae468d01a3f362318');
 const signed = async (command: Command) => ({ command, sig: await ownerKey.signTypedData(commandTypedData('near-testnet', 'leash.testnet', command) as never) });
-const TEE = (o: Partial<{ measurement_hash: string; paid_until_ns: string }> = {}) => ({ measurement_hash: MEAS, paid_until_ns: String((Date.now() + 86_400_000) * 1_000_000), keys: {}, ...o });
+const TEE = (o: Partial<{ measurement_hash: string; paid_until_ns: string; months_paid: number }> = {}) => ({ measurement_hash: MEAS, months_paid: 1, paid_until_ns: String((Date.now() + 86_400_000) * 1_000_000), keys: {}, ...o });
 const SIGN_OUT = (agent: string): SignOut => ({ payload: 'ab', big_r: `02${'11'.repeat(32)}`, s: '22'.repeat(32), recovery_id: 0, action: { type: 'approveAgent', agentAddress: agent, agentName: 'leash-tee', nonce: 1 } });
 
 /** Contract mock that logs every view/call/HL post in order. */
@@ -136,6 +136,14 @@ describe('OwnerScope, tee mode', () => {
     const feePaid = vi.fn(async () => true);
     await scope(w, 'tee', { ledger: { feePaid } }).serves(OWNER);
     expect(feePaid).toHaveBeenCalledWith({ legAddresses: [LEG0], feeAddress: FEE, minUsd: 5 });
+  });
+  it('requires months_paid x price in the ledger: 2 months paid but one month landed is not served', async () => {
+    const w = world({ tee: TEE({ months_paid: 2 }) });
+    const rows = [{ time: 1, hash: '0x1', delta: { type: 'internalTransfer', user: LEG0, destination: FEE, usdc: '5' } }];
+    const ledger = hlLedgerPort({ userNonFundingLedgerUpdates: async () => rows as never });
+    expect(await scope(w, 'tee', { ledger }).serves(OWNER)).toBe(false);
+    rows.push({ time: 2, hash: '0x2', delta: { type: 'internalTransfer', user: LEG0, destination: FEE, usdc: '5' } });
+    expect(await scope(w, 'tee', { ledger }).serves(OWNER)).toBe(true);
   });
 });
 
