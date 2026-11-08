@@ -1,0 +1,173 @@
+{
+  "claim": "C21",
+  "title": "TEE mode, dev-registered agent (register_tee_agent_dev, no TDX quote): measurement and instance bound, paid in HL, keys burned on exit",
+  "status": "✅",
+  "at": "2026-11-08T21:47:05.412Z",
+  "network": "testnet",
+  "numbers": {
+    "leg0PerpBeforeOrder": 3,
+    "leaveGasBurntTgas": 33.483603012905,
+    "leaveKeysBurned": 3,
+    "checksPassed": 14,
+    "checksTotal": 14
+  },
+  "refs": {
+    "agentA": "dc1f7b662daca02dbac0e71a4ff123f1e5b4725d4b9f5e4b19da04cdeb7d5ce3",
+    "agentB": "92dd6c5e008f1a41e816ad9027d6f03dcd7f555e279c1bd9e0cc78d5e855d9b6",
+    "measurementHash": "0xe4d879a3407de578f579dfab4366fcea75a6649c683d9efe4f056f6505437574",
+    "owner": "0x46d40d33867af6d04c33888e943b1d569a3f5050",
+    "legs": [
+      "0x24beb800743ae5f09d4ae68595bc6609124d1ccb",
+      "0xa6ada2e68cc686e02a2eb6d8200904eea5181308",
+      "0x63c0fa53a8f33fbe78ec0fa129e36144354deb3c"
+    ],
+    "setTeeTx": "DaFzFLocJpNBEU4p8gckaYVXb5vqYPaMdcUi2ZvJUU8o",
+    "payTeeTx": "8DKLDRaJ9uyXEYF1NoNC395uFkX4mpPr3LJL599QQfP2",
+    "payTeeHl": {
+      "status": "ok",
+      "response": {
+        "type": "default"
+      }
+    },
+    "ledgerRows": [
+      {
+        "time": 1794174362807,
+        "hash": "0xdb419e81737bd90adcbb042dabd32b011000b6670e7ef7dc7f0a49d4327fb2f5",
+        "delta": {
+          "type": "internalTransfer",
+          "usdc": "1.0",
+          "user": "0x24beb800743ae5f09d4ae68595bc6609124d1ccb",
+          "destination": "0x306d1dbe4a4f93f06c8070b047ede9f59e37a2dc",
+          "fee": "0.0"
+        }
+      }
+    ],
+    "leaveTx": "GPt13LjBm6qombuZGfarYmSZvRtHJUCcZFuPNQGXbipr",
+    "agentATxns": [],
+    "agentBTxns": [],
+    "checks": {
+      "B has the same measurement as A (stranger instance of the same image)": {
+        "pass": true,
+        "detail": {
+          "hash": "0xe4d879a3407de578f579dfab4366fcea75a6649c683d9efe4f056f6505437574"
+        }
+      },
+      "owner signs setTee (measurement + the TEE account)": {
+        "pass": true,
+        "detail": {
+          "tx": "DaFzFLocJpNBEU4p8gckaYVXb5vqYPaMdcUi2ZvJUU8o",
+          "kind": "ownerExecute"
+        }
+      },
+      "before payTee the TEE agent refuses to serve the owner": {
+        "pass": true,
+        "detail": "owner is not a paid TEE owner of this image (setTee, payTee)"
+      },
+      "payTee 1 month: usdSend to the fee address lands in the HL ledger": {
+        "pass": true,
+        "detail": {
+          "tx": "8DKLDRaJ9uyXEYF1NoNC395uFkX4mpPr3LJL599QQfP2",
+          "ledger": {
+            "time": 1794174362807,
+            "hash": "0xdb419e81737bd90adcbb042dabd32b011000b6670e7ef7dc7f0a49d4327fb2f5",
+            "delta": {
+              "type": "internalTransfer",
+              "usdc": "1.0",
+              "user": "0x24beb800743ae5f09d4ae68595bc6609124d1ccb",
+              "destination": "0x306d1dbe4a4f93f06c8070b047ede9f59e37a2dc",
+              "fee": "0.0"
+            }
+          }
+        }
+      },
+      "stranger instance B (same measurement, other account) is refused: HTTP and contract": {
+        "pass": true,
+        "detail": {
+          "http": "owner is not a paid TEE owner of this image (setTee, payTee)",
+          "contract": "{\"index\":0,\"kind\":{\"index\":0,\"kind\":{\"FunctionCallError\":{\"ExecutionError\":\"Smart contract panicked: owner is in TEE mode: caller is not the owner's TEE agent\"}"
+        }
+      },
+      "A enrols: fresh in-memory key per leg, tee_approve_agent, approveAgent posted to HL (3 legs)": {
+        "pass": true,
+        "detail": [
+          {
+            "leg": 0,
+            "agent": "0xc64448f88d4340bbc9be4c7d7c3bbaed4b9f1b2d"
+          },
+          {
+            "leg": 1,
+            "agent": "0xc7d77700ce7fc9595c56c8aa1457825e753171a0"
+          },
+          {
+            "leg": 2,
+            "agent": "0xe242817223aeba2ded7d336043aee98fded20a43"
+          }
+        ]
+      },
+      "no key was written to disk by the TEE agent": {
+        "pass": true,
+        "detail": true
+      },
+      "TEE rebalance accepted (leg0 -> leg1) and posted to HL": {
+        "pass": true,
+        "detail": {
+          "status": "ok",
+          "response": {
+            "type": "default"
+          }
+        }
+      },
+      "server-mode agent rebalance for the TEE owner is refused by the contract": {
+        "pass": true,
+        "detail": "rebalance failed: Smart contract panicked: owner is in TEE mode: caller is not the owner's TEE agent"
+      },
+      "the owner's own approveAgent is refused while in TEE mode": {
+        "pass": true,
+        "detail": "owner_execute failed: Smart contract panicked: owner is in TEE mode: trading keys are approved by the TEE agent (setTee zero to leave)"
+      },
+      "the leash-tee key trades leg0 (resting order, then cancelled)": {
+        "pass": true,
+        "detail": {
+          "oid": 64856308064
+        }
+      },
+      "setTee to zero: Revoked[] burns the 3 leash-tee keys, posted to HL; gas recorded": {
+        "pass": true,
+        "detail": {
+          "tx": "GPt13LjBm6qombuZGfarYmSZvRtHJUCcZFuPNQGXbipr",
+          "revoked": [
+            {
+              "leg": 0,
+              "ok": true
+            },
+            {
+              "leg": 1,
+              "ok": true
+            },
+            {
+              "leg": 2,
+              "ok": true
+            }
+          ],
+          "gasTgas": 33.483603012905
+        }
+      },
+      "the burned leash-tee key's order is rejected by HL": {
+        "pass": true,
+        "detail": {
+          "rejected": "the exchange rejected the relayed action: Must deposit before performing actions. User: 0x24beb800743ae5f09d4ae68595bc6609124d1ccb"
+        }
+      },
+      "after leaving, a server-mode scope serves the owner again (get_tee entry kept, hash null)": {
+        "pass": true,
+        "detail": {
+          "months_paid": 1,
+          "paid_until_ns": 1796766361021951500
+        }
+      }
+    }
+  },
+  "notes": [
+    "Testnet results are DEV-REGISTERED (register_tee_agent_dev): no TDX quote. On-chain quote verification is evidenced only by T0 (tx 4QTqwX..., 187 TGas)."
+  ]
+}
