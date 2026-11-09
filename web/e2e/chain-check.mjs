@@ -41,7 +41,7 @@ const r = await fetch(rpc, { method: 'POST', headers: { 'content-type': 'applica
 const acao = r.headers.get('access-control-allow-origin');
 check('testnet RPC answers an Origin request with access-control-allow-origin', Boolean(acao), String(acao));
 const pre = await fetch(rpc, { method: 'OPTIONS', headers: { origin: 'http://localhost:5173', 'access-control-request-method': 'POST', 'access-control-request-headers': 'content-type' } });
-check('testnet RPC answers the CORS preflight (content-type allowed)', pre.status < 300 && /content-type/i.test(pre.headers.get('access-control-allow-headers') ?? ''), `${pre.status} ${pre.headers.get('access-control-allow-headers')}`);
+check('testnet RPC answers the CORS preflight (content-type allowed, or *)', pre.status < 300 && /content-type|\*/i.test(pre.headers.get('access-control-allow-headers') ?? ''), `${pre.status} ${pre.headers.get('access-control-allow-headers')}`);
 
 console.log(bad ? 'SOME FAILED' : 'ALL PASS');
 process.exit(bad ? 1 : 0);
