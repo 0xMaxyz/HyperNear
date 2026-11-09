@@ -116,6 +116,7 @@ function TeeCard(p: Props & { state: TeeState; mode: 'server' | 'tee'; offered: 
   const payLeg = p.legs.find((l) => l.leg === leg) ?? p.legs[0];
   const legFree = payLeg ? Number(payLeg.clearinghouse.withdrawable) + payLeg.spotUsdc : 0;
   const hashOk = HASH_RE.test(hash.trim());
+  const short = monthsOk && payLeg !== undefined && legFree < total / 1e6;
 
   async function look() {
     setLookErr(undefined);
@@ -200,9 +201,9 @@ function TeeCard(p: Props & { state: TeeState; mode: 'server' | 'tee'; offered: 
           </div>
           <p className="small" aria-live="polite">
             You pay <strong>{usd(total)}</strong> ({monthsOk ? m : '?'} × {usd(perMonth)}) to <code title={s.feeAddress}>{s.feeAddress}</code>, sent from leg {payLeg?.leg ?? '?'}&apos;s Hyperliquid account
-            {payLeg && <span className={legFree < total / 1e6 ? 'flag' : 'muted'}> ({usd(legFree * 1e6)} available there{legFree < total / 1e6 ? ', not enough' : ''})</span>}.
+            {payLeg && <span className={short ? 'flag' : 'muted'}> ({usd(legFree * 1e6)} available there{short ? `, ${usd(total)} needed: not enough, move USDC to leg ${payLeg.leg} or pick another leg` : ''})</span>}.
           </p>
-          <button className="primary" disabled={!p.canSign || p.busy !== null || !monthsOk || !payLeg} title={p.why} onClick={() => p.onPay(payLeg!.leg, m)}>
+          <button className="primary" disabled={!p.canSign || p.busy !== null || !monthsOk || !payLeg || short} title={short ? 'Not enough USDC on this leg' : p.why} onClick={() => p.onPay(payLeg!.leg, m)}>
             {p.busy === 'tee-pay' ? 'Waiting for signature…' : `Pay ${usd(total)}: sign`}
           </button>
           <p className="muted small">The contract signs a Hyperliquid transfer of this amount from the leg. You sign the price and address shown here, and the contract refuses any other.</p>

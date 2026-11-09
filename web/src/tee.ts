@@ -8,14 +8,15 @@ export interface TeeInfo {
   /** null after leaving TEE mode (the entry stays to keep the paid time) */
   measurement_hash: string | null;
   agent_account: string | null;
-  paid_until_ns: string;
+  /** u64 on the contract: a JSON number over RPC, a string in the fixture; BigInt() takes both */
+  paid_until_ns: string | number;
   months_paid: number;
   keys: Record<string, Hex>;
 }
 /** get_tee_agent */
 export interface TeeAgentInfo {
   measurement_hash: string;
-  expires_ns: string;
+  expires_ns: string | number;
 }
 
 export interface TeeState {
@@ -39,7 +40,7 @@ const nowNs = () => BigInt(Date.now()) * 1_000_000n;
 
 /** "In TEE mode" is a set measurement: a left TEE mode keeps its entry (the paid time) with a null hash. */
 export const inTeeMode = (s?: TeeState | null) => s?.tee?.measurement_hash != null;
-export const nsToDate = (ns: string) => new Date(Number(BigInt(ns) / 1_000_000n));
+export const nsToDate = (ns: string | number) => new Date(Number(BigInt(ns) / 1_000_000n));
 /** Per month, in micro-USD, exactly as payTee must carry it (the contract refuses any other). */
 export const priceMicro = (usd: string) => Math.round(Number(usd) * 1e6);
 export const usd = (micro: number) => `$${(micro / 1e6).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
@@ -86,7 +87,7 @@ export async function lookupTeeAgent(account: string, c: TeeCtx): Promise<TeeAge
 }
 
 export async function loadTee(owner: Hex, c: TeeCtx): Promise<TeeState> {
-  if (c.dryRun) return { priceUsd: '5.00', feeAddress: dryFee, tee: dry.tee, agent: dry.tee?.agent_account ? dryAgent(dry.tee.agent_account) : null };
+  if (c.dryRun) return { priceUsd: '2.00', feeAddress: dryFee, tee: dry.tee, agent: dry.tee?.agent_account ? dryAgent(dry.tee.agent_account) : null };
   const cfg = await view<{ tee_price_usd?: string | number | null; tee_fee_address?: Hex | null }>(c, 'get_config', {});
   // a contract that predates TEE mode has no get_tee: the owner is simply not in TEE mode
   const tee = await view<TeeInfo | null>(c, 'get_tee', { owner: owner.toLowerCase() }).catch((e: Error) => {

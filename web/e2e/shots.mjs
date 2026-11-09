@@ -313,9 +313,9 @@ await withAgent('hedged', () => withAgent('hedged', async () => {
   const host = page.locator('section[aria-labelledby=host-h]');
   await host.getByText('Server (free)').waitFor({ timeout: 15000 });
   await page.waitForTimeout(1500);
-  check('Agent hosting offers Server (free) and TEE with the price from get_config', (await host.locator('label.on', { hasText: 'Server (free)' }).count()) === 1 && (await host.getByText('TEE ($5.00/month)').count()) === 1);
+  check('Agent hosting offers Server (free) and TEE with the price from get_config', (await host.locator('label.on', { hasText: 'Server (free)' }).count()) === 1 && (await host.getByText('TEE ($2.00/month)').count()) === 1);
   await shot(page, '30-hosting-server');
-  await host.getByText('TEE ($5.00/month)').click();
+  await host.getByText('TEE ($2.00/month)').click();
   await host.getByLabel(/TEE agent account/).fill('leash-tee-1.hypernear-dry-run.testnet');
   await host.getByRole('button', { name: 'Look up on the contract' }).click();
   await host.getByText(/measurement filled in/).waitFor({ timeout: 5000 });
@@ -330,10 +330,13 @@ await withAgent('hedged', () => withAgent('hedged', async () => {
   check('TEE card shows measurement, agent account and the dev label (never "verified")', (await host.locator('dd', { hasText: hash }).count()) === 1 && (await host.getByText('dev-registered (testnet), no hardware quote').count()) === 1 && !/TDX|verified/i.test(await host.innerText()));
   check('tee.switched in the log: "TEE keys revoked on 3 legs"', (await page.locator('.log li', { hasText: 'TEE keys revoked on 3 legs' }).count()) >= 1);
   check('owner calls now go to the TEE agent', hits.tee >= 1, JSON.stringify(hits));
+  await host.getByLabel('Months, 1 to 12').fill('12');
+  check('Pay is disabled with the reason when the leg has too little USDC', (await host.getByRole('button', { name: /^Pay \$24\.00/ }).isDisabled()) && (await host.getByText(/\$24\.00 needed: not enough/).count()) === 1);
+  await shot(page, '36-tee-pay-not-enough');
   await host.getByLabel('Months, 1 to 12').fill('2');
   const pay = await host.locator('p', { hasText: /^You pay/ }).innerText();
-  check(`Pay shows amount and destination before signing: ${pay.slice(0, 120)}`, /\$10\.00 \(2 × \$5\.00\) to 0x7b1e0a5f3c2d4e6f8091a2b3c4d5e6f708192a3b/.test(pay));
-  await host.getByRole('button', { name: /^Pay \$10\.00/ }).click();
+  check(`Pay shows amount and destination before signing: ${pay.slice(0, 120)}`, /\$4\.00 \(2 × \$2\.00\) to 0x7b1e0a5f3c2d4e6f8091a2b3c4d5e6f708192a3b/.test(pay));
+  await host.getByRole('button', { name: /^Pay \$4\.00/ }).click();
   const t2 = await note();
   check(`Pay: ${t2.slice(0, 90)}`, /Paid 2 months of TEE hosting from leg 0/.test(t2));
   await host.locator('dt', { hasText: 'Months paid' }).locator('xpath=following-sibling::dd[1]').filter({ hasText: '2' }).waitFor({ timeout: 15000 });
@@ -341,6 +344,7 @@ await withAgent('hedged', () => withAgent('hedged', async () => {
   await page.getByRole('button', { name: 'Prepare agents' }).click();
   const t3 = await note();
   check(`Prepare agents goes to the TEE agent: ${t3.slice(0, 70)}`, /Agent keys prepared/.test(t3) && posts.some((p) => p.path === '8788/agents/prepare'));
+  check('Enable agent in TEE mode: one line instead of the agent account input, cap and cooldown kept', (await page.getByText(/the contract accepts only the TEE agent named above; your daily cap and cooldown still apply/).count()) === 1 && (await page.getByLabel('Agent account').count()) === 0 && (await page.getByLabel(/Daily cap/).count()) === 1);
   check('setup text for TEE mode', (await page.getByText(/in its own memory and the contract approves it for you/).count()) === 1);
   await shot(page, '32-tee-mode');
   await page.setViewportSize({ width: 390, height: 844 });
@@ -368,7 +372,7 @@ await withAgent('hedged', () => withAgent('hedged', async () => {
   for (const p of sent) if ((await verify.intentSigner(p.body, 'near-testnet', 'leash-spike-1107.testnet')) !== owner) allOwner = false;
   check('setTee and payTee intents recover to the owner', allOwner);
   const pay1 = sent[1].body.intent;
-  check('payTee carries priceMicro 5000000 and the fee address from get_config', pay1.priceMicro === 5000000 && pay1.feeAddress === '0x7b1e0a5f3c2d4e6f8091a2b3c4d5e6f708192a3b' && pay1.months === 2 && pay1.leg === 0);
+  check('payTee carries priceMicro 2000000 and the fee address from get_config', pay1.priceMicro === 2000000 && pay1.feeAddress === '0x7b1e0a5f3c2d4e6f8091a2b3c4d5e6f708192a3b' && pay1.months === 2 && pay1.leg === 0);
   const zero = sent[2].body.intent;
   check('leaving signs setTee with the zero hash and an empty account', /^0x0{64}$/.test(zero.measurementHash) && zero.agentAccount === '');
   check('no page errors (TEE)', errors.length === 0, errors.join(' | '));

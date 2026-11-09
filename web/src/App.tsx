@@ -96,7 +96,8 @@ export function App({ auth }: { auth: Auth }) {
   const coins = view?.orderPolicy.allowedCoins ?? ['BTC', 'ETH'];
   const legs = view?.snapshot.legs ?? [];
   const topLegs = view?.legs ?? [];
-  const agentValue = agentId ?? view?.config?.agentAccount ?? AGENT_ACCOUNT;
+  // in TEE mode the contract's agent check is the TEE account named in setTee
+  const agentValue = teeMode ? (tee?.tee?.agent_account ?? '') : (agentId ?? view?.config?.agentAccount ?? AGENT_ACCOUNT);
   const registered = new Set(legs.map((l) => l.leg));
   const policy = view?.policy ?? null;
 
@@ -341,10 +342,14 @@ export function App({ auth }: { auth: Auth }) {
                     <span className={policy?.agent ? 'ok' : 'todo'}>{policy?.agent ? 'done' : 'to do'}</span>
                   </div>
                   <div className="fields">
-                    <label>
-                      Agent account
-                      <input value={agentValue} onChange={(e) => setAgentId(e.target.value)} spellCheck={false} />
-                    </label>
+                    {teeMode ? (
+                      <p className="muted small">TEE mode: the contract accepts only the TEE agent named above; your daily cap and cooldown still apply.</p>
+                    ) : (
+                      <label>
+                        Agent account
+                        <input value={agentValue} onChange={(e) => setAgentId(e.target.value)} spellCheck={false} />
+                      </label>
+                    )}
                     <label>
                       Daily cap, USDC
                       <input value={cap} onChange={(e) => setCap(e.target.value)} inputMode="decimal" aria-invalid={!DECIMAL.test(cap)} />
