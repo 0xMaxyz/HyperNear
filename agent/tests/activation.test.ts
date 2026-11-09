@@ -75,6 +75,12 @@ const withAct = (src: Act, dst: Act) => {
   return s;
 };
 
+// a leg with a strategy budget is topped up from the reserve leg 2 only
+const withReserve = (s: OwnerSnapshot) => {
+  s.legs.push({ leg: 2, address: '0x1111111111111111111111111111111111111111', agent: null, clearinghouse: ch({ accountValue: 30, maint: 0, withdrawable: 30 }), spotUsdc: 0, activation: 'paid' });
+  return s;
+};
+
 describe('guard rebalance with HL activation', () => {
   it('a missing target is sent 1 more, so it receives what the guard computed', () => {
     expect(run(withAct('paid', 'paid'))).toMatchObject({ amount: '1.00', activationFeeUsd: 0 });
@@ -94,8 +100,7 @@ describe('guard rebalance with HL activation', () => {
 
   it('counts the activation fee against the strategy top-up budget', () => {
     const big = { ...DEFAULT_LOOP_CONFIG, targetMultiple: 100 };
-    const s = withAct('paid', 'owed-on-credit');
-    s.legs.push({ leg: 2, address: '0x1111111111111111111111111111111111111111', agent: null, clearinghouse: ch({ accountValue: 30, maint: 0, withdrawable: 30 }), spotUsdc: 0, activation: 'paid' });
+    const s = withReserve(withAct('paid', 'owed-on-credit'));
     expect(run(s, policy(), big, 5)).toMatchObject({ amount: '5.00', activationFeeUsd: 1 }); // 4 reach the leg, 5 leave the reserve
     expect(run(s, policy(), big, 1.5)).toMatchObject({ kind: 'blocked', reason: expect.stringContaining('budget used') });
   });
@@ -110,7 +115,7 @@ describe('strategy leg top-ups', () => {
   it('the first top-up of a fresh leg loses 1 USDC (budget and PnL), the second does not', async () => {
     const runner = new StrategyRunner({ spec: v.spec, port, policy: ctx.orderPolicy, emit: () => {}, isFrozen: async () => false });
     const cap = v.spec.limits.topUpCapPerDay;
-    const s = withAct('paid', 'owed-on-credit');
+    const s = withReserve(withAct('paid', 'owed-on-credit'));
     const next = () => run(s, policy({ cooldown_sec: 0 }), DEFAULT_LOOP_CONFIG, () => runner.topUpLeft());
     const first = next();
     expect(first).toMatchObject({ kind: 'rebalance', amount: '2.00', activationFeeUsd: 1 });
