@@ -40,18 +40,30 @@ A Hyperliquid master key is a bare EOA. Whoever holds it can approve any agent, 
 
 Guaranteed by the contract:
 
-- Contract-signed USDC moves only between the owner's registered legs, or to the owner. An agent or relayer cannot send funds anywhere else.
+- Contract-signed USDC moves only between the owner's registered legs, or to the owner, or, on the owner's own `payTee` signature naming the amount and address, the published TEE fee to the published fee address (fixed when the contract is created). An agent or relayer cannot send funds anywhere else.
 - The agent's moves are bounded by the owner's daily cap and cooldown.
 - After `freeze`, the contract signs nothing except the owner's withdraw and unfreeze, and Hyperliquid cancels of the frozen legs' resting orders (`cancel_orders`, which anyone may call while the owner is frozen: a cancel cannot move funds).
 
 Not guaranteed:
 
 - **Trades can still lose money.** The contract limits where funds can go, not whether they are lost. An agent key can trade a leg badly, and a leg can be liquidated.
-- **Order policy is checked off-chain**, in the agent (leverage, notional, coins). The contract cannot read Hyperliquid state. A TEE for the agent is a next step, not part of this repo.
+- **Order policy is checked off-chain**, in the agent (leverage, notional, coins). The contract cannot read Hyperliquid state. The optional [TEE mode](#optional-tee-mode-not-yet-run-on-real-hardware) moves this check into code the owner picks by its measurement, but it has not yet run on real TEE hardware.
 - **Resting orders need a second step after a freeze.** Freeze revokes the old API wallets, but orders already on the book stay until someone calls `cancel_orders`. Our agent does it right after a freeze it relays (claim C20); if our server is gone, anyone with a NEAR account can run `node agent/scripts/clear-frozen.ts 0x<owner>`. Between the freeze and that sweep (18.5 s on testnet), a resting order can still fill.
 - **The owner must be an EOA** (for example MetaMask; a Privy embedded wallet is untested, C13). Smart-contract wallets (Safe, ERC-1271) are not supported.
 - Funding a fresh leg costs 1 USDC of Hyperliquid activation fee; withdrawals cost 1 USDC.
 - After a mainnet deploy the runbook deletes the contract's full-access keys (step 10; the mainnet run has not happened yet). That makes the contract account the custody root: nobody, including us, can upgrade it afterwards.
+
+## Optional TEE mode (not yet run on real hardware)
+
+By default our server runs the agent, so the owner trusts us with the order policy, the trading keys and the kill switch. An owner can instead choose **TEE mode** (paid, USDC per month) in the web UI:
+
+- `setTee {measurementHash, agentAccount}` (owner-signed) names one agent instance and the code measurement the owner accepts. While it is set, only that NEAR account, registered with a matching unexpired attestation, may `rebalance` or `agent_usd_class_transfer` for the owner, and the owner's own `approveAgent` is refused.
+- `register_tee_agent` verifies an Intel TDX quote **inside the contract** (the `shade-attestation` / `dcap-qvl` verifier, vendored) and binds it to the caller's implicit-account key; a reused quote is refused and registrations expire after 7 days. Verifying one real recorded quote on testnet burned 187 TGas (T0, tx [4QTqwXfG…](https://testnet.nearblocks.io/txns/4QTqwXfGn9hfVohdyJZHPcaaoaSNju5FBwDA4HW4sC6f), [`validation/results/T0.json`](validation/results/T0.json)).
+- The TEE agent makes fresh Hyperliquid trading keys per boot, in memory only, and gets them approved through `tee_approve_agent`. Leaving or switching (`setTee` to another hash or to zero) revokes those keys in the same transaction.
+- `payTee {leg, months, priceMicro, feeAddress}` signs a `usdSend` of exactly what the owner saw; the agent serves only owners whose payments actually landed in the Hyperliquid ledger.
+- Run it: the agent with `HYPERNEAR_RUN_MODE=tee` (`Dockerfile`, `docker-compose.tee.yml`); the server agent (`HYPERNEAR_RUN_MODE=server`, the default) skips owners in TEE mode.
+
+**Status, plainly:** the owner-binding, payment and revocation logic passed 14 of 14 live checks on NEAR and Hyperliquid testnet (claim C21), but with a **dev registration** (`register_tee_agent_dev`, testnet builds only) instead of a TDX quote. On-chain quote verification is shown only by T0's recorded quote. The agent has **not yet run on a real Phala TDX machine**, so the full chain (real quote → registration → trading) is unproven. Even when it runs: the TEE gives no liveness (freeze and the `cancel_orders` sweep stay the fallback), the agent's AI API keys are passed as unmeasured environment variables, and TDX itself has known side-channel limits.
 
 ## NEAR features used
 
@@ -87,7 +99,7 @@ Expected: exit code 0 and these summary lines (live tests are skipped without cr
 packages/core test:       Tests  289 passed (289)
 packages/hypernear-client test:       Tests  44 passed | 1 skipped (45)
 validation test:       Tests  4 passed | 21 skipped (25)
-agent test:       Tests  310 passed | 9 skipped (319)
+agent test:       Tests  347 passed | 9 skipped (356)
 ```
 
 **3. Contract tests.**
@@ -96,7 +108,7 @@ agent test:       Tests  310 passed | 9 skipped (319)
 cd contract && cargo test && cd ..
 ```
 
-Expected: `test result: ok. 53 passed; 0 failed`. They cover the owner-intent digests against viem signatures, replay and burned nonces, the cap and cooldown, rebalance to a foreign address, freeze, the Hyperliquid digests and the L1 cancel digests against the SDK vectors.
+Expected: `test result: ok. 71 passed; 0 failed` (75 with `--features spike`). They cover the owner-intent digests against viem signatures, replay and burned nonces, the cap and cooldown, rebalance to a foreign address, freeze, the Hyperliquid digests, the L1 cancel digests against the SDK vectors, and TEE mode (a recorded real TDX quote verifies, a tampered or reused one is refused, a stranger instance and the server agent are refused, keys are burned on a switch, the fee terms the owner signed).
 
 **4. Agent dry run (recorded testnet data, no keys, no network).**
 
