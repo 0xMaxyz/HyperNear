@@ -18,6 +18,8 @@ export interface TeeLedgerPort {
 /**
  * Reads HL's userNonFundingLedgerUpdates of the owner's legs and adds up usdSends (ledger type internalTransfer, or a
  * `send`) to the fee address; the caller requires months_paid x tee_price_usd, so a payTee whose usdSend never landed gets no service.
+ * `usdc` is what the owner sent (gross), whatever the activation fee did: testnet ledger rows show usdc 5.0 / fee 1.0 to a never-seen
+ * destination that was credited 4 (validation/results/C10-ledger.json); mainnet rows charge the 1 USDC to the sender separately. So `fee` is never added.
  */
 export function hlLedgerPort(hl: Pick<HlClient, 'userNonFundingLedgerUpdates'>): TeeLedgerPort {
   return {

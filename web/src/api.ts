@@ -21,12 +21,15 @@ export interface Position {
   unrealizedPnl: string;
   leverage: { type: string; value: number };
 }
+/** Hyperliquid's 1 USDC new-account fee: paid, owed on the first credit (never-seen account) or owed on the first transfer out (agent/src/activation.ts) */
+export type Activation = 'paid' | 'owed-on-credit' | 'owed-on-first-send';
 export interface LegSnap {
   leg: number;
   address: Hex;
   agent: { address: Hex; name: string; approvedAt?: number | null } | null;
   clearinghouse: { marginSummary: { accountValue: string }; withdrawable: string; assetPositions: { position: Position }[] };
   spotUsdc: number;
+  activation: Activation;
 }
 export interface OwnerPolicy {
   nonce: number;
@@ -53,7 +56,7 @@ export interface OwnerView {
   orderPolicy: { maxLeverage: number; maxNotionalUsd: number; allowedCoins: string[]; slippage: number };
   guard: GuardRow[];
   breakeven?: unknown;
-  config?: { contractId: string; chainTag: ChainTag; agentAccount: string | null; hlNetwork: 'testnet' | 'mainnet' };
+  config?: { contractId: string; chainTag: ChainTag; agentAccount: string | null; hlNetwork: 'testnet' | 'mainnet'; teeFeeActivation?: Activation | null };
   /** the exact approveAgent intents to sign, one per leg whose key Hyperliquid has not approved */
   pendingApprovals?: PendingApproval[];
   decision?: { mode: DecisionMode; latest: (Decision & { status: 'open' | 'accepted' | 'rejected' | 'expired'; at: number }) | null };

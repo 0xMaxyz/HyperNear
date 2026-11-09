@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ChainTag } from '@hypernear/client';
-import type { LegSnap } from './api';
+import type { Activation, LegSnap } from './api';
 import { HASH_RE, inTeeMode, isDevRun, nsToDate, priceMicro, usd, type TeeAgentInfo, type TeeState } from './tee';
 
 /** Set once a TEE image is published with a Phala verification page; until then no link is shown. */
@@ -13,6 +13,8 @@ interface Props {
   /** the TEE agent's address is configured (VITE_TEE_AGENT_URL) */
   teeUrl?: string;
   legs: LegSnap[];
+  /** the TEE fee address's activation state: owed-on-credit means 1 USDC of a payment to it is lost */
+  feeActivation?: Activation | null;
   chainTag: ChainTag;
   canSign: boolean;
   busy: string | null;
@@ -116,7 +118,9 @@ function TeeCard(p: Props & { state: TeeState; mode: 'server' | 'tee'; offered: 
   const payLeg = p.legs.find((l) => l.leg === leg) ?? p.legs[0];
   const legFree = payLeg ? Number(payLeg.clearinghouse.withdrawable) + payLeg.spotUsdc : 0;
   const hashOk = HASH_RE.test(hash.trim());
-  const short = monthsOk && payLeg !== undefined && legFree < total / 1e6;
+  // the paying leg's first transfer out costs it 1 USDC on top; a never-seen fee address keeps 1 USDC of what arrives
+  const sendFee = payLeg?.activation === 'owed-on-first-send' ? 1 : 0;
+  const short = monthsOk && payLeg !== undefined && legFree < total / 1e6 + sendFee;
 
   async function look() {
     setLookErr(undefined);
@@ -207,8 +211,10 @@ function TeeCard(p: Props & { state: TeeState; mode: 'server' | 'tee'; offered: 
           </div>
           <p className="small" aria-live="polite">
             You pay <strong>{usd(total)}</strong> ({monthsOk ? m : '?'} × {usd(perMonth)}) to <code title={s.feeAddress}>{s.feeAddress}</code>, sent from leg {payLeg?.leg ?? '?'}&apos;s Hyperliquid account
-            {payLeg && <span className={short ? 'flag' : 'muted'}> ({usd(legFree * 1e6)} available there{short ? `, ${usd(total)} needed: not enough, move USDC to leg ${payLeg.leg} or pick another leg` : ''})</span>}.
+            {payLeg && <span className={short ? 'flag' : 'muted'}> ({usd(legFree * 1e6)} available there{short ? `, ${usd(total + sendFee * 1e6)} needed: not enough, move USDC to leg ${payLeg.leg} or pick another leg` : ''})</span>}.
           </p>
+          {sendFee > 0 && <p className="muted small">Leg {payLeg?.leg}&apos;s first transfer out costs {usd(1e6)} extra (Hyperliquid activation), so it needs {usd(total + 1e6)} in all.</p>}
+          {p.feeActivation === 'owed-on-credit' && <p className="flag small">The fee address is new to Hyperliquid: {usd(1e6)} of this payment goes to its activation, so it receives {usd(Math.max(0, total - 1e6))}.</p>}
           <button className="primary" disabled={!p.canSign || p.busy !== null || !monthsOk || !payLeg || short} title={short ? 'Not enough USDC on this leg' : p.why} onClick={() => p.onPay(payLeg!.leg, m)}>
             {p.busy === 'tee-pay' ? 'Waiting for signature…' : `Pay ${usd(total)}: sign`}
           </button>

@@ -1,10 +1,15 @@
 // Fund a leg's Hyperliquid account with USDC through NEAR Intents 1Click (USDC -> HyperCore USDC, recipient = the leg).
-//   node agent/scripts/fund-leg-1click.ts --to <leg 0x…> --amount 10 --from near|arb [--refund-to <addr>] [--execute]
+//   node agent/scripts/fund-leg-1click.ts --to <leg 0x…> --amount 10 --from near|arb [--refund-to <addr>] [--network testnet|mainnet] [--execute]
+// A never-seen leg loses 1 USDC activation fee from its first credit (expectedCredit shows it; an amount of 1 or less is refused);
+// a seen leg that has never sent pays 1 USDC on its first transfer out instead (firstTransferOutFeeUsd).
 // Default is a DRY quote (dry: true): prints amount out, fees and ETA; nothing can be sent.
 // --execute asks for a real quote, prints the deposit address, then polls /v0/status until done. It never sends funds:
 // the user sends `amount` of the origin USDC to the deposit address from their own wallet.
 // Lands on the leg's HyperCore SPOT balance (hip1 USDC); move it to perp with an owner usdClassTransfer (toPerp).
 // Optional ONECLICK_JWT (bearer) for authenticated quotes.
+import { activationStatus } from '../src/activation.ts';
+import { hlClient } from '../src/market.ts';
+
 const API = process.env.ONECLICK_API ?? 'https://1click.chaindefuser.com';
 
 /** 1Click asset ids (GET /v0/tokens, checked 2026-11-07). */
@@ -21,6 +26,8 @@ export interface FundArgs {
   from: 'near' | 'arb';
   refundTo?: string;
   execute?: boolean;
+  /** Hyperliquid network the leg lives on (activation check); 1Click funds mainnet */
+  network?: 'testnet' | 'mainnet';
 }
 
 function units(amount: string, decimals: number): string {
@@ -43,6 +50,10 @@ async function call(path: string, init?: RequestInit): Promise<any> {
 export async function quote(a: FundArgs) {
   if (!/^0x[0-9a-fA-F]{40}$/.test(a.to)) throw new Error(`--to must be the leg's 0x address: ${a.to}`);
   const origin = ASSETS[a.from];
+  // a never-seen leg loses 1 USDC of its first credit (the leg then holds amount - 1); a seen leg that never sent pays 1 on its first transfer out
+  const status = await activationStatus(hlClient(a.network ?? 'mainnet'), a.to);
+  const activationFee = status === 'owed-on-credit' ? 1 : 0;
+  if (activationFee && Number(a.amount) <= activationFee) throw new Error(`--amount ${a.amount} is not above the ${activationFee} USDC activation fee of a new leg: nothing would arrive`);
   // dry quotes still need a well-formed refund address; real ones must be the user's own
   const refundTo = a.refundTo ?? (a.execute ? undefined : a.from === 'near' ? 'leash.near' : a.to);
   if (!refundTo) throw new Error('--refund-to is required with --execute (your own address on the origin chain)');
@@ -69,6 +80,9 @@ export async function quote(a: FundArgs) {
     amountOut: fmt(q.amountOut, ASSETS.hypercoreUsdc.decimals),
     minAmountOut: fmt(q.minAmountOut, ASSETS.hypercoreUsdc.decimals),
     amountOutUsd: q.amountOutUsd,
+    activationFeeUsd: activationFee,
+    firstTransferOutFeeUsd: status === 'owed-on-first-send' ? 1 : 0,
+    expectedCredit: q.amountOut === undefined ? '-' : (Number(q.amountOut) / 10 ** ASSETS.hypercoreUsdc.decimals - activationFee).toFixed(6),
     withdrawFee: fmt(q.withdrawFee, ASSETS.hypercoreUsdc.decimals),
     refundFee: fmt(q.refundFee, origin.decimals),
     appFeesBps: (res.quoteRequest?.appFees ?? []).map((f: { fee: number }) => f.fee),
@@ -100,7 +114,7 @@ function args(argv: string[]): FundArgs {
   };
   const from = (get('from') ?? 'near') as FundArgs['from'];
   if (from !== 'near' && from !== 'arb') throw new Error('--from near|arb');
-  return { to: get('to') ?? '', amount: get('amount') ?? '10', from, refundTo: get('refund-to'), execute: argv.includes('--execute') };
+  return { to: get('to') ?? '', amount: get('amount') ?? '10', from, refundTo: get('refund-to'), execute: argv.includes('--execute'), network: get('network') === 'testnet' ? 'testnet' : 'mainnet' };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

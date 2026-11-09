@@ -158,7 +158,7 @@ try {
   guard = new GuardLoop({
     legs, bus, agentId: nearAgentId, agentClient, owners: () => [ow],
     budgetLeftUsd: (o, leg) => manager.topUpLeft(o, leg),
-    onTopUp: (o, leg, usd) => manager.recordTopUp(o, leg, usd),
+    onTopUp: (o, leg, usd, fee) => manager.recordTopUp(o, leg, usd, fee),
     cfg: { intervalMs: 2000, guard: { ...DEFAULT_GUARD_CONFIG, marginFloorMultiple: FLOOR }, targetMultiple: TARGET, reserveLeg: RESERVE },
   });
   guard.start();

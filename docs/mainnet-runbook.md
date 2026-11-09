@@ -47,7 +47,9 @@ quotes from 2026-11-07. HL fees are Hyperliquid mainnet base rates.
    `... --execute --refund-to <your origin address>`: prints the deposit address and polls `/v0/status` to SUCCESS.
    Dry quotes for 10 USDC (2026-11-07): from NEAR USDC -> 9.6836 USDC out (min 9.5837), from Arbitrum USDC -> 9.6847
    (min 9.5848); fee 0.3153 + 1 bp, ETA 30-35 s. USDC lands on the leg's HyperCore **spot** balance; HL takes a
-   1 USDC activation fee from the first credit of a new address (C10).
+   1 USDC activation fee from the first credit of a new address (C10); an account funded fee-free pays it on its first
+   transfer out instead (the script prints `expectedCredit` and `firstTransferOutFeeUsd`; an amount of 1 or less to a new leg is refused).
+   **Before launch, activate the TEE fee address (send it at least 2 USDC), so owners never pay its activation.**
    *Abort point: a failed 1Click swap refunds to `--refund-to`.*
 
 6. **MAINNET: owner intents** (owner signs in the wallet, relayer sends `owner_execute`; ~0.0014 NEAR each, MPC 1 yocto):

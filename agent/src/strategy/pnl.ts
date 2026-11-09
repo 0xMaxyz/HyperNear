@@ -14,7 +14,9 @@ export interface PnlBreakdown {
   unrealized: number;
   /** funding received (+) or paid (-) since `since`, USD */
   funding: number;
-  /** realized - fees + unrealized + funding */
+  /** one-time 1 USDC HL activation fee taken from the first top-up of a fresh leg (set by the runner; absent when none) */
+  activation?: number;
+  /** realized - fees + unrealized + funding - activation */
   total: number;
   fills: number;
 }

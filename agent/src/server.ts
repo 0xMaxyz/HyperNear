@@ -29,6 +29,7 @@ import { ReplayCache, verifyCommand } from './commands.ts';
 import { DEFAULT_GUARD_CONFIG, evaluateGuard, type GuardConfig } from './guard.ts';
 import { GuardLoop } from './guardLoop.ts';
 import { HedgeRefused, Hedger } from './hedge.ts';
+import { activationStatus } from './activation.ts';
 import { guardInputs, Legs, pendingApprovals, type OwnerSnapshot } from './legs.ts';
 import { claudeEscalator } from './claude.ts';
 import { ACTION_IDS, proposeAction, type Action } from './decide.ts';
@@ -156,8 +157,8 @@ export function handler(d: Deps) {
         const latest = d.decider?.latest(owner);
         return reply(200, {
           owner,
-          config: { contractId: d.client.contractId, chainTag: cfg.chain_tag, agentAccount: d.config.nearAgent?.accountId ?? null, hlNetwork: cfg.hl_mainnet ? 'mainnet' : 'testnet' },
-          legs: snapshot.legs.map((l) => ({ leg: l.leg, address: l.address, agent: l.agent && { address: l.agent.address, name: l.agent.name, approvedAt: l.agent.approvedAt ?? null } })),
+          config: { contractId: d.client.contractId, chainTag: cfg.chain_tag, agentAccount: d.config.nearAgent?.accountId ?? null, hlNetwork: cfg.hl_mainnet ? 'mainnet' : 'testnet', teeFeeActivation: cfg.tee_fee_address ? await activationStatus(d.legs.hl, cfg.tee_fee_address) : null },
+          legs: snapshot.legs.map((l) => ({ leg: l.leg, address: l.address, activation: l.activation, agent: l.agent && { address: l.agent.address, name: l.agent.name, approvedAt: l.agent.approvedAt ?? null } })),
           // GET never creates state: keys appear after the owner's signed prepareAgents
           needsPrepare: snapshot.legs.some((l) => !l.agent),
           pendingApprovals: pendingApprovals(snapshot),
@@ -351,7 +352,7 @@ export function buildDeps(config: AgentConfig, tee?: TeeRuntime): Deps {
     owners: () => scope.filter(allOwners()),
     // a strategy leg is topped up only from the reserve leg and within the strategy's own daily budget
     budgetLeftUsd: (o, leg) => d.strategies?.topUpLeft(o, leg),
-    onTopUp: (o, leg, usd) => d.strategies?.recordTopUp(o, leg, usd),
+    onTopUp: (o, leg, usd, fee) => d.strategies?.recordTopUp(o, leg, usd, fee),
     cfg: { intervalMs: config.guard.intervalSec * 1000, guard: guardConfig, annualVol: config.guard.annualVol },
   });
   const hedger = new Hedger(legs, config.policy, bus);

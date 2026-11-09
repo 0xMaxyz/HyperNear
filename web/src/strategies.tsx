@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Hex } from 'viem';
 import { newCommand, type Command } from '@hypernear/client';
-import { ApiError, getJson, post, specHashOf, type AgentEvent, type DraftOk, type DraftRefused, type SpecChange, type StrategySpec, type StrategyStatus } from './api';
+import { ApiError, getJson, post, specHashOf, type AgentEvent, type LegSnap, type DraftOk, type DraftRefused, type SpecChange, type StrategySpec, type StrategyStatus } from './api';
 import { short } from './panels';
 
 const usd = (n: number | string) => `$${Number(n).toLocaleString('en-US', { maximumFractionDigits: 4 })}`;
@@ -52,6 +52,7 @@ const bad = (t: string) => /refused|rejected|error|lost|skipped:/.test(t);
 type Draft = { kind: 'ok'; text: string; res: DraftOk; hashOk: boolean | null } | { kind: 'refused'; text: string; errors: string[]; draft?: unknown };
 
 export function StrategiesPanel(p: {
+  legs?: LegSnap[];
   owner?: Hex;
   canSign: boolean;
   events: AgentEvent[];
@@ -193,7 +194,7 @@ export function StrategiesPanel(p: {
                 <dt>Largest exposure</dt><dd>{usd(draft.res.spec.limits.maxNotional)}</dd>
                 <dt>Stops after losing</dt><dd>{usd(draft.res.spec.limits.maxDailyLoss)} in a day</dd>
                 <dt>Leverage up to</dt><dd>{draft.res.spec.limits.maxLeverage}x</dd>
-                <dt>Guard top-ups</dt><dd>{usd(draft.res.spec.limits.topUpCapPerDay)} a day</dd>
+                <dt>Guard top-ups</dt><dd>{usd(draft.res.spec.limits.topUpCapPerDay)} a day{p.legs?.find((l) => l.leg === draft.res.spec.leg)?.activation === 'owed-on-credit' && <span className="flag small"> (leg {draft.res.spec.leg} is new: its first top-up loses 1 USDC activation, counted in this budget)</span>}</dd>
                 <dt>When stopped</dt><dd>{draft.res.spec.onStop === 'flatten' ? 'close the position' : 'cancel resting orders, keep the position'}</dd>
               </dl>
 

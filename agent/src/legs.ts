@@ -5,6 +5,7 @@ import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import type { Hex } from 'viem';
 import type { HlClearinghouseState, HlClient } from '@perps-platform/core';
 import { HyperNearClient, NearMasterSigner, type OwnerIntentTypedData } from '@hypernear/client';
+import { activationStatus, type Activation } from './activation.ts';
 import { agentKeySigner, hlClient, readMarket, type Market } from './market.ts';
 import type { GuardLegInput } from './guard.ts';
 
@@ -85,6 +86,8 @@ export interface LegState {
   agent: { address: Hex; name: string; approvedAt?: number } | null;
   clearinghouse: HlClearinghouseState;
   spotUsdc: number;
+  /** HL's 1 USDC new-account fee: paid, or still owed on the next credit / on the first transfer out (activation.ts) */
+  activation: Activation;
 }
 
 export interface OwnerSnapshot {
@@ -121,12 +124,13 @@ export class Legs {
     const [regs, market] = await Promise.all([this.registered(o), readMarket(this.hl, this.coins)]);
     const legs = await Promise.all(
       regs.map(async ({ leg, address }) => {
-        const [clearinghouse, spot] = await Promise.all([
+        const [clearinghouse, spot, activation] = await Promise.all([
           this.hl.clearinghouseState({ user: address }),
           this.hl.spotClearinghouseState({ user: address }),
+          activationStatus(this.hl, address),
         ]);
         const spotUsdc = Number(spot.balances.find((b) => b.coin === 'USDC')?.total ?? 0);
-        return { leg, address, agent: this.keys.get(o, leg) ?? null, clearinghouse, spotUsdc };
+        return { leg, address, agent: this.keys.get(o, leg) ?? null, clearinghouse, spotUsdc, activation };
       })
     );
     return { owner: o, at: Date.now(), legs, market };

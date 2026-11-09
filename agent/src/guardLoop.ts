@@ -35,7 +35,7 @@ export const DEFAULT_LOOP_CONFIG: GuardLoopConfig = {
 export type RebalancePlan =
   | { kind: 'none' }
   | { kind: 'blocked'; stressedLeg: number; reason: string }
-  | { kind: 'rebalance'; from: { leg: number; address: Hex }; to: { leg: number; address: Hex }; amount: string; reasons: string[] };
+  | { kind: 'rebalance'; from: { leg: number; address: Hex }; to: { leg: number; address: Hex }; amount: string; reasons: string[]; /** USDC of `amount` that HL keeps as the new leg's activation fee (0 or 1); the leg receives amount - activationFeeUsd */ activationFeeUsd: 0 | 1; /** extra USDC the source leg pays for its first transfer out (not part of `amount`) */ sourceFeeUsd: 0 | 1 };
 
 const DAY_MS = 86_400_000;
 
@@ -79,17 +79,22 @@ export function planRebalance(
     .sort((a, b) => b.ratio - a.ratio || b.withdrawable - a.withdrawable);
   const src = sources[0];
   if (!src) return blocked(budget === undefined ? 'no other leg without a strategy has withdrawable USDC' : `reserve leg ${cfg.reserveLeg} has no withdrawable USDC`);
-  if (budget !== undefined && budget < cfg.minUsd) return blocked(`strategy top-up budget used (leg ${stressed}: $${budget.toFixed(2)} left today)`);
+  const to = s.legs.find((l) => l.leg === stressed)!;
+  const fee = to.activation === 'owed-on-credit' ? 1 : 0; // HL keeps 1 USDC of the first credit to a never-seen account (sent on top, so the leg receives what the guard computed); a source leg that has never sent pays 1 more
+  if (budget !== undefined && budget < cfg.minUsd + fee) return blocked(`strategy top-up budget used (leg ${stressed}: $${budget.toFixed(2)} left today${fee ? ', 1 USDC of it is the leg HL activation fee' : ''})`);
   const st = legRatio(s, stressed);
   const needed = Math.max(cfg.targetMultiple * st.maint - st.accountValue, cfg.minUsd);
-  const amount = Math.floor(Math.min(needed, src.withdrawable * cfg.withdrawableShare, capLeftUsd, budget ?? Number.POSITIVE_INFINITY) * 100) / 100;
+  const sourceFee = s.legs.find((l) => l.leg === src.leg)!.activation === 'owed-on-first-send' ? 1 : 0;
+  const amount = Math.floor(Math.min(needed, src.withdrawable * cfg.withdrawableShare - fee - sourceFee, capLeftUsd, (budget ?? Number.POSITIVE_INFINITY) - fee) * 100) / 100;
   if (amount < cfg.minUsd) return blocked(`only $${amount.toFixed(2)} available (withdrawable / daily cap)`);
-  const to = s.legs.find((l) => l.leg === stressed)!;
+  if (amount + fee > capLeftUsd) return blocked(`$${amount.toFixed(2)} + 1 USDC HL activation fee for leg ${stressed} exceeds the daily cap left ($${capLeftUsd.toFixed(2)})`);
   return {
     kind: 'rebalance',
     from: { leg: src.leg, address: src.address },
     to: { leg: stressed, address: to.address },
-    amount: amount.toFixed(2),
+    amount: (amount + fee).toFixed(2),
+    activationFeeUsd: fee,
+    sourceFeeUsd: sourceFee,
     reasons: triggered.filter((r) => r.id.startsWith(`leg${stressed}:`)).flatMap((r) => r.reasons),
   };
 }
@@ -103,8 +108,8 @@ export interface GuardLoopDeps {
   owners: () => Hex[] | Promise<Hex[]>;
   /** per-strategy daily top-up budget left on a leg (manager.topUpLeft); undefined = no strategy there */
   budgetLeftUsd?: (owner: Hex, leg: number) => number | undefined;
-  /** called after a top-up was posted to HL (manager.recordTopUp) */
-  onTopUp?: (owner: Hex, leg: number, usd: number) => void;
+  /** called after a top-up was posted to HL (manager.recordTopUp); usd is what was sent, activationFeeUsd the part HL kept */
+  onTopUp?: (owner: Hex, leg: number, usd: number, activationFeeUsd: number) => void;
   cfg?: Partial<GuardLoopConfig>;
   now?: () => number;
 }
@@ -173,7 +178,7 @@ export class GuardLoop {
       });
       const res = await hlClient(this.d.legs.network, { master: signer }).usdSend({ destination: plan.to.address, amount: plan.amount });
       this.d.bus.emit('guard.rebalance.posted', { owner, hl: res, ms: now() - t0 });
-      this.d.onTopUp?.(owner, plan.to.leg, Number(plan.amount));
+      this.d.onTopUp?.(owner, plan.to.leg, Number(plan.amount), plan.activationFeeUsd);
       this.#last.delete(owner); // the next tick reports the new state (ok, or still stressed)
       return plan;
     } finally {

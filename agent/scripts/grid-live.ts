@@ -12,6 +12,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { HyperNearClient, NearMasterSigner, nearAccount, ownerIntentTypedData, type OwnerIntent } from '@hypernear/client';
 import { EventBus } from '../src/events.ts';
 import { Legs } from '../src/legs.ts';
+import { activationStatus } from '../src/activation.ts';
 import { agentKeySigner, hlClient, position } from '../src/market.ts';
 import { StrategyManager } from '../src/strategy/manager.ts';
 import { hlPort } from '../src/strategy/port.ts';
@@ -21,7 +22,7 @@ const RPC = 'https://test.rpc.fastnear.com';
 const PUBLIC_TEST_OWNER_KEY = '0x4c0883a69102937d6231471b5dbb6204fe5129617082792ae468d01a3f362318';
 const LEG = 3;
 const LAB_INDEX = 3; // lab wallets 1-10 only; the rest belong to the load tests
-const FUND_USD = 26; // 25 to trade with + the 1 USDC HL activation fee
+const TRADE_USD = 25; // what the leg should hold; the send adds HL's 1 USDC activation fee when the leg is new
 const TICK_MS = 5000;
 
 const keyOf = (id: string) => JSON.parse(readFileSync(`${homedir()}/.near-credentials/testnet/${id}.json`, 'utf8')).private_key as string;
@@ -77,6 +78,7 @@ const legAddr = await client.registerLeg(ow, LEG);
 console.log(`owner ${ow}; strategy leg ${LEG} ${legAddr}`);
 const before = await total(legAddr);
 if (before.perp + before.spot < 20) {
+  const FUND_USD = TRADE_USD + ((await activationStatus(legs.hl, legAddr)) === 'owed-on-credit' ? 1 : 0);
   if (labBefore.perp + labBefore.spot < FUND_USD + 8) throw new Error(`lab wallet #${LAB_INDEX} holds $${(labBefore.perp + labBefore.spot).toFixed(2)}: not enough to fund leg ${LEG} and trade`);
   const r = await lab.usdSend({ destination: legAddr, amount: String(FUND_USD) });
   console.log(`usdSend $${FUND_USD} lab #${LAB_INDEX} -> leg ${LEG}: ${JSON.stringify(r)}`);

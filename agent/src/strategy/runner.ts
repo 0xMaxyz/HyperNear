@@ -29,6 +29,8 @@ export interface RunnerSaved {
   twap: TwapState;
   /** guard top-ups taken today (UTC day number, USD): the strategy's topUpCapPerDay is checked against this */
   topUp: { day: number; usd: number };
+  /** USD HL kept as the leg's one-time activation fee out of the first guard top-up (pnl.activation) */
+  activationUsd?: number;
   /** epoch ms the strategy first started: PnL is counted from here */
   startedAt: number;
   /** grid orders placed / filled (the fill rate fact) */
@@ -60,6 +62,7 @@ export class StrategyRunner {
   grid: GridState = emptyGrid();
   twap: TwapState = { done: 0, skipped: 0, filledSize: 0, nextAt: 0 };
   topUp = { day: 0, usd: 0 };
+  activationUsd = 0;
   startedAt: number;
   gridStats = { placed: 0, filled: 0 };
   /** PnL at the last tick (pnl.ts: fills, positions at mark and funding since startedAt; never equity). */
@@ -81,14 +84,20 @@ export class StrategyRunner {
     if (o.initial?.held) this.grid = { held: o.initial.held, orders: {} };
     if (o.initial?.twap) this.twap = { ...o.initial.twap };
     if (o.initial?.topUp) this.topUp = { ...o.initial.topUp };
+    this.activationUsd = o.initial?.activationUsd ?? 0;
   }
 
   snapshot(): RunnerSaved {
-    return { state: this.state, held: this.grid.held, twap: this.twap, topUp: this.topUp, startedAt: this.startedAt, gridStats: this.gridStats };
+    return { state: this.state, held: this.grid.held, twap: this.twap, topUp: this.topUp, activationUsd: this.activationUsd, startedAt: this.startedAt, gridStats: this.gridStats };
   }
 
   async refreshPnl() {
-    this.lastPnl = await this.#o.port.pnl(this.startedAt).catch(() => this.lastPnl);
+    this.lastPnl = await this.#o.port.pnl(this.startedAt).then((p) => this.#withActivation(p), () => this.lastPnl);
+  }
+
+  /** The one-time HL activation fee is a cost of this strategy's leg: shown as its own line and part of the total. */
+  #withActivation(p: PnlBreakdown): PnlBreakdown {
+    return this.activationUsd ? { ...p, activation: this.activationUsd, total: p.total - this.activationUsd } : p;
   }
 
   /** USD of the daily top-up budget (limits.topUpCapPerDay) left today. */
@@ -97,8 +106,10 @@ export class StrategyRunner {
     return Math.max(0, this.spec.limits.topUpCapPerDay - (this.topUp.day === day ? this.topUp.usd : 0));
   }
 
-  addTopUp(usd: number) {
+  /** usd is what the guard sent (the budget counts all of it); activationUsd of it was kept by HL as the new leg's fee. */
+  addTopUp(usd: number, activationUsd = 0) {
     const day = Math.floor(this.#now / DAY_MS);
+    this.activationUsd += activationUsd;
     this.topUp = { day, usd: (this.topUp.day === day ? this.topUp.usd : 0) + usd };
     this.#o.onChange?.();
   }
@@ -143,7 +154,7 @@ export class StrategyRunner {
 
     // limits.maxDailyLoss: the strategy's own PnL since it started (fills, positions at mark, funding), so a guard top-up
     // is not a gain and an owner transfer is not a loss. shortcut: counted since the start, not reset each UTC day.
-    const pnl = (this.lastPnl = await port.pnl(this.startedAt));
+    const pnl = (this.lastPnl = this.#withActivation(await port.pnl(this.startedAt)));
     if (pnl.total < -spec.limits.maxDailyLoss) {
       return this.pause(`loss limit: PnL ${pnl.total.toFixed(2)} USD since the start (realized ${pnl.realized.toFixed(2)}, fees ${pnl.fees.toFixed(2)}, unrealized ${pnl.unrealized.toFixed(2)}, funding ${pnl.funding.toFixed(2)}) is below -${spec.limits.maxDailyLoss}`);
     }

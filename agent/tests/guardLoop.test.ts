@@ -24,6 +24,8 @@ describe('planRebalance', () => {
       to: { leg: 1, address: '0x8056c4fa3aad69cf04c2ade906c58489e76c9986' },
       amount: '1.00',
       reasons: ['margin_floor'],
+      activationFeeUsd: 0,
+      sourceFeeUsd: 0,
     });
   });
 
@@ -78,7 +80,7 @@ describe('GuardLoop.tick (detect-only, no agent key)', () => {
 describe('planRebalance for a strategy leg (per-strategy budget, reserve leg only)', () => {
   const withReserve = () => {
     const s = snap(healthy(), stressed());
-    s.legs.push({ leg: 2, address: '0x1111111111111111111111111111111111111111', agent: null, clearinghouse: ch({ accountValue: 30, maint: 0, withdrawable: 30 }), spotUsdc: 0 });
+    s.legs.push({ leg: 2, address: '0x1111111111111111111111111111111111111111', agent: null, clearinghouse: ch({ accountValue: 30, maint: 0, withdrawable: 30 }), spotUsdc: 0, activation: 'paid' });
     return s;
   };
   const run = (budget: number | undefined, cfg = { ...DEFAULT_LOOP_CONFIG, targetMultiple: 100 }) => {
@@ -104,7 +106,7 @@ describe('planRebalance for a strategy leg (per-strategy budget, reserve leg onl
     const s = withReserve();
     s.legs = s.legs.filter((l) => l.leg !== 2);
     // leg 3 runs a grid: richest and healthiest, so it would win the sort without the filter
-    s.legs.push({ leg: 3, address: '0x3333333333333333333333333333333333333333', agent: null, clearinghouse: ch({ accountValue: 50, maint: 0, withdrawable: 50 }), spotUsdc: 0 });
+    s.legs.push({ leg: 3, address: '0x3333333333333333333333333333333333333333', agent: null, clearinghouse: ch({ accountValue: 50, maint: 0, withdrawable: 50 }), spotUsdc: 0, activation: 'paid' });
     const grid = (leg: number) => (leg === 3 ? 5 : undefined);
     const p = (snapshot: typeof s) => planRebalance(snapshot, evaluateGuard(guardInputs(snapshot, 0.6), DEFAULT_GUARD_CONFIG), policy(), 'agent.testnet', NOW, DEFAULT_LOOP_CONFIG, grid);
     expect(p(s)).toMatchObject({ kind: 'rebalance', from: { leg: 0 }, to: { leg: 1 } });

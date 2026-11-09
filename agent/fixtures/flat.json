@@ -32,7 +32,8 @@
           "assetPositions": [],
           "time": 1794058102336
         },
-        "spotUsdc": 0.2
+        "spotUsdc": 0.2,
+        "activation": "paid"
       },
       {
         "leg": 1,
@@ -60,7 +61,8 @@
           "assetPositions": [],
           "time": 1794058102336
         },
-        "spotUsdc": 0
+        "spotUsdc": 0,
+        "activation": "paid"
       },
       {
         "leg": 2,
@@ -88,7 +90,8 @@
           "assetPositions": [],
           "time": 1794058102336
         },
-        "spotUsdc": 0
+        "spotUsdc": 0,
+        "activation": "paid"
       }
     ],
     "market": {

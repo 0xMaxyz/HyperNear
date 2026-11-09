@@ -292,6 +292,7 @@ export function App({ auth }: { auth: Auth }) {
             error={teeErr}
             teeUrl={TEE_AGENT_URL}
             legs={legs}
+            feeActivation={view?.config?.teeFeeActivation}
             chainTag={chainTag}
             canSign={canSign}
             busy={busy}
@@ -407,7 +408,7 @@ export function App({ auth }: { auth: Auth }) {
             </div>
           </div>
 
-          <StrategiesPanel owner={owner} canSign={canSign} events={mine} sign={signCommand} tick={view?.snapshot.at} />
+          <StrategiesPanel legs={legs} owner={owner} canSign={canSign} events={mine} sign={signCommand} tick={view?.snapshot.at} />
 
           <Activity events={mine.filter((e) => !e.type.startsWith('strategy.'))} stream={stream} scan={nearScan(chainTag)} />
         </main>

@@ -175,6 +175,20 @@ describe('hlLedgerPort', () => {
   });
 });
 
+describe('hlLedgerPort and the HL activation fee', () => {
+  const hl = (delta: Record<string, unknown>) => hlLedgerPort({ userNonFundingLedgerUpdates: async () => [{ time: 1, hash: '0x1', delta }] as never });
+  it('counts usdc as sent, whatever the fee row says: testnet row to a never-seen address (usdc 5.0, fee 1.0, credited 4)', async () => {
+    const port = hl({ type: 'internalTransfer', user: LEG0, destination: FEE, usdc: '5.0', fee: '1.0' });
+    expect(await port.feePaid({ legAddresses: [LEG0], feeAddress: FEE, minUsd: 5 })).toBe(true);
+    expect(await port.feePaid({ legAddresses: [LEG0], feeAddress: FEE, minUsd: 5.5 })).toBe(false); // the fee is never added on top
+  });
+  it('mainnet row: the first send paid fee 1.0 as the sender, the receiver got the full amount', async () => {
+    const port = hl({ type: 'send', user: LEG0, destination: FEE, token: 'USDC', amount: '5.0', usdcValue: '5.0', fee: '1.0', feeToken: 'USDC' });
+    expect(await port.feePaid({ legAddresses: [LEG0], feeAddress: FEE, minUsd: 5 })).toBe(true);
+    expect(await port.feePaid({ legAddresses: [LEG0], feeAddress: FEE, minUsd: 5.01 })).toBe(false);
+  });
+});
+
 describe('TEE boot', () => {
   const shade = (log: string[]) => ({
     accountId: () => 'a'.repeat(64),

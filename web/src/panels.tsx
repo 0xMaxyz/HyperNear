@@ -78,6 +78,8 @@ export function LegsTable({ view, loading, error }: { view?: OwnerView; loading:
                   <Addr a={l.address} />
                   <br />
                   <span className="muted">agent {l.agent ? (l.agent.approvedAt ? 'approved' : 'key made, not approved') : 'none'}</span>
+                  {l.activation === 'owed-on-credit' && <div className="flag small">new: first deposit loses 1 USDC activation</div>}
+                  {l.activation === 'owed-on-first-send' && <div className="flag small">first transfer out costs 1 USDC activation</div>}
                 </td>
                 <td data-label="Position">
                   {ps.length === 0 ? (
@@ -89,7 +91,10 @@ export function LegsTable({ view, loading, error }: { view?: OwnerView; loading:
                 <td data-label="Liquidation" className="num">
                   {ps.length === 0 ? <span className="muted">none</span> : ps.map((p) => <div key={p.coin}>{p.liquidationPx === null ? 'none' : usd(p.liquidationPx)}</div>)}
                 </td>
-                <td data-label="Withdrawable" className="num">{usd(l.clearinghouse.withdrawable)}</td>
+                <td data-label="Withdrawable" className="num">
+                  {usd(l.clearinghouse.withdrawable)}
+                  {l.activation === 'owed-on-first-send' && <div className="muted small">{usd(Math.max(0, Number(l.clearinghouse.withdrawable) - 1))} after the activation fee</div>}
+                </td>
                 <td data-label="Guard">
                   {ps.length === 0 ? (
                     <span className="muted">no position</span>

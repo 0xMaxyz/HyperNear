@@ -1,0 +1,20 @@
+{
+  "claim": "C10",
+  "title": "raw ledger row of a usdSend to a never-seen address (read from the testnet info API 2026-11-09)",
+  "network": "testnet",
+  "user": "0xcaAe712dAd9c944a42DAdc096DbF8178f5838fd6",
+  "note": "usdc is what the sender sent (gross: 5.0); the destination was credited 4 (C10.json). fee is the 1 USDC activation fee. On mainnet the same row shape appears but the destination gets the full amount and the sender is charged the fee (agent/tests/fixtures/activation-ledgers.json).",
+  "rows": [
+    {
+      "time": 1794054538102,
+      "hash": "0xa107a675a84fd58aa281042d9a03a5010300be5b4342f45c44d051c86743af75",
+      "delta": {
+        "type": "internalTransfer",
+        "usdc": "5.0",
+        "user": "0x75c450e9597b5ca41aa86b18f630f51278c350e3",
+        "destination": "0xcaae712dad9c944a42dadc096dbf8178f5838fd6",
+        "fee": "1.0"
+      }
+    }
+  ]
+}

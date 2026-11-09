@@ -20,7 +20,7 @@ function hedged(o: { u0?: string; u1?: string; maint0?: number; reserve?: number
   );
   s.legs[0]!.clearinghouse.assetPositions[0]!.position.unrealizedPnl = o.u0 ?? '-1';
   s.legs[1]!.clearinghouse.assetPositions[0]!.position.unrealizedPnl = o.u1 ?? '1.5';
-  if (o.reserve !== undefined) s.legs.push({ leg: 2, address: '0x0000000000000000000000000000000000000002', agent: null, clearinghouse: ch({ withdrawable: o.reserve }), spotUsdc: 0 });
+  if (o.reserve !== undefined) s.legs.push({ leg: 2, address: '0x0000000000000000000000000000000000000002', agent: null, clearinghouse: ch({ withdrawable: o.reserve }), spotUsdc: 0, activation: 'paid' });
   return s;
 }
 

@@ -92,8 +92,8 @@ export class StrategyManager {
     return this.#onLeg(owner, leg)?.topUpLeft();
   }
 
-  recordTopUp(owner: Hex, leg: number, usd: number) {
-    this.#onLeg(owner, leg)?.addTopUp(usd);
+  recordTopUp(owner: Hex, leg: number, usd: number, activationUsd = 0) {
+    this.#onLeg(owner, leg)?.addTopUp(usd, activationUsd);
   }
 
   /** Decision-layer facts for the owner's running (or finished, still holding) strategies, from a fresh leg snapshot. */
