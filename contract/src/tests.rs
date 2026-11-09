@@ -1033,34 +1033,102 @@ fn tee_approve_agent_signs_the_fixed_name_records_the_key() {
     });
 }
 
+/// The (path, digest) of a burn approveAgent for each (leg, name), in slot order, as freeze signs them.
+fn burns(o: &Owner, slots: &[(u32, &str)]) -> Vec<(String, String)> {
+    slots
+        .iter()
+        .enumerate()
+        .map(|(i, (leg, name))| {
+            let path = leg_path(&o.addr, *leg);
+            (path.clone(), hl(HlAction::ApproveAgent { agent_address: burn_address(&path), agent_name: (*name).into(), nonce: T0 * 1000 + i as u64 }))
+        })
+        .collect()
+}
+
 #[test]
-fn changing_or_leaving_tee_burns_the_old_instances_keys() {
+fn entering_tee_burns_the_servers_agents_on_every_leg() {
     let mut c = tee_contract();
     let h = register_tee(&mut c, TEE_ACC, T0);
-    let (o, _) = tee_owner(&mut c, 79);
+    let (o, _) = tee_owner(&mut c, 79); // nonce 0 used, legs 0 and 1
+    register(&mut c, &o, 2, 229);
+    for leg in 0..3u32 {
+        ctx(RELAYER, T0);
+        o.exec(&mut c, 1 + leg as u64, approve_named(leg, &format!("leash-leg{leg}"), 90 + leg as u8));
+    }
     set_tee(&mut c, &o, &h, TEE_ACC);
+    assert_eq!(signed(), burns(&o, &[(0, "leash-leg0"), (1, "leash-leg1"), (2, "leash-leg2")]));
+    assert_eq!(c.get_tee(o.addr.clone()).unwrap().measurement_hash, Some(h));
+}
+
+#[test]
+fn entering_tee_needs_freezes_gas_budget() {
+    let mut c = tee_contract();
+    let h = register_tee(&mut c, TEE_ACC, T0);
+    let (o, _) = tee_owner(&mut c, 84);
+    register(&mut c, &o, 2, 230);
+    for leg in 0..3u32 {
+        ctx(RELAYER, T0);
+        o.exec(&mut c, 1 + leg as u64, approve_named(leg, &format!("leash-leg{leg}"), 100 + leg as u8));
+    }
+    // three revocations need 3 x 20 + 15 + 5 = 80 TGas prepaid, as a freeze of three agents does
+    let mut b = VMContextBuilder::new();
+    b.current_account_id(CONTRACT.parse().unwrap())
+        .predecessor_account_id(RELAYER.parse().unwrap())
+        .block_timestamp(T0 * 1_000_000_000)
+        .attached_deposit(RELAYER_DEPOSIT)
+        .prepaid_gas(Gas::from_tgas(60));
+    testing_env!(b.build());
+    expect_panic("attach more gas: freezing 3 agents needs 80 TGas", || {
+        o.exec(&mut c, 4, OwnerIntent::SetTee { measurement_hash: h.clone(), agent_account: TEE_ACC.into() })
+    });
+}
+
+#[test]
+fn exit_and_switch_burn_the_tee_keys_and_same_settings_burn_nothing() {
+    let mut c = tee_contract();
+    let h = register_tee(&mut c, TEE_ACC, T0);
+    let (o, _) = tee_owner(&mut c, 80); // no server agents approved
+    set_tee(&mut c, &o, &h, TEE_ACC);
+    assert!(signed().is_empty(), "nothing approved yet, nothing to burn");
     ctx(TEE_ACC, T0);
     let _ = c.tee_approve_agent(o.addr.clone(), 0, owner(83).addr, 1);
     let _ = c.tee_approve_agent(o.addr.clone(), 1, owner(84).addr, 2);
-    // same hash and account again: nothing to burn
+    // same hash and account again: nothing to burn, keys kept
     set_tee(&mut c, &o, &h, TEE_ACC);
     assert!(signed().is_empty());
     assert_eq!(c.get_tee(o.addr.clone()).unwrap().keys.len(), 2);
-    // another instance: one joined revocation of "leash-tee" on both legs, keys cleared
+    // switching instance burns the leash-tee keys and clears them
     set_tee(&mut c, &o, &h, OTHER_TEE);
-    let want: Vec<(String, String)> = (0..2)
-        .map(|leg| {
-            let path = leg_path(&o.addr, leg);
-            (path.clone(), hl(HlAction::ApproveAgent { agent_address: burn_address(&path), agent_name: tee::TEE_AGENT_NAME.into(), nonce: T0 * 1000 + leg as u64 }))
-        })
-        .collect();
-    assert_eq!(signed(), want);
+    assert_eq!(signed(), burns(&o, &[(0, tee::TEE_AGENT_NAME), (1, tee::TEE_AGENT_NAME)]));
     assert!(c.get_tee(o.addr.clone()).unwrap().keys.is_empty());
-    // leaving with no keys left signs nothing
+    // exit burns every tracked slot again (re-pointing a burned name to its burn address is harmless)
     set_tee(&mut c, &o, tee::ZERO_HASH, "");
-    assert!(signed().is_empty());
+    assert_eq!(signed(), burns(&o, &[(0, tee::TEE_AGENT_NAME), (1, tee::TEE_AGENT_NAME)]));
     let t = c.get_tee(o.addr.clone()).unwrap();
     assert_eq!((t.measurement_hash, t.agent_account), (None, None));
+}
+
+#[test]
+fn a_non_tee_owner_keeps_its_agents_when_another_owner_enters_tee() {
+    let mut c = tee_contract();
+    let h = register_tee(&mut c, TEE_ACC, T0);
+    let (plain, _) = tee_owner(&mut c, 81);
+    ctx(RELAYER, T0);
+    plain.exec(&mut c, 1, approve_named(0, "leash-leg0", 95));
+    let (o, _) = tee_owner(&mut c, 82);
+    ctx(RELAYER, T0);
+    o.exec(&mut c, 1, approve_named(0, "leash-leg0", 96));
+    set_tee(&mut c, &o, &h, TEE_ACC);
+    assert_eq!(signed(), burns(&o, &[(0, "leash-leg0")]), "only the entering owner's slots");
+    assert!(c.get_tee(plain.addr.clone()).is_none());
+    assert_eq!(c.get_agent_slots(plain.addr.clone()), vec![AgentSlot { leg: 0, name: "leash-leg0".into() }]);
+    // the plain owner's server agent and own approvals still work
+    ctx(AGENT, T0);
+    let leg1 = c.get_leg(plain.addr.clone(), 1).unwrap();
+    let _ = c.rebalance(plain.addr.clone(), 0, leg1, "1".into(), 1);
+    ctx(RELAYER, T0);
+    plain.exec(&mut c, 2, approve_named(1, "leash-leg1", 97));
+    assert_eq!(signed().len(), 1);
 }
 
 #[test]

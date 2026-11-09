@@ -289,8 +289,9 @@ impl Leash {
                 let t = owners.entry(owner.clone()).or_default();
                 let new = (!leaving).then_some(measurement_hash);
                 if t.measurement_hash != new || t.agent_account != account {
-                    // another image or instance: burn the old instance's HL trading keys (same path as a freeze)
-                    tee_revoke = t.keys.keys().map(|leg| AgentSlot { leg: *leg, name: tee::TEE_AGENT_NAME.into() }).collect();
+                    // entering, switching or leaving: burn EVERY HL API wallet approved through the contract on every leg
+                    // (the server's leash-leg{i} and the old TEE's leash-tee), as a freeze does, so no previous key trades on
+                    tee_revoke = agent_slots().get(&owner).cloned().unwrap_or_default();
                     t.keys.clear();
                 }
                 t.measurement_hash = new;
