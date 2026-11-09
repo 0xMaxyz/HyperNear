@@ -99,7 +99,7 @@ Expected: exit code 0 and these summary lines (live tests are skipped without cr
 packages/core test:       Tests  289 passed (289)
 packages/hypernear-client test:       Tests  44 passed | 1 skipped (45)
 validation test:       Tests  4 passed | 21 skipped (25)
-agent test:       Tests  347 passed | 9 skipped (356)
+agent test:       Tests  348 passed | 9 skipped (357)
 ```
 
 **3. Contract tests.**
@@ -108,7 +108,7 @@ agent test:       Tests  347 passed | 9 skipped (356)
 cd contract && cargo test && cd ..
 ```
 
-Expected: `test result: ok. 71 passed; 0 failed` (75 with `--features spike`). They cover the owner-intent digests against viem signatures, replay and burned nonces, the cap and cooldown, rebalance to a foreign address, freeze, the Hyperliquid digests, the L1 cancel digests against the SDK vectors, and TEE mode (a recorded real TDX quote verifies, a tampered or reused one is refused, a stranger instance and the server agent are refused, keys are burned on a switch, the fee terms the owner signed).
+Expected: `test result: ok. 74 passed; 0 failed` (78 with `--features spike`). They cover the owner-intent digests against viem signatures, replay and burned nonces, the cap and cooldown, rebalance to a foreign address, freeze, the Hyperliquid digests, the L1 cancel digests against the SDK vectors, and TEE mode (a recorded real TDX quote verifies, a tampered or reused one is refused, a stranger instance and the server agent are refused, keys are burned on a switch, the fee terms the owner signed).
 
 **4. Agent dry run (recorded testnet data, no keys, no network).**
 
