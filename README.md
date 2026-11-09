@@ -99,7 +99,7 @@ Expected: exit code 0 and these summary lines (live tests are skipped without cr
 packages/core test:       Tests  289 passed (289)
 packages/hypernear-client test:       Tests  44 passed | 1 skipped (45)
 validation test:       Tests  4 passed | 21 skipped (25)
-agent test:       Tests  348 passed | 9 skipped (357)
+agent test:       Tests  360 passed | 9 skipped (369)
 ```
 
 **3. Contract tests.**
