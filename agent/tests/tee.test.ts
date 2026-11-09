@@ -396,3 +396,11 @@ describe('stable TEE account', () => {
     expect(() => pinAccount({ accountId: () => 'renamed' }, a)).toThrow(/layout changed/);
   });
 });
+
+describe('TEE dev mode guard', () => {
+  it('refuses HYPERNEAR_TEE_DEV=1 on mainnet and allows it on testnet', async () => {
+    const { loadConfig } = await import('../src/config.ts');
+    expect(() => loadConfig({ HYPERNEAR_TEE_DEV: '1', NEAR_NETWORK: 'mainnet' })).toThrow(/testnet-only/);
+    expect(loadConfig({ HYPERNEAR_TEE_DEV: '1' }).tee.dev).toBe(true);
+  });
+});

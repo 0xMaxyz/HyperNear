@@ -3,8 +3,8 @@ import type { ChainTag } from '@hypernear/client';
 import type { LegSnap } from './api';
 import { HASH_RE, inTeeMode, isDevRun, nsToDate, priceMicro, usd, type TeeAgentInfo, type TeeState } from './tee';
 
-/** Placeholder until the Phala verification page of the shipped image exists (T2). */
-const VERIFY_URL = (import.meta.env.VITE_TEE_VERIFY_URL as string | undefined) ?? 'https://proof.t16z.com/';
+/** Set once a TEE image is published with a Phala verification page; until then no link is shown. */
+const VERIFY_URL = (import.meta.env.VITE_TEE_VERIFY_URL as string | undefined) || undefined;
 const when = (d: Date) => d.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
 
 interface Props {
@@ -134,7 +134,7 @@ function TeeCard(p: Props & { state: TeeState; mode: 'server' | 'tee'; offered: 
     <div className="tee">
       {!p.offered && <p className="state">This contract does not offer TEE mode (no price or fee address in get_config).</p>}
       <p className="muted small">
-        The agent runs inside a trusted execution environment. Its trading keys exist only in its memory, and the contract lets only the instance you name, running the measurement you name, act for you.
+        {isDevRun(p.chainTag) ? 'Testnet: the TEE agent here is dev-registered, with no hardware quote. ' : ''}In TEE mode the agent runs inside a trusted execution environment. Its trading keys exist only in its memory, and the contract lets only the instance you name, running the measurement you name, act for you. TEE mode has not yet run on real TEE hardware.
       </p>
       <dl className="kv tee-kv">
         <dt>Measurement</dt>
@@ -149,8 +149,14 @@ function TeeCard(p: Props & { state: TeeState; mode: 'server' | 'tee'; offered: 
         <dd>{rec?.months_paid ?? 0}</dd>
       </dl>
       <p className="small">
-        <a href={VERIFY_URL} target="_blank" rel="noreferrer">Verify the attestation on Phala&apos;s verifier</a>
-        <span className="muted">{isDevRun(p.chainTag) ? ' (this testnet agent is dev-registered: there is no hardware quote to verify)' : ''}</span>
+        {VERIFY_URL ? (
+          <>
+            <a href={VERIFY_URL} target="_blank" rel="noreferrer">Verify the attestation on Phala&apos;s verifier</a>
+            <span className="muted">{isDevRun(p.chainTag) ? ' (this testnet agent is dev-registered: there is no hardware quote to verify)' : ''}</span>
+          </>
+        ) : (
+          <span className="muted">No published TEE image yet, so there is no attestation to verify.</span>
+        )}
       </p>
       {!p.teeUrl && <p className="state">VITE_TEE_AGENT_URL is not set, so this page cannot talk to a TEE agent for setup.</p>}
 
@@ -178,7 +184,7 @@ function TeeCard(p: Props & { state: TeeState; mode: 'server' | 'tee'; offered: 
           >
             {p.busy === 'tee-switch' ? 'Waiting for signature…' : 'Switch to TEE: sign'}
           </button>
-          <p className="muted small">You sign setTee with exactly this account and measurement. Then pay below and run Prepare agents against the TEE agent.</p>
+          <p className="muted small">You sign setTee with exactly this account and measurement. In the same transaction the contract revokes every existing trading key on your legs, the server's included. Then pay below and run Prepare agents against the TEE agent. To return to the server later, leave TEE and run Prepare and Approve again.</p>
         </div>
       )}
 

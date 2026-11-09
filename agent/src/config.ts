@@ -60,6 +60,8 @@ function keyPair(idVar: string, keyVar: string, env: NodeJS.ProcessEnv) {
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AgentConfig {
+  // register_tee_agent_dev and the dev seed exist only for testnet; fail loudly rather than at boot.
+  if (env.HYPERNEAR_TEE_DEV === '1' && env.NEAR_NETWORK === 'mainnet') throw new Error('HYPERNEAR_TEE_DEV=1 is testnet-only; unset it for mainnet');
   return {
     network: env.NEAR_NETWORK === 'mainnet' ? 'mainnet' : 'testnet',
     contractId: env.NEAR_CONTRACT_ID ?? 'leash-spike-1107.testnet',
