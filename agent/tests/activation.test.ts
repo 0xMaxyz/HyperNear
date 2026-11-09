@@ -66,8 +66,8 @@ const policy = (o: Partial<OwnerState> = {}): OwnerState => ({ nonce: 1, frozen:
 const healthy = () => ch({ accountValue: 14.8, maint: 0.38, withdrawable: 4.7, positions: [{ coin: 'BTC', szi: '0.0004', liq: '50000' }] });
 const stressed = () => ch({ accountValue: 0.36, maint: 0.19, withdrawable: 0, positions: [{ coin: 'BTC', szi: '-0.0002', lev: 40, liq: '101200' }] });
 type Act = OwnerSnapshot['legs'][number]['activation'];
-const run = (s: OwnerSnapshot, p = policy(), cfg = DEFAULT_LOOP_CONFIG, budget?: () => number | undefined) =>
-  planRebalance(s, evaluateGuard(guardInputs(s, 0.6), DEFAULT_GUARD_CONFIG), p, 'agent.testnet', NOW, cfg, budget);
+const run = (s: OwnerSnapshot, p = policy(), cfg = DEFAULT_LOOP_CONFIG, budget?: number | (() => number)) =>
+  planRebalance(s, evaluateGuard(guardInputs(s, 0.6), DEFAULT_GUARD_CONFIG), p, 'agent.testnet', NOW, cfg, (leg) => (leg === 1 && budget !== undefined ? (typeof budget === 'function' ? budget() : budget) : undefined)); // only the stressed leg 1 has a strategy
 const withAct = (src: Act, dst: Act) => {
   const s = snap(healthy(), stressed());
   s.legs[0]!.activation = src;
@@ -96,8 +96,8 @@ describe('guard rebalance with HL activation', () => {
     const big = { ...DEFAULT_LOOP_CONFIG, targetMultiple: 100 };
     const s = withAct('paid', 'owed-on-credit');
     s.legs.push({ leg: 2, address: '0x1111111111111111111111111111111111111111', agent: null, clearinghouse: ch({ accountValue: 30, maint: 0, withdrawable: 30 }), spotUsdc: 0, activation: 'paid' });
-    expect(run(s, policy(), big, () => 5)).toMatchObject({ amount: '5.00', activationFeeUsd: 1 }); // 4 reach the leg, 5 leave the reserve
-    expect(run(s, policy(), big, () => 1.5)).toMatchObject({ kind: 'blocked', reason: expect.stringContaining('budget used') });
+    expect(run(s, policy(), big, 5)).toMatchObject({ amount: '5.00', activationFeeUsd: 1 }); // 4 reach the leg, 5 leave the reserve
+    expect(run(s, policy(), big, 1.5)).toMatchObject({ kind: 'blocked', reason: expect.stringContaining('budget used') });
   });
 });
 

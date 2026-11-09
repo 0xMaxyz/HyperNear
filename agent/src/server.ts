@@ -157,7 +157,7 @@ export function handler(d: Deps) {
         const latest = d.decider?.latest(owner);
         return reply(200, {
           owner,
-          config: { contractId: d.client.contractId, chainTag: cfg.chain_tag, agentAccount: d.config.nearAgent?.accountId ?? null, hlNetwork: cfg.hl_mainnet ? 'mainnet' : 'testnet', teeFeeActivation: cfg.tee_fee_address ? await activationStatus(d.legs.hl, cfg.tee_fee_address) : null },
+          config: { contractId: d.client.contractId, chainTag: cfg.chain_tag, agentAccount: d.config.nearAgent?.accountId ?? null, hlNetwork: cfg.hl_mainnet ? 'mainnet' : 'testnet', teeFeeActivation: cfg.tee_fee_address ? await activationStatus(d.legs.hl, cfg.tee_fee_address) : undefined },
           legs: snapshot.legs.map((l) => ({ leg: l.leg, address: l.address, activation: l.activation, agent: l.agent && { address: l.agent.address, name: l.agent.name, approvedAt: l.agent.approvedAt ?? null } })),
           // GET never creates state: keys appear after the owner's signed prepareAgents
           needsPrepare: snapshot.legs.some((l) => !l.agent),
