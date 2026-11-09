@@ -23,8 +23,8 @@ const browser = await chromium.launch();
 const results = [];
 const check = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? `: ${detail}` : ''}`); };
 
-async function withAgent(fixture, fn) {
-  const p = spawn('node', ['agent/src/server.ts', '--dry-run', '--serve'], { cwd: REPO, env: { ...process.env, HYPERNEAR_DRY_FIXTURE: fixture, PORT: '8787' }, stdio: ['ignore', 'pipe', 'inherit'] });
+async function withAgent(fixture, fn, port = '8787') {
+  const p = spawn('node', ['agent/src/server.ts', '--dry-run', '--serve'], { cwd: REPO, env: { ...process.env, HYPERNEAR_DRY_FIXTURE: fixture, PORT: port }, stdio: ['ignore', 'pipe', 'inherit'] });
   await new Promise((res, rej) => { p.stdout.once('data', res); p.once('exit', (c) => rej(new Error(`agent exited early (${c})`))); });
   try { await fn(); } finally { p.kill(); await new Promise((r) => setTimeout(r, 300)); }
 }
@@ -283,6 +283,97 @@ await withAgent('hedged', async () => {
   check('no page errors (demo owner)', errors.length === 0, errors.join(' | '));
   await ctx.close();
 });
+
+
+// 5. optional TEE mode against two real dry-run agents: the server agent (8787) and the owner's TEE agent (8788, VITE_TEE_AGENT_URL).
+//    The dry run has no contract: the page's fixture plays get_config / get_tee / get_tee_agent and applies setTee / payTee itself.
+await withAgent('hedged', () => withAgent('hedged', async () => {
+  const wallet = privateKeyToAccount(DEMO_KEY);
+  const owner = wallet.address.toLowerCase();
+  const { page, ctx, errors } = await open({ wallet });
+  const posts = [];
+  const hits = { server: 0, tee: 0 };
+  let prepared = false;
+  page.on('request', (r) => { const u = r.url(); if (/:8787\/owner\//.test(u)) hits.server++; if (/:8788\/owner\//.test(u)) hits.tee++; });
+  await page.route('http://localhost:8788/agents/prepare', async (route) => { const res = await route.fetch(); prepared = true; posts.push({ path: '8788/agents/prepare' }); await route.fulfill({ response: res }); });
+  await page.route('http://localhost:8788/owner/*', async (route) => {
+    const res = await route.fetch();
+    const j = await res.json();
+    if (!prepared) j.legs = j.legs.map((l) => ({ ...l, agent: null, needsPrepare: true }));
+    await route.fulfill({ response: res, json: j });
+  });
+  page.on('response', async (r) => {
+    if (r.request().method() !== 'POST' || !/:8787\/relay/.test(r.url())) return;
+    posts.push({ path: '/relay', body: JSON.parse(r.request().postData() ?? '{}') });
+  });
+  await page.getByRole('button', { name: /Log in with/ }).click();
+  await page.getByText('Continue with a wallet').click({ timeout: 15000 });
+  await page.locator('#headlessui-portal-root').getByText('MetaMask').first().click({ timeout: 15000 });
+  await page.getByText(/Create legs/).first().waitFor({ timeout: 40000 });
+  const host = page.locator('section[aria-labelledby=host-h]');
+  await host.getByText('Server (free)').waitFor({ timeout: 15000 });
+  await page.waitForTimeout(1500);
+  check('Agent hosting offers Server (free) and TEE with the price from get_config', (await host.locator('label.on', { hasText: 'Server (free)' }).count()) === 1 && (await host.getByText('TEE ($5.00/month)').count()) === 1);
+  await shot(page, '30-hosting-server');
+  await host.getByText('TEE ($5.00/month)').click();
+  await host.getByLabel(/TEE agent account/).fill('leash-tee-1.hypernear-dry-run.testnet');
+  await host.getByRole('button', { name: 'Look up on the contract' }).click();
+  await host.getByText(/measurement filled in/).waitFor({ timeout: 5000 });
+  const hash = await host.getByLabel(/Measurement hash you accept/).inputValue();
+  check('look-up fills the measurement hash from get_tee_agent', /^0x[0-9a-f]{64}$/.test(hash), hash);
+  await shot(page, '31-tee-choose');
+  const note = async () => { await page.locator('.notice').first().waitFor({ timeout: 25000 }); await page.waitForTimeout(900); return page.locator('.notice').first().innerText(); };
+  await host.getByRole('button', { name: /Switch to TEE/ }).click();
+  const t1 = await note();
+  check(`Switch to TEE: ${t1.slice(0, 90)}`, /Switched to TEE mode/.test(t1));
+  await host.getByText(/^Pay for TEE hosting/).waitFor({ timeout: 15000 });
+  check('TEE card shows measurement, agent account and the dev label (never "verified")', (await host.locator('dd', { hasText: hash }).count()) === 1 && (await host.getByText('dev-registered (testnet), no hardware quote').count()) === 1 && !/TDX|verified/i.test(await host.innerText()));
+  check('tee.switched in the log: "TEE keys revoked on 3 legs"', (await page.locator('.log li', { hasText: 'TEE keys revoked on 3 legs' }).count()) >= 1);
+  check('owner calls now go to the TEE agent', hits.tee >= 1, JSON.stringify(hits));
+  await host.getByLabel('Months, 1 to 12').fill('2');
+  const pay = await host.locator('p', { hasText: /^You pay/ }).innerText();
+  check(`Pay shows amount and destination before signing: ${pay.slice(0, 120)}`, /\$10\.00 \(2 × \$5\.00\) to 0x7b1e0a5f3c2d4e6f8091a2b3c4d5e6f708192a3b/.test(pay));
+  await host.getByRole('button', { name: /^Pay \$10\.00/ }).click();
+  const t2 = await note();
+  check(`Pay: ${t2.slice(0, 90)}`, /Paid 2 months of TEE hosting from leg 0/.test(t2));
+  await host.locator('dt', { hasText: 'Months paid' }).locator('xpath=following-sibling::dd[1]').filter({ hasText: '2' }).waitFor({ timeout: 15000 });
+  check('tee.paid in the log', (await page.locator('.log li', { hasText: 'TEE payment: 2 months paid from leg 0' }).count()) >= 1);
+  await page.getByRole('button', { name: 'Prepare agents' }).click();
+  const t3 = await note();
+  check(`Prepare agents goes to the TEE agent: ${t3.slice(0, 70)}`, /Agent keys prepared/.test(t3) && posts.some((p) => p.path === '8788/agents/prepare'));
+  check('setup text for TEE mode', (await page.getByText(/in its own memory and the contract approves it for you/).count()) === 1);
+  await shot(page, '32-tee-mode');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(500);
+  await shot(page, '33-tee-mobile');
+  check('no horizontal overflow at 390px (TEE)', await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.waitForTimeout(500);
+  await shot(page, '34-tee-dark');
+  await page.emulateMedia({ colorScheme: 'light' });
+  await host.getByText('Server (free)').click();
+  check('leaving TEE warns that it revokes the TEE trading keys', (await host.getByText(/revokes the TEE's trading keys on Hyperliquid/).count()) === 1);
+  await host.getByRole('button', { name: 'Leave TEE…' }).click();
+  await shot(page, '35-tee-leave');
+  await host.getByRole('button', { name: /^Leave TEE: sign/ }).click();
+  const t4 = await note();
+  check(`Leave TEE: ${t4.slice(0, 90)}`, /Back on the server/.test(t4));
+  await host.locator('label.on', { hasText: 'Server (free)' }).waitFor({ timeout: 15000 });
+  check('after leaving, the card is back in server mode', (await host.getByText(/^Pay for TEE hosting/).count()) === 0);
+  const sent = posts.filter((p) => p.body?.sig);
+  const types = sent.map((p) => p.body.intent.type);
+  check(`signed setTee, payTee, setTee: ${types.join(', ')}`, types.join() === 'setTee,payTee,setTee');
+  let allOwner = true;
+  for (const p of sent) if ((await verify.intentSigner(p.body, 'near-testnet', 'leash-spike-1107.testnet')) !== owner) allOwner = false;
+  check('setTee and payTee intents recover to the owner', allOwner);
+  const pay1 = sent[1].body.intent;
+  check('payTee carries priceMicro 5000000 and the fee address from get_config', pay1.priceMicro === 5000000 && pay1.feeAddress === '0x7b1e0a5f3c2d4e6f8091a2b3c4d5e6f708192a3b' && pay1.months === 2 && pay1.leg === 0);
+  const zero = sent[2].body.intent;
+  check('leaving signs setTee with the zero hash and an empty account', /^0x0{64}$/.test(zero.measurementHash) && zero.agentAccount === '');
+  check('no page errors (TEE)', errors.length === 0, errors.join(' | '));
+  await ctx.close();
+}, '8788'));
 
 
 await browser.close();

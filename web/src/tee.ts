@@ -1,9 +1,22 @@
 // Optional TEE mode, read side: the contract's get_config / get_tee / get_tee_agent. The agent does not proxy them, so the page
 // asks a NEAR RPC node directly (views are public). In --dry-run there is no contract: a small in-page fixture plays both modes.
 import type { Hex } from 'viem';
-import type { ChainTag, OwnerIntent, TeeAgentInfo, TeeInfo } from '@hypernear/client';
+import type { ChainTag, OwnerIntent } from '@hypernear/client';
 
-export type { TeeAgentInfo, TeeInfo };
+/** get_tee (packages/hypernear-client TeeInfo; the browser entry does not export the client's types). */
+export interface TeeInfo {
+  /** null after leaving TEE mode (the entry stays to keep the paid time) */
+  measurement_hash: string | null;
+  agent_account: string | null;
+  paid_until_ns: string;
+  months_paid: number;
+  keys: Record<string, Hex>;
+}
+/** get_tee_agent */
+export interface TeeAgentInfo {
+  measurement_hash: string;
+  expires_ns: string;
+}
 
 export interface TeeState {
   /** USD per month and where payTee sends it; null when the contract does not offer TEE mode */
