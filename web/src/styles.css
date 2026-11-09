@@ -225,3 +225,4 @@ pre { margin: 6px 0; padding: 10px; background: var(--bg); border: 1px solid var
 .tee .pay, .tee .fields { margin-top: 12px; }
 .tee code { overflow-wrap: anywhere; }
 .leave { margin-top: 8px; display: grid; gap: 8px; }
+.tee a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
