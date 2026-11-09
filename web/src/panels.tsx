@@ -182,6 +182,17 @@ function summarize(e: AgentEvent): string {
       const ls = (d.legs as { leg: number; ok: boolean }[] | undefined) ?? [];
       return `${who}trading keys revoked on Hyperliquid: ${ls.filter((l) => l.ok).length} of ${ls.length} legs${ls.some((l) => !l.ok) ? `, failed on ${ls.filter((l) => !l.ok).map((l) => l.leg).join(', ')}` : ''}`;
     }
+    case 'tee.switched': {
+      const ls = (d.legs as { leg: number; ok: boolean }[] | undefined) ?? [];
+      const ok = ls.filter((l) => l.ok).length;
+      return `${who}TEE keys revoked on ${ok} leg${ok === 1 ? '' : 's'}${ls.some((l) => !l.ok) ? `, failed on ${ls.filter((l) => !l.ok).map((l) => l.leg).join(', ')}` : ''}`;
+    }
+    case 'tee.paid': {
+      const n = Number(d.months);
+      return d.ok === false
+        ? `${who}TEE payment of ${n} month${n === 1 ? '' : 's'} from leg ${String(d.leg)} was not accepted by Hyperliquid: ${JSON.stringify(d.hl ?? 'no answer').slice(0, 120)}`
+        : `${who}TEE payment: ${n} month${n === 1 ? '' : 's'} paid from leg ${String(d.leg)}`;
+    }
     case 'orders.swept': {
       const w = d as unknown as Swept;
       const secs = w.ms ? ` (${(w.ms / 1000).toFixed(1)} s)` : '';

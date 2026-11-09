@@ -5,6 +5,11 @@ export const AGENT_URL = (import.meta.env.VITE_AGENT_URL as string | undefined) 
 export const CONTRACT_ID = (import.meta.env.VITE_CONTRACT_ID as string | undefined) ?? 'leash-spike-1107.testnet';
 export const CHAIN_TAG = ((import.meta.env.VITE_CHAIN_TAG as string | undefined) ?? 'near-testnet') as ChainTag;
 export const AGENT_ACCOUNT = (import.meta.env.VITE_AGENT_ACCOUNT as string | undefined) ?? 'agent.leash-spike-1107.testnet';
+/** The owner's own TEE agent (optional TEE mode). Unset: the TEE mode cannot be set up from this page. */
+export const TEE_AGENT_URL = (import.meta.env.VITE_TEE_AGENT_URL as string | undefined) || undefined;
+/** Which agent the owner API calls go to: the server agent, or the TEE agent once the owner is in TEE mode. */
+let agentBase = AGENT_URL;
+export const pointAgentAt = (tee: boolean) => { agentBase = tee && TEE_AGENT_URL ? TEE_AGENT_URL : AGENT_URL; };
 /** Read-only demo owner: the dry-run agent serves the same fixtures for any address. */
 export const DEMO_OWNER = '0x2c7536e3605d9c16a7a3d7b1898e529396a65c23' as Hex;
 
@@ -79,30 +84,32 @@ async function json(r: Response) {
 
 export async function getOwner(owner: Hex, signal?: AbortSignal): Promise<OwnerView> {
   try {
-    return (await json(await fetch(`${AGENT_URL}/owner/${owner}`, { signal: signal ?? AbortSignal.timeout(8000) }))) as unknown as OwnerView;
+    return (await json(await fetch(`${agentBase}/owner/${owner}`, { signal: signal ?? AbortSignal.timeout(8000) }))) as unknown as OwnerView;
   } catch (e) {
     if (e instanceof ApiError || (e as Error).name === 'AbortError') throw e;
-    throw new ApiError(`Cannot reach the agent at ${AGENT_URL}. Is it running, and is VITE_AGENT_URL right?`);
+    throw new ApiError(`Cannot reach the agent at ${agentBase}. Is it running, and is ${agentBase === AGENT_URL ? 'VITE_AGENT_URL' : 'VITE_TEE_AGENT_URL'} right?`);
   }
 }
 
-export async function post(path: string, body: unknown): Promise<Record<string, unknown>> {
+/** `base` overrides the agent: setTee and payTee always go through the server agent, which stays up when a TEE agent is gone. */
+export async function post(path: string, body: unknown, base = agentBase): Promise<Record<string, unknown>> {
   try {
-    return await json(await fetch(`${AGENT_URL}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(60_000) }));
+    return await json(await fetch(`${base}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(60_000) }));
   } catch (e) {
     if (e instanceof ApiError) throw e;
-    throw new ApiError(`Cannot reach the agent at ${AGENT_URL}.`);
+    throw new ApiError(`Cannot reach the agent at ${base}.`);
   }
 }
 
 /** SSE over fetch, because the agent names its events (`event: guard.trigger`) and EventSource has no wildcard. */
-export function streamEvents(onEvent: (e: AgentEvent) => void, onState: (s: 'live' | 'down') => void): () => void {
+/** `idOffset` keeps the ids of a second agent's bus apart from the first one's (each bus counts from 1). */
+export function streamEvents(onEvent: (e: AgentEvent) => void, onState: (s: 'live' | 'down') => void, base = AGENT_URL, idOffset = 0): () => void {
   const ctl = new AbortController();
   let lastId = 0;
   (async () => {
     while (!ctl.signal.aborted) {
       try {
-        const r = await fetch(`${AGENT_URL}/events`, { signal: ctl.signal, headers: lastId ? { 'last-event-id': String(lastId) } : {} });
+        const r = await fetch(`${base}/events`, { signal: ctl.signal, headers: lastId ? { 'last-event-id': String(lastId) } : {} });
         if (!r.ok || !r.body) throw new Error(`HTTP ${r.status}`);
         onState('live');
         const reader = r.body.pipeThrough(new TextDecoderStream()).getReader();
@@ -119,7 +126,7 @@ export function streamEvents(onEvent: (e: AgentEvent) => void, onState: (s: 'liv
             if (!data) continue;
             const e = JSON.parse(data.slice(6)) as AgentEvent;
             lastId = Math.max(lastId, e.id);
-            onEvent(e);
+            onEvent({ ...e, id: e.id + idOffset });
           }
         }
       } catch {
@@ -176,10 +183,10 @@ export function pendingDecision(events: AgentEvent[], dismissed: Set<string>, fr
 
 export async function getJson<T>(path: string): Promise<T> {
   try {
-    return (await json(await fetch(`${AGENT_URL}${path}`, { signal: AbortSignal.timeout(8000) }))) as T;
+    return (await json(await fetch(`${agentBase}${path}`, { signal: AbortSignal.timeout(8000) }))) as T;
   } catch (e) {
     if (e instanceof ApiError) throw e;
-    throw new ApiError(`Cannot reach the agent at ${AGENT_URL}.`);
+    throw new ApiError(`Cannot reach the agent at ${agentBase}.`);
   }
 }
 

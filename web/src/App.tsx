@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Hex } from 'viem';
 import { commandTypedData, newCommand, ownerIntentTypedData, type Command, type OwnerIntent, type OwnerIntentTypedData } from '@hypernear/client';
-import { AGENT_ACCOUNT, AGENT_URL, CHAIN_TAG, CONTRACT_ID, DEMO_OWNER, getOwner, pendingDecision, post, streamEvents, type AgentEvent, type DecisionMode, type OwnerView } from './api';
+import { AGENT_ACCOUNT, AGENT_URL, CHAIN_TAG, CONTRACT_ID, DEMO_OWNER, TEE_AGENT_URL, getOwner, pendingDecision, pointAgentAt, post, streamEvents, type AgentEvent, type DecisionMode, type OwnerView } from './api';
 import { LegPanel } from './legpanel';
 import { Activity, BreakevenCard, DecisionPanel, FreezeSteps, LegsTable, nearScan, short } from './panels';
 import { StrategiesPanel } from './strategies';
+import { dryApply, inTeeMode, loadTee, lookupTeeAgent, priceMicro, type TeeState, ZERO_HASH } from './tee';
+import { HostingCard } from './teepanel';
 
 export interface Auth {
   ready: boolean;
@@ -34,14 +36,19 @@ export function App({ auth }: { auth: Auth }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice>();
   const [dry, setDry] = useState(false);
+  const [tee, setTee] = useState<TeeState>();
+  const [teeErr, setTeeErr] = useState<string>();
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
+  const teeMode = inTeeMode(tee);
   const [agentId, setAgentId] = useState<string>(); // undefined until typed: then the agent's own account from /owner config
   const [cap, setCap] = useState('50');
   const [cooldown, setCooldown] = useState('60');
   const [coin, setCoin] = useState('BTC');
   const [ratio, setRatio] = useState('0.5');
 
+  // owner calls (setup, prepare, commands) go to the TEE agent once the owner is in TEE mode
+  pointAgentAt(teeMode);
   const refresh = useCallback(async () => {
     if (!owner) return;
     try {
@@ -49,6 +56,11 @@ export function App({ auth }: { auth: Auth }) {
       setView(v);
       if (v.dryRun) setDry(true);
       setError(undefined);
+      // the hosting mode lives on the contract, not in the agent: read it next to the owner view
+      loadTee(owner, { dryRun: Boolean(v.dryRun), chainTag: v.config?.chainTag ?? CHAIN_TAG, contractId: v.config?.contractId ?? CONTRACT_ID }).then(
+        (t) => (setTee(t), setTeeErr(undefined)),
+        (e) => setTeeErr(msg(e)),
+      );
     } catch (e) {
       setError(msg(e));
     } finally {
@@ -56,9 +68,11 @@ export function App({ auth }: { auth: Auth }) {
     }
   }, [owner]);
 
+  useEffect(() => void refresh(), [teeMode, refresh]); // a new hosting mode means a new agent to ask
   useEffect(() => {
     if (!owner) return;
     setView(undefined);
+    setTee(undefined);
     setError(undefined);
     setLoading(true);
     void refresh();
@@ -69,11 +83,13 @@ export function App({ auth }: { auth: Auth }) {
   useEffect(() => {
     if (!owner) return;
     setStream('connecting');
-    return streamEvents(
-      (e) => setEvents((l) => (l.some((x) => x.id === e.id) ? l : [e, ...l].slice(0, 80))),
-      setStream
-    );
-  }, [owner]);
+    const add = (e: AgentEvent) => setEvents((l) => (l.some((x) => x.id === e.id) ? l : [e, ...l].slice(0, 80)));
+    // the server agent's stream stays open (setTee and payTee are relayed through it); a TEE owner's own agent adds a second one
+    const second = teeMode && TEE_AGENT_URL && TEE_AGENT_URL !== AGENT_URL;
+    const stops = [streamEvents(add, (s) => (!second || !teeMode) && setStream(s))];
+    if (second) stops.push(streamEvents(add, setStream, TEE_AGENT_URL, 1e9));
+    return () => stops.forEach((f) => f());
+  }, [owner, teeMode]);
 
   const chainTag = view?.config?.chainTag ?? CHAIN_TAG;
   const contractId = view?.config?.contractId ?? CONTRACT_ID;
@@ -146,6 +162,30 @@ export function App({ auth }: { auth: Auth }) {
   const policyOk = agentValue.trim() !== '' && DECIMAL.test(cap) && /^\d+$/.test(cooldown);
   const enableAgent = () =>
     run('policy', async () => done(await ownerIntent({ type: 'setPolicy', agent: agentValue.trim(), dailyCap: cap, cooldownSec: Number(cooldown) }), `Agent ${agentValue.trim()} enabled, cap $${cap} a day`));
+
+  /** TEE mode: setTee and payTee go through the server agent. The dry-run agent only simulates, so its fixture applies them itself. */
+  const teeIntent = async (intent: OwnerIntent) => {
+    const nonce = (await getOwner(owner!)).policy?.nonce ?? 0;
+    const sig = await auth.sign(ownerIntentTypedData({ chainTag, contractId, owner: owner!, nonce, intent }));
+    const out = await post('/relay', { owner, nonce, intent, sig }, AGENT_URL);
+    if (out.dryRun) dryApply(intent);
+    return out;
+  };
+  const switchTee = (account: string, hash: string) =>
+    run('tee-switch', async () => done(await teeIntent({ type: 'setTee', measurementHash: hash as Hex, agentAccount: account }), `Switched to TEE mode with ${account}. Pay next, then Prepare agents`));
+  const leaveTee = () =>
+    run('tee-leave', async () => {
+      const out = await teeIntent({ type: 'setTee', measurementHash: ZERO_HASH, agentAccount: '' });
+      const revoked = Array.isArray(out.revoked) ? (out.revoked as { ok: boolean }[]) : [];
+      return done(out, `Back on the server${revoked.length ? `, TEE keys revoked on ${revoked.filter((r) => r.ok).length} of ${revoked.length} legs` : ''}. Prepare agents again`);
+    });
+  const payTee = (leg: number, months: number) =>
+    run('tee-pay', async () => {
+      if (!tee?.priceUsd || !tee.feeAddress) throw new Error('This contract does not offer TEE mode');
+      const out = await teeIntent({ type: 'payTee', leg, months, priceMicro: priceMicro(tee.priceUsd), feeAddress: tee.feeAddress });
+      if (out.ok === false) throw new Error(`Hyperliquid did not accept the payment: ${JSON.stringify(out.hl ?? out.error ?? 'refused').slice(0, 120)}`);
+      return done(out, `Paid ${months} month${months === 1 ? '' : 's'} of TEE hosting from leg ${leg}`);
+    });
 
   const toggleFreeze = () =>
     run('freeze', async () => {
@@ -246,6 +286,21 @@ export function App({ auth }: { auth: Auth }) {
             <LegsTable view={view} loading={loading} error={error} />
           </section>
 
+          <HostingCard
+            state={tee}
+            error={teeErr}
+            teeUrl={TEE_AGENT_URL}
+            legs={legs}
+            chainTag={chainTag}
+            canSign={canSign}
+            busy={busy}
+            why={why}
+            lookup={(a) => lookupTeeAgent(a, { dryRun: Boolean(view?.dryRun), chainTag, contractId })}
+            onSwitch={switchTee}
+            onPay={payTee}
+            onLeave={leaveTee}
+          />
+
           <LegPanel view={view} demo={demo} />
 
           <div className="grid">
@@ -264,7 +319,7 @@ export function App({ auth }: { auth: Auth }) {
                 <li>
                   <div>
                     <strong>2. Prepare agents</strong>
-                    <p className="muted small">The service makes one Hyperliquid trading key per leg. You sign the request, the keys never leave the service.</p>
+                    <p className="muted small">{teeMode ? "The TEE agent makes one Hyperliquid trading key per leg in its own memory and the contract approves it for you: there is nothing more to sign." : 'The service makes one Hyperliquid trading key per leg. You sign the request, the keys never leave the service.'}</p>
                   </div>
                   <span className={topLegs.length > 0 && needPrepare.length === 0 ? 'ok' : 'todo'}>{topLegs.length > 0 && needPrepare.length === 0 ? 'done' : 'to do'}</span>
                   <button disabled={locked || needPrepare.length === 0} title={why} onClick={prepareAgents}>{busy === 'prepare' ? 'Waiting for signature…' : 'Prepare agents'}</button>

@@ -278,6 +278,16 @@ export function buildDryRunDeps(fixtureName = 'hedged', opts: { replayStartMs?: 
       },
       async relay(body) {
         const b = parseRelayBody(body); // same validation as the live relayer
+        // the TEE owner steps emit what the live relayer emits, so the page's log shows them in the dry run too
+        if (b.intent.type === 'setTee') {
+          const legs = [0, 1, 2].map((leg) => ({ leg, ok: true }));
+          bus.emit('tee.switched', { owner: b.owner, legs, dryRun: true });
+          return { kind: 'teeSwitch', simulated: true, owner: b.owner, intent: b.intent, txHash: null, revoked: legs };
+        }
+        if (b.intent.type === 'payTee') {
+          bus.emit('tee.paid', { owner: b.owner, leg: b.intent.leg, months: b.intent.months, ok: true, dryRun: true });
+          return { kind: 'payTee', simulated: true, owner: b.owner, intent: b.intent, txHash: null, ok: true };
+        }
         return { kind: b.intent.type === 'registerLeg' ? 'registerLeg' : 'ownerExecute', simulated: true, owner: b.owner, intent: b.intent, txHash: null };
       },
       replayEvents(write) {
