@@ -25,7 +25,7 @@ A Hyperliquid master key is a bare EOA. Whoever holds it can approve any agent, 
 
 ## What it does
 
-- **Owner.** Any EOA. Owner intents are EIP-712 typed data verified on-chain with `env::ecrecover` (tested with viem signatures and an injected-wallet login through the real Privy modal; the Privy embedded/passkey wallet's signature path is not yet verified, C13). Anyone may relay an intent, so the relayer cannot censor an owner.
+- **Owner.** Any EOA. Owner intents are EIP-712 typed data verified on-chain with `env::ecrecover` (domain name `Leash`, the project's first name, kept so signatures and the deployed contracts stay valid) (tested with viem signatures and an injected-wallet login through the real Privy modal; the Privy embedded/passkey wallet's signature path is not yet verified, C13). Anyone may relay an intent, so the relayer cannot censor an owner.
 - **Legs.** Leg *i* of an owner is the EVM address derived by NEAR Chain Signatures from (contract id, owner, leg). The contract signs Hyperliquid actions for it: `approveAgent`, `usdSend`, `usdClassTransfer`, `withdraw3`.
 - **Withdrawals only to the owner.** The owner's `withdraw` intent has no destination field, so the destination is always the owner's address.
 - **Agent permissions.** The owner names one NEAR agent account, with a daily cap and a cooldown. That account's access key is a NEAR function-call key limited to `rebalance` and `agent_usd_class_transfer`. `rebalance` can only move USDC to another registered leg of the same owner. Each leg also gets its own Hyperliquid API wallet for trading.
