@@ -13,11 +13,13 @@ import { DECISION_EVENTS, type Proposal } from './decide.ts';
 import { Decider, DecisionModes, proposalEvent } from './decisions.ts';
 import { DEFAULT_GUARD_CONFIG, evaluateGuard } from './guard.ts';
 import { HedgeRefused, Hedger, planCloseHedge, planOpenHedge, type ClosePlan, type OpenPlan } from './hedge.ts';
-import { guardInputs, Legs, type OwnerSnapshot } from './legs.ts';
+import { guardInputs, Legs, type LegState, type OwnerSnapshot } from './legs.ts';
 import { HttpError, parseRelayBody, RateLimiter, Relayer } from './relayer.ts';
 import type { Deps } from './server.ts';
 import { position } from './market.ts';
 import type { Draft } from './strategy/builder.ts';
+import { strategyLibrary } from './strategy/library.ts';
+import { fundingService } from './funding.ts';
 import type { StrategyManager } from './strategy/manager.ts';
 import { specHash, validateSpec, type SpecContext, type StrategySpec } from './strategy/spec.ts';
 
@@ -180,7 +182,7 @@ export function recordedProposals(): Proposal[] {
   }));
 }
 
-export function buildDryRunDeps(fixtureName = 'hedged', opts: { replayStartMs?: number; replaySpeed?: number } = {}): Deps {
+export function buildDryRunDeps(fixtureName = 'hedged', opts: { replayStartMs?: number; replaySpeed?: number; fetchFn?: typeof fetch } = {}): Deps {
   const fixtures = loadFixtures();
   const fx = fixtures.find((f) => f.name === fixtureName) ?? fixtures[0]!;
   const snap = fx.snapshot;
@@ -204,7 +206,15 @@ export function buildDryRunDeps(fixtureName = 'hedged', opts: { replayStartMs?: 
   const client = new HyperNearClient({ contractId: DRY_CONTRACT_ID, backend });
   const dataDir = mkdtempSync(join(tmpdir(), 'hypernear-dry-'));
   const legs = new Legs({ client, dataDir, network: 'testnet', coins: config.policy.allowedCoins });
-  legs.snapshot = async (owner) => ({ ...snap, owner: owner.toLowerCase() as Hex, at: Date.now(), legs: owner.toLowerCase() === snap.owner ? snap.legs : [] });
+  // simulated deposits and "move to trading balance" steps, laid over the fixture's balances (nothing leaves this process)
+  const credited = new Map<number, { spot: number; perp: number }>();
+  const withCredits = (l: LegState): LegState => {
+    const c = credited.get(l.leg);
+    if (!c) return l;
+    const perp = (v: string) => String(Number(v) + c.perp);
+    return { ...l, spotUsdc: l.spotUsdc + c.spot, clearinghouse: { ...l.clearinghouse, marginSummary: { ...l.clearinghouse.marginSummary, accountValue: perp(l.clearinghouse.marginSummary.accountValue) }, withdrawable: perp(l.clearinghouse.withdrawable) } };
+  };
+  legs.snapshot = async (owner) => ({ ...snap, owner: owner.toLowerCase() as Hex, at: Date.now(), legs: owner.toLowerCase() === snap.owner ? snap.legs.map(withCredits) : [] });
   const bus = new EventBus();
   const recorded = JSON.parse(readFileSync(GUARD_DEMO, 'utf8')) as { timeline: { t: number; event: string; detail?: Record<string, unknown> }[] };
   const revoked = (JSON.parse(readFileSync(FREEZE_LIVE, 'utf8')) as { events: { type: string; data: Record<string, unknown> }[] }).events;
@@ -243,7 +253,7 @@ export function buildDryRunDeps(fixtureName = 'hedged', opts: { replayStartMs?: 
     const { text: _t, ms: _ms, ...draft } = row;
     return draft as unknown as Draft;
   };
-  const strategies = dryStrategies(snap.owner, bus, () => ({
+  const strategyCtx = (): SpecContext => ({
     orderPolicy: config.policy,
     registeredLegs: [0, 1, 2, 3],
     reservedLegs: [0, 1, 2],
@@ -251,7 +261,10 @@ export function buildDryRunDeps(fixtureName = 'hedged', opts: { replayStartMs?: 
     owner: policyOf(snap.owner),
     agentId: DRY_AGENT,
     otherTopUpBudget: 0,
-  }));
+  });
+  const strategies = dryStrategies(snap.owner, bus, strategyCtx);
+  // the library answers from the same fixture: real validateSpec, the fixture's prices, no model
+  const library = strategyLibrary({ context: async () => strategyCtx(), current: (o, id) => strategies.get(o, id), mids: async () => snap.market.mids, keyReady: () => true });
 
   return {
     config: dryConfig,
@@ -261,6 +274,8 @@ export function buildDryRunDeps(fixtureName = 'hedged', opts: { replayStartMs?: 
     decider,
     strategies,
     drafter,
+    library,
+    funding: fundingService({ network: 'testnet', fetchFn: opts.fetchFn }),
     replay: new ReplayCache(),
     guardConfig: DEFAULT_GUARD_CONFIG,
     hedger: new Hedger(legs, config.policy, bus),
@@ -288,7 +303,25 @@ export function buildDryRunDeps(fixtureName = 'hedged', opts: { replayStartMs?: 
           bus.emit('tee.paid', { owner: b.owner, leg: b.intent.leg, months: b.intent.months, ok: true, dryRun: true });
           return { kind: 'payTee', simulated: true, owner: b.owner, intent: b.intent, txHash: null, ok: true };
         }
+        const intent = b.intent;
+        if (intent.type === 'usdClassTransfer') {
+          // spot <-> perp on the simulated balances
+          const base = snap.legs.find((l) => l.leg === intent.leg);
+          const c = credited.get(intent.leg) ?? { spot: 0, perp: 0 };
+          const amount = Number(intent.amount);
+          const have = intent.toPerp ? (base?.spotUsdc ?? 0) + c.spot : Number(base?.clearinghouse.withdrawable ?? 0) + c.perp;
+          if (!Number.isFinite(amount) || amount <= 0 || amount > have + 1e-9) throw new HttpError(422, `leg ${intent.leg} has only ${have.toFixed(2)} USDC on ${intent.toPerp ? 'spot' : 'the trading balance'}`);
+          credited.set(intent.leg, { spot: c.spot + (intent.toPerp ? -amount : amount), perp: c.perp + (intent.toPerp ? amount : -amount) });
+          return { kind: 'ownerExecute', simulated: true, owner: b.owner, intent, txHash: null, ok: true };
+        }
         return { kind: b.intent.type === 'registerLeg' ? 'registerLeg' : 'ownerExecute', simulated: true, owner: b.owner, intent: b.intent, txHash: null };
+      },
+      credit(owner, leg, amount) {
+        const l = snap.legs.find((x) => x.leg === leg);
+        if (owner.toLowerCase() !== snap.owner || !l) throw new HttpError(404, `leg ${leg} is not registered for this owner`);
+        const c = credited.get(leg) ?? { spot: 0, perp: 0 };
+        credited.set(leg, { ...c, spot: c.spot + amount });
+        return { leg, spotUsdc: l.spotUsdc + c.spot + amount };
       },
       replayEvents(write) {
         const speed = opts.replaySpeed ?? 1;

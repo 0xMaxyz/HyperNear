@@ -13,6 +13,8 @@
 //   POST /strategy/resume {command, sig}: action startStrategy, command.coin = strategy id, command.specHash = hash of the stored spec of a paused/restored strategy
 //   POST /strategy/pause|stop {command, sig}: action pauseStrategy|stopStrategy, command.coin = strategy id (kill switch)
 //   GET  /strategies/:owner  the owner's strategies (state, held levels, resting orders, dead-man status)
+//   GET  /fund/info; POST /fund/quote {owner, leg, token, amount, refundTo}; GET /fund/status?depositAddress: fund a leg through 1Click (real deposit addresses on mainnet only)
+//   GET  /strategy/library?owner&coin&leg: ready-made specs sized from the live price; POST /strategy/check {owner, spec}: validate any spec (no model)
 //   POST /strategy/draft  {owner, text}: plain language -> {spec, specHash, diff, warnings} (Claude drafts, spec.ts validates; starts nothing)
 //   (after a relayed freeze the server clears resting orders through the contract's cancel_orders and emits orders.swept)
 //   GET  /events        SSE: hedge, guard and decision log
@@ -39,6 +41,8 @@ import { breakevens, openTime, readPnlData, type LegPnlData } from './pnl.ts';
 import { hlPoster, HttpError, RateLimiter, Relayer } from './relayer.ts';
 import { livePorts, sweepFrozen, sweptEvent, type LegSweep } from './sweep.ts';
 import { claudeAsk, drafter, MAX_DRAFT_TEXT, type Draft } from './strategy/builder.ts';
+import { strategyLibrary, type StrategyLibrary } from './strategy/library.ts';
+import { fundingService, type FundingService } from './funding.ts';
 import { proposeStrategyAction, type StrategyClients } from './strategy/decide.ts';
 import { claudeStrategyEscalator, jevAskStrategy } from './strategy/decideClients.ts';
 import { StartConflict, StrategyManager } from './strategy/manager.ts';
@@ -64,6 +68,10 @@ export interface Deps {
   sweeper?: (owner: Hex) => Promise<LegSweep[]>;
   /** plain language -> validated spec draft (needs ANTHROPIC_API_KEY) */
   drafter?: (owner: Hex, text: string) => Promise<Draft>;
+  /** ready-made strategy specs and the check-only validation (no model involved) */
+  library?: StrategyLibrary;
+  /** deposit quotes and status through NEAR Intents 1Click (mainnet deposits only; elsewhere price previews) */
+  funding?: FundingService;
   annualVol?: number;
   /** which owners this process serves (server: not in TEE mode; tee: paid TEE owners of this image). Absent in the dry run. */
   scope?: OwnerScope;
@@ -84,6 +92,8 @@ export interface TeeRuntime {
 export interface DryRunHooks {
   hedge: (action: 'openHedge' | 'closeHedge', owner: Hex, coin: string, ratio: number) => Promise<Record<string, unknown>>;
   relay: (body: unknown) => Promise<Record<string, unknown>>;
+  /** simulated deposit: adds test USDC to a leg's spot balance */
+  credit?: (owner: Hex, leg: number, amount: number) => { leg: number; spotUsdc: number };
   /** replays the scripted guard sequence to one SSE client; returns a stop function */
   replayEvents: (write: (e: { id: number; type: string; at: number; data: Record<string, unknown> }) => void) => () => void;
 }
@@ -270,6 +280,49 @@ export function handler(d: Deps) {
         const draft = await d.drafter(ownerOf(b.owner), b.text);
         return reply(draft.ok ? 200 : 422, draft);
       }
+      if (req.method === 'GET' && url.pathname === '/fund/info') {
+        if (!d.funding) throw new HttpError(503, 'funding off');
+        return reply(200, await d.funding.info());
+      }
+      if (req.method === 'POST' && url.pathname === '/fund/quote') {
+        if (!d.relayer.limiter.allow(req.socket.remoteAddress ?? 'unknown')) throw new HttpError(429, 'rate limited');
+        if (!d.funding) throw new HttpError(503, 'funding off');
+        const b = (await readJson(req)) as Record<string, unknown>;
+        const owner = ownerOf(b.owner);
+        // the money may only go to one of the owner's own legs
+        const leg = (await d.legs.snapshot(owner)).legs.find((l) => l.leg === Number(b.leg));
+        if (!leg) throw new HttpError(404, `leg ${String(b.leg)} is not registered for this owner`);
+        return reply(200, await d.funding.quote({ token: String(b.token), amount: String(b.amount), recipient: leg.address, refundTo: String(b.refundTo ?? ''), activation: leg.activation, dry: b.dry !== false }));
+      }
+      if (req.method === 'GET' && url.pathname === '/fund/status') {
+        if (!d.relayer.limiter.allow(req.socket.remoteAddress ?? 'unknown')) throw new HttpError(429, 'rate limited');
+        if (!d.funding) throw new HttpError(503, 'funding off');
+        return reply(200, await d.funding.status(url.searchParams.get('depositAddress') ?? ''));
+      }
+      if (req.method === 'POST' && url.pathname === '/fund/credit') {
+        if (!d.dryRun?.credit) throw new HttpError(404, 'not found'); // simulated credit exists only in the dry run
+        const b = (await readJson(req)) as Record<string, unknown>;
+        const amount = Number(b.amount);
+        if (!Number.isFinite(amount) || amount <= 0 || amount > 1000) throw new HttpError(400, 'amount must be between 0 and 1000');
+        return reply(200, d.dryRun.credit(ownerOf(b.owner), Number(b.leg), amount));
+      }
+      if (req.method === 'GET' && url.pathname === '/strategy/library') {
+        if (!d.library) throw new HttpError(503, 'strategy library off');
+        const leg = url.searchParams.get('leg');
+        const listing = await d.library
+          .list(ownerOf(url.searchParams.get('owner')), { coin: url.searchParams.get('coin') ?? undefined, leg: leg === null ? undefined : Number(leg) })
+          .catch((e) => {
+            throw new HttpError(400, (e as Error).message);
+          });
+        return reply(200, listing);
+      }
+      if (req.method === 'POST' && url.pathname === '/strategy/check') {
+        if (!d.relayer.limiter.allow(req.socket.remoteAddress ?? 'unknown')) throw new HttpError(429, 'rate limited');
+        if (!d.library) throw new HttpError(503, 'strategy library off');
+        const b = (await readJson(req)) as { owner?: unknown; spec?: unknown };
+        const checked = await d.library.check(ownerOf(b.owner), b.spec);
+        return reply(checked.ok ? 200 : 422, checked);
+      }
       if (req.method === 'POST' && url.pathname === '/strategy/start') {
         if (!d.strategies) throw new HttpError(503, 'strategies off');
         const body = (await readJson(req)) as { spec?: unknown };
@@ -379,6 +432,13 @@ export function buildDeps(config: AgentConfig, tee?: TeeRuntime): Deps {
   const strategyClients: StrategyClients | undefined = clients && { ask: jevAskStrategy(), escalate: claudeStrategyEscalator() };
   const strategies = new StrategyManager({ legs, client, policy: config.policy, agentId: tee ? undefined : config.nearAgent?.accountId, hedgeReserveUsd: config.guard.hedgeReserveUsd, dataDir: config.dataDir, served: (o) => scope.stillServes(o), emit: (t, data) => void bus.emit(t, data) });
   d.strategies = strategies;
+  d.funding = fundingService({ network: config.network, maxUsd: Number(process.env.HYPERNEAR_FUND_MAX_USD) || undefined });
+  d.library = strategyLibrary({
+    context: (owner, selfId) => strategies.context(owner, selfId),
+    current: (owner, id) => strategies.get(owner, id),
+    mids: async () => (await legs.hl.allMids()) as Record<string, string>,
+    keyReady: (owner, leg) => Boolean(legs.keys.get(owner, leg)?.approvedAt),
+  });
   if (config.relayer) d.sweeper = (owner) => sweepFrozen(owner, livePorts({ client, hl: legs.hl, network: config.network }));
   if (process.env.ANTHROPIC_API_KEY) {
     d.drafter = drafter({

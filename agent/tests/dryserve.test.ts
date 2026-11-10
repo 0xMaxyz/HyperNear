@@ -16,8 +16,8 @@ afterEach(() => {
   server?.close();
 });
 
-async function serve(fixture = 'hedged') {
-  server = createServer(handler(buildDryRunDeps(fixture, { replayStartMs: 0, replaySpeed: 1000 })));
+async function serve(fixture = 'hedged', fetchFn?: typeof fetch) {
+  server = createServer(handler(buildDryRunDeps(fixture, { replayStartMs: 0, replaySpeed: 1000, fetchFn })));
   await new Promise<void>((r) => server!.listen(0, '127.0.0.1', r));
   return `http://127.0.0.1:${(server!.address() as AddressInfo).port}`;
 }
@@ -142,6 +142,19 @@ describe('--dry-run --serve: strategies', () => {
     expect(events.every((e) => e.data.owner === OWNER)).toBe(true);
   });
 
+  it('GET /strategy/library lists templates sized from the fixture price; POST /strategy/check validates one and refuses a bad edit', async () => {
+    const base = await serve('hedged');
+    const lib = await (await fetch(`${base}/strategy/library?owner=${OWNER}&coin=BTC`)).json();
+    expect(lib).toMatchObject({ dryRun: true, coin: 'BTC', leg: 3 });
+    expect(lib.items.map((i: any) => i.id)).toEqual(['grid-classic', 'grid-tight', 'grid-dip', 'dca-steady', 'twap-smoke']);
+    const ok = await post(`${base}/strategy/check`, { owner: OWNER, spec: lib.items[1].spec });
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toMatchObject({ ok: true, specHash: lib.items[1].specHash });
+    const bad = await post(`${base}/strategy/check`, { owner: OWNER, spec: { ...lib.items[1].spec, params: { ...lib.items[1].spec.params, upper: 1 } } });
+    expect(bad.status).toBe(422);
+    expect((await fetch(`${base}/strategy/library?owner=${OWNER}&coin=DOGE`)).status).toBe(400);
+  });
+
   it('a signed start of a new spec and pause/resume work on the simulated list', async () => {
     const base = await serve('hedged');
     const draft = await (await post(`${base}/strategy/draft`, { owner: OWNER, text: 'Buy about 11 dollars of ETH every 6 hours, 8 times, never paying more than 3% above the current price. Close it all when I stop it.' })).json();
@@ -163,5 +176,45 @@ describe('--dry-run --serve: strategies', () => {
     expect(await pause.json()).toMatchObject({ state: 'paused' });
     const resume = await post(`${base}/strategy/resume`, await sign(newCommand(OWNER, 'startStrategy', draft.spec.id, '0', 30, Date.now() + 2, hash as `0x${string}`)));
     expect(await resume.json()).toMatchObject({ state: 'running' });
+  });
+});
+
+describe('--dry-run --serve: funding', () => {
+  // 1Click stand-in: the dry-run server must never need the network in a test
+  const oneClick = (async (url: string) => {
+    const path = String(url).replace(/^https?:\/\/[^/]+/, '');
+    const json = (b: unknown) => new Response(JSON.stringify(b), { status: 200, headers: { 'content-type': 'application/json' } });
+    if (path === '/v0/tokens') return json([{ assetId: 'nep141:usdc-arb', symbol: 'USDC', blockchain: 'arb', decimals: 6, price: 1 }]);
+    if (path === '/v0/quote') return json({ correlationId: 'c1', quote: { amountOut: '982000000', minAmountOut: '972000000', withdrawFee: '31530000', timeEstimate: 35 } });
+    return json({});
+  }) as unknown as typeof fetch;
+
+  it('/fund/info and /fund/quote answer as a price preview; a leg that is not yours is refused', async () => {
+    const base = await serve('hedged', oneClick);
+    const info = await (await fetch(`${base}/fund/info`)).json();
+    expect(info).toMatchObject({ dryRun: true, network: 'testnet', realDeposits: false, tokens: [{ label: 'USDC on Arbitrum' }] });
+    const body = { owner: OWNER, leg: 2, token: 'nep141:usdc-arb', amount: '10', refundTo: OWNER };
+    const q = await (await post(`${base}/fund/quote`, body)).json();
+    expect(q).toMatchObject({ dry: true, depositAddress: null, amountOut: 9.82 });
+    const other = await post(`${base}/fund/quote`, { ...body, leg: 9 });
+    expect(other.status).toBe(404);
+    const noRefund = await post(`${base}/fund/quote`, { ...body, refundTo: 'x' });
+    expect(noRefund.status).toBe(400);
+  });
+
+  it('a simulated credit lands on spot, and a signed move to the trading balance shifts it to perp; too much is refused', async () => {
+    const base = await serve('hedged', oneClick);
+    const leg = async (n: number) => (await (await fetch(`${base}/owner/${OWNER}`)).json()).snapshot.legs.find((l: any) => l.leg === n);
+    const before = await leg(2);
+    expect(await (await post(`${base}/fund/credit`, { owner: OWNER, leg: 2, amount: 25 })).json()).toMatchObject({ leg: 2, spotUsdc: before.spotUsdc + 25 });
+    expect((await leg(2)).spotUsdc).toBeCloseTo(before.spotUsdc + 25, 6);
+    const move = (amount: string, toPerp = true) => post(`${base}/relay`, { owner: OWNER, nonce: 0, intent: { type: 'usdClassTransfer', leg: 2, amount, toPerp, hlNonce: 1 }, sig: `0x${'11'.repeat(65)}` });
+    expect((await move('20')).status).toBe(200);
+    const after = await leg(2);
+    expect(after.spotUsdc).toBeCloseTo(before.spotUsdc + 5, 6);
+    expect(Number(after.clearinghouse.marginSummary.accountValue)).toBeCloseTo(Number(before.clearinghouse.marginSummary.accountValue) + 20, 6);
+    expect(Number(after.clearinghouse.withdrawable)).toBeCloseTo(Number(before.clearinghouse.withdrawable) + 20, 6);
+    expect((await move('500')).status).toBe(422);
+    expect((await post(`${base}/fund/credit`, { owner: OWNER, leg: 2, amount: -1 })).status).toBe(400);
   });
 });

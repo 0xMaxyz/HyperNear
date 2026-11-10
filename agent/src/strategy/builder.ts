@@ -163,20 +163,29 @@ export function drafter(d: DrafterDeps) {
     }
     if (!isObj(out)) return { ok: false, errors: ['the model returned something that is not a JSON object'] };
     if (out.spec === null || out.spec === undefined) return { ok: false, errors: [typeof out.cannot === 'string' && out.cannot ? out.cannot : 'the model proposed no strategy'] };
-    const id = isObj(out.spec) && typeof out.spec.id === 'string' ? out.spec.id : undefined;
-    const ctx = id ? await d.context(owner, id) : base;
-    const v = validateSpec(out.spec, ctx);
-    if (!v.ok) return { ok: false, errors: v.errors, draft: out.spec };
-    const current = d.current(owner, v.spec.id);
-    const mid = Number((await d.mids())[v.spec.coin]);
-    const warnings = warningsFor(v.spec, ctx, Number.isFinite(mid) ? mid : undefined, d.keyReady(owner, v.spec.leg));
-    if (current) warnings.push(`replaces your running strategy ${v.spec.id}: stop it first, or send the identical spec to resume it`);
-    return {
-      ok: true,
-      spec: v.spec,
-      specHash: specHash(v.spec),
-      diff: { against: current ? v.spec.id : 'new', changes: current ? diffSpecs(current, v.spec) : [] },
-      warnings,
-    };
+    return checkSpec(d, owner, out.spec, base);
+  };
+}
+
+/**
+ * Validate any spec (the model's draft, a library template, hand-edited JSON) against the owner's policies and return what the
+ * owner needs before signing: the hash, the diff against a running strategy with the same id, and the warnings.
+ * `base` is an already fetched context for a spec without an id.
+ */
+export async function checkSpec(d: Pick<DrafterDeps, 'context' | 'current' | 'mids' | 'keyReady'>, owner: Hex, spec: unknown, base?: SpecContext): Promise<Draft> {
+  const id = isObj(spec) && typeof spec.id === 'string' ? spec.id : undefined;
+  const ctx = id ? await d.context(owner, id) : (base ?? (await d.context(owner)));
+  const v = validateSpec(spec, ctx);
+  if (!v.ok) return { ok: false, errors: v.errors, draft: spec };
+  const current = d.current(owner, v.spec.id);
+  const mid = Number((await d.mids())[v.spec.coin]);
+  const warnings = warningsFor(v.spec, ctx, Number.isFinite(mid) ? mid : undefined, d.keyReady(owner, v.spec.leg));
+  if (current) warnings.push(`replaces your running strategy ${v.spec.id}: stop it first, or send the identical spec to resume it`);
+  return {
+    ok: true,
+    spec: v.spec,
+    specHash: specHash(v.spec),
+    diff: { against: current ? v.spec.id : 'new', changes: current ? diffSpecs(current, v.spec) : [] },
+    warnings,
   };
 }
