@@ -170,7 +170,7 @@ await page.addInitScript(() => {
     tag.style.cssText = `position:fixed;top:0;right:0;display:none;padding:3px 10px 4px;background:${ink};color:${paper};font:600 12px/1.2 system-ui,sans-serif;border-radius:0 0 0 5px;z-index:2147483644`;
     document.documentElement.append(card, cap, cur, tag);
     card.style.display = 'flex';
-    card.innerHTML = `<div>HyperNear: smart accounts for Hyperliquid</div><div style="font-weight:400;font-size:26px;max-width:960px">Keys held by NEAR Chain Signatures.<br>Policy in a public NEAR contract.</div>`;
+    card.innerHTML = `<svg viewBox="8 9 32 32" width="72" height="72" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 18a7 7 0 0 1 14 0v14a7 7 0 0 1-14 0v-7"/><path d="M17 18l6 7"/></svg><div>HyperNear: smart accounts for Hyperliquid</div><div style="font-weight:400;font-size:26px;max-width:960px">Keys held by NEAR Chain Signatures.<br>Policy in a public NEAR contract.</div>`;
   };
   const pad = document.createElement('style');
   pad.textContent = 'main { padding-bottom: 640px !important; }';

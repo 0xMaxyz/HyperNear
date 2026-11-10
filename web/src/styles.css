@@ -80,9 +80,8 @@ input[aria-invalid='true'] { border-color: var(--accent); }
 .brand { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
 .brand h1 { font-size: 22px; letter-spacing: -0.01em; }
 .tagline { font-size: 13px; }
-/* motif: a hypernear loop, a ring with a short lead */
-.mark { align-self: center; width: 14px; height: 14px; border: 3px solid var(--ink); border-radius: 50%; position: relative; margin-right: -4px; }
-.mark::after { content: ''; position: absolute; left: 8px; top: 2px; width: 12px; height: 3px; background: var(--ink); }
+/* the HyperNear mark: a carabiner, clipped on (docs/brand) */
+.mark { align-self: center; flex: none; width: 24px; height: 24px; color: var(--ink); margin-right: -4px; }
 .who { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .badge { padding: 4px 10px; border: 1px solid var(--ink); border-radius: 4px; font-size: 13px; font-weight: 650; }
 .addr { padding: 2px 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 3px; }

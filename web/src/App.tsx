@@ -240,7 +240,10 @@ export function App({ auth }: { auth: Auth }) {
     <>
       <header className="top">
         <div className="brand">
-          <span className="mark" aria-hidden="true" />
+          <svg className="mark" viewBox="8 9 32 32" fill="none" stroke="currentColor" strokeWidth={4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M17 18a7 7 0 0 1 14 0v14a7 7 0 0 1-14 0v-7" />
+            <path d="M17 18l6 7" />
+          </svg>
           <h1>HyperNear</h1>
           <span className="muted tagline">Smart accounts for Hyperliquid, keys held by NEAR</span>
         </div>

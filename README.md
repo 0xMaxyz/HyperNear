@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/logo-dark.svg">
+  <img src="docs/brand/logo-light.svg" alt="HyperNear" height="56">
+</picture>
+
 # HyperNear
 
 Demo video and X post: `<X_POST_URL>` (TODO: replace before submitting; built at NEAR HACKATHON, @NEARProtocol #NEARHackathon)
