@@ -258,7 +258,7 @@ Rules Q-002 to Q-005: earlier code on another chain is allowed if disclosed, and
 
 - **Baseline (pre-hackathon, Q-003):** [`packages/core`](packages/core) is a stripped copy of `packages/core` from PerpX (`maxperp/hl` commit `ef584538`, authored 2026-09-05, before the 2026-10-19 announcement): the `HlClient` import closure and the pure liquidation helpers. Tag `pre-hackathon`. Nothing else was copied from it.
 - **Built in the window (2026-11-07 to 2026-11-14):** everything else: the NEAR contract, `packages/hypernear-client`, `agent/`, `web/`, `validation/`, the docs.
-- **Diff:** [`pre-hackathon...hackathon-submission`](https://github.com/OWNER/REPO/compare/pre-hackathon...hackathon-submission) (TODO: replace `OWNER/REPO` with the repository when it is public). The tag `hackathon-submission` will be created on the final commit.
+- **Diff:** [`pre-hackathon...hackathon-submission`](https://github.com/0xMaxyz/hypernear/compare/pre-hackathon...hackathon-submission). The tag `hackathon-submission` will be created on the final commit.
 
 ## License
 
