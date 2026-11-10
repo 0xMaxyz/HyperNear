@@ -55,11 +55,14 @@ function Chart({ candles, lines, summary }: { candles: Candle[]; lines: Line[]; 
 
 type Load<T> = { state: 'loading' } | { state: 'error'; message: string } | { state: 'ok'; data: T };
 
-export function LegPanel({ view, demo }: { view?: OwnerView; demo: boolean }) {
+/** `leg` and `onLeg` let the leg cards above drive the selection; without them the panel keeps its own. */
+export function LegPanel({ view, demo, leg: picked, onLeg }: { view?: OwnerView; demo: boolean; leg?: number; onLeg?: (leg: number) => void }) {
   const legs = view?.snapshot.legs ?? [];
   const network = view?.config?.hlNetwork ?? 'testnet';
   const coins = view?.orderPolicy.allowedCoins ?? ['BTC'];
-  const [leg, setLeg] = useState<number>();
+  const [own, setOwn] = useState<number>();
+  const leg = picked ?? own;
+  const setLeg = (n: number) => (onLeg ? onLeg(n) : setOwn(n));
   const [coin, setCoin] = useState('BTC');
   const [interval, setInterval_] = useState<Interval>('15m');
   const dry = Boolean(view?.dryRun);

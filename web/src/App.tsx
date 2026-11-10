@@ -3,10 +3,15 @@ import type { Hex } from 'viem';
 import { commandTypedData, newCommand, ownerIntentTypedData, type Command, type OwnerIntent, type OwnerIntentTypedData } from '@hypernear/client';
 import { AGENT_ACCOUNT, AGENT_URL, CHAIN_TAG, CONTRACT_ID, DEMO_OWNER, TEE_AGENT_URL, getOwner, pendingDecision, pointAgentAt, post, streamEvents, type AgentEvent, type DecisionMode, type OwnerView } from './api';
 import { LegPanel } from './legpanel';
-import { Activity, BreakevenCard, DecisionPanel, FreezeSteps, LegsTable, nearScan, short } from './panels';
+import { Activity, BreakevenCard, DecisionPanel, FreezeSteps, nearScan, short } from './panels';
+import { LegCards } from './legcards';
 import { StrategiesPanel } from './strategies';
 import { dryApply, inTeeMode, loadTee, lookupTeeAgent, priceMicro, type TeeState, ZERO_HASH } from './tee';
 import { HostingCard } from './teepanel';
+import { AccountMenu, type AuthAccount } from './account';
+import { FundTab } from './fund';
+import { Learn } from './learn';
+import { Panel, Tabs, useRoute, type TabDef } from './tabs';
 
 export interface Auth {
   ready: boolean;
@@ -17,7 +22,11 @@ export interface Auth {
   sign: (td: OwnerIntentTypedData) => Promise<Hex>;
   /** no VITE_PRIVY_APP_ID: logging in is impossible, the demo still works */
   loginOff?: boolean;
+  /** what the Account menu shows; absent when there is no login */
+  account?: AuthAccount;
 }
+
+const TABS = ['home', 'legs', 'hedge', 'strategies', 'fund', 'activity', 'learn'];
 
 type Notice = { kind: 'ok' | 'err'; text: string };
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -39,6 +48,9 @@ export function App({ auth }: { auth: Auth }) {
   const [tee, setTee] = useState<TeeState>();
   const [teeErr, setTeeErr] = useState<string>();
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [menu, setMenu] = useState(false);
+  const [route, go] = useRoute(TABS);
+  const [selLeg, setSelLeg] = useState<number>();
 
   const teeMode = inTeeMode(tee);
   const [agentId, setAgentId] = useState<string>(); // undefined until typed: then the agent's own account from /owner config
@@ -133,6 +145,17 @@ export function App({ auth }: { auth: Auth }) {
       return todo.length ? `Registered leg${todo.length > 1 ? 's' : ''} ${todo.join(' and ')}${dry ? ' (simulated, dry-run)' : ''}.` : 'Both legs were already registered.';
     });
 
+  /** Funds that arrived on a leg's spot balance cannot trade until the owner moves them to the perp (trading) balance. */
+  const moveToTrading = (leg: number, amount: string) =>
+    run('move', async () => done(await ownerIntent({ type: 'usdClassTransfer', leg, amount, toPerp: true, hlNonce: Date.now() }), `Moved ${amount} USDC on leg ${leg} to the trading balance`));
+
+  /** Registering a leg is permissionless: the relayer pays, no signature. */
+  const addLeg = (leg: number) =>
+    run('legs', async () => {
+      done(await post('/relay', { owner, intent: { type: 'registerLeg', leg } }), '');
+      return `Registered leg ${leg}${dry ? ' (simulated, dry-run)' : ''}.`;
+    });
+
   /** Keys the service has not made yet: the owner signs a prepareAgents command. */
   const needPrepare = topLegs.filter((l) => !l.agent || l.needsPrepare);
   const prepareAgents = () =>
@@ -143,6 +166,9 @@ export function App({ auth }: { auth: Auth }) {
     });
 
   const pending = view?.pendingApprovals ?? [];
+  // Hyperliquid refuses every action, approving a key included, on an account that never received a deposit
+  const unfunded = legs.filter((l) => Number(l.clearinghouse.marginSummary.accountValue) + l.spotUsdc <= 0);
+  const approvalBlocked = pending.some((p) => unfunded.some((l) => l.leg === p.leg));
   const approveAgents = () =>
     run('approve', async () => {
       // each intent is signed exactly as the agent listed it; every one burns the owner's next nonce, so re-read it
@@ -153,10 +179,13 @@ export function App({ auth }: { auth: Auth }) {
         const sig = await auth.sign(ownerIntentTypedData({ chainTag, contractId, owner: owner!, nonce, intent }));
         const out = await post('/relay', { owner, nonce, intent, sig });
         if (out.dryRun) setDry(true);
-        if (out.ok === false) failed = `leg ${intent.leg}: ${JSON.stringify(out.hl ?? out.error ?? 'refused').slice(0, 120)}`;
+        if (out.ok === false) {
+          const why = JSON.stringify(out.hl ?? out.error ?? 'refused');
+          failed = /Must deposit/i.test(why) ? `leg ${intent.leg} has never received a deposit, and Hyperliquid acts on no account before one. Fund it on the Fund tab, then approve again` : `leg ${intent.leg}: ${why.slice(0, 120)}`;
+        }
         else ok++;
       }
-      if (failed) throw new Error(`Approved ${ok}, Hyperliquid refused ${failed}`);
+      if (failed) throw new Error(`Approved ${ok}. ${failed}`);
       return `Approved the agent key on ${ok} leg${ok === 1 ? '' : 's'}${dry ? ' (simulated, dry-run)' : ''}.`;
     });
 
@@ -236,6 +265,23 @@ export function App({ auth }: { auth: Auth }) {
   const why = canSign ? undefined : 'Log in to sign';
   const locked = !canSign || busy !== null;
 
+  const tabDefs: TabDef[] = [
+    { id: 'home', label: 'Home', dot: pending.length > 0 ? 'An agent key is waiting for your approval' : undefined },
+    { id: 'legs', label: 'Legs' },
+    { id: 'hedge', label: 'Hedge', dot: decision ? 'A decision is waiting for you' : undefined },
+    { id: 'strategies', label: 'Strategies' },
+    { id: 'fund', label: 'Fund' },
+    { id: 'activity', label: 'Activity' },
+    { id: 'learn', label: 'Learn' },
+  ];
+  // approvals must not hide behind a tab: say so on every other tab
+  const attention =
+    decision && route.tab !== 'hedge'
+      ? { text: 'A decision is waiting for you.', link: 'Review it', href: '#/hedge' }
+      : pending.length > 0 && route.tab !== 'home'
+        ? { text: 'An agent key is waiting for your approval.', link: 'Approve it', href: '#/home' }
+        : undefined;
+
   return (
     <>
       <header className="top">
@@ -250,17 +296,31 @@ export function App({ auth }: { auth: Auth }) {
         <div className="who">
           {view?.config && <span className="muted small" title={`${view.config.chainTag}, contract ${view.config.contractId}`}>Hyperliquid {view.config.hlNetwork}</span>}
           {dry && <span className="badge" title={`Served by the agent with ${AGENT_URL}; no keys, recorded testnet data`}>dry-run data</span>}
-          {owner && <code className="addr" title={owner}>{short(owner)}</code>}
-          {auth.authenticated ? (
-            <button onClick={auth.logout}>Log out</button>
-          ) : demo ? (
-            <>
-              <button onClick={() => setDemo(false)}>Leave demo</button>
-              <button className="primary" onClick={auth.login} disabled={auth.loginOff || !auth.ready}>Log in</button>
-            </>
-          ) : null}
+          {owner && (
+            <button className="addr" aria-haspopup="dialog" title={`Account ${owner}`} onClick={() => setMenu(true)}>
+              {short(owner)}
+            </button>
+          )}
+          {!auth.authenticated && demo && (
+            <button className="primary" onClick={auth.login} disabled={auth.loginOff || !auth.ready}>Log in</button>
+          )}
         </div>
       </header>
+      {owner && (
+        <AccountMenu
+          open={menu}
+          onClose={() => setMenu(false)}
+          owner={owner}
+          signedIn={auth.authenticated}
+          account={auth.account}
+          network={view?.config?.hlNetwork}
+          mode={dry ? 'recorded data (dry-run), nothing is sent' : view?.config ? `live, ${view.config.chainTag}` : 'connecting…'}
+          onLogout={() => (setMenu(false), auth.logout())}
+          onLogin={auth.loginOff ? undefined : () => (setMenu(false), auth.login())}
+          onLeaveDemo={demo ? () => setDemo(false) : undefined}
+          onGo={go}
+        />
+      )}
 
       {!owner ? (
         <main className="intro">
@@ -285,30 +345,25 @@ export function App({ auth }: { auth: Auth }) {
             {notice && <p className={`notice ${notice.kind}`} role={notice.kind === 'err' ? 'alert' : 'status'}>{notice.text}</p>}
           </div>
 
-          <section className="card wide" aria-labelledby="legs-h">
-            <h2 id="legs-h">Legs</h2>
-            <LegsTable view={view} loading={loading} error={error} />
-          </section>
+          <Tabs tabs={tabDefs} current={route.tab} onGo={go} />
+          {attention && (
+            <p className="attention" role="status">
+              {attention.text} <a href={attention.href}>{attention.link}</a>
+            </p>
+          )}
 
-          <HostingCard
-            state={tee}
-            error={teeErr}
-            teeUrl={TEE_AGENT_URL}
-            legs={legs}
-            feeActivation={view?.config?.teeFeeActivation}
-            chainTag={chainTag}
-            canSign={canSign}
-            busy={busy}
-            why={why}
-            lookup={(a) => lookupTeeAgent(a, { dryRun: Boolean(view?.dryRun), chainTag, contractId })}
-            onSwitch={switchTee}
-            onPay={payTee}
-            onLeave={leaveTee}
-          />
+          {route.tab === 'legs' && (
+            <Panel id="legs">
+              <section className="card wide" aria-labelledby="legs-h">
+                <h2 id="legs-h">Legs</h2>
+                <LegCards view={view} owner={owner} loading={loading} error={error} selected={selLeg} onSelect={setSelLeg} onGo={go} onAddLeg={addLeg} busy={busy} />
+              </section>
+              <LegPanel view={view} demo={demo} leg={selLeg} onLeg={setSelLeg} />
+            </Panel>
+          )}
 
-          <LegPanel view={view} demo={demo} />
-
-          <div className="grid">
+          {route.tab === 'home' && (
+          <Panel id="home">
             <section className="card" aria-labelledby="setup-h">
               <h2 id="setup-h">Setup</h2>
               {!canSign && <p className="state">Read-only: log in to sign setup steps.</p>}
@@ -331,16 +386,24 @@ export function App({ auth }: { auth: Auth }) {
                 </li>
                 <li>
                   <div>
-                    <strong>3. Approve agent</strong>
-                    <p className="muted small">You sign one approval per leg exactly as listed; the contract signs it for Hyperliquid and the service posts it.</p>
+                    <strong>3. Fund the legs</strong>
+                    <p className="muted small">Send USDC to each leg. Hyperliquid will not approve a trading key on an account that has never received a deposit, so this comes before approving.</p>
+                  </div>
+                  <span className={legs.length > 0 && unfunded.length === 0 ? 'ok' : 'todo'}>{legs.length > 0 && unfunded.length === 0 ? 'done' : 'to do'}</span>
+                  <button disabled={legs.length === 0} onClick={() => go(unfunded[0] ? `fund?leg=${unfunded[0].leg}` : 'fund')}>Open Fund</button>
+                </li>
+                <li>
+                  <div>
+                    <strong>4. Approve agent</strong>
+                    <p className="muted small">You sign one approval per leg exactly as listed; the contract signs it for Hyperliquid and the service posts it.{approvalBlocked && ' Fund the legs first (step 3).'}</p>
                   </div>
                   <span className={legs.length > 0 && legs.every((l) => l.agent?.approvedAt) ? 'ok' : 'todo'}>{legs.length > 0 && legs.every((l) => l.agent?.approvedAt) ? 'done' : 'to do'}</span>
-                  <button disabled={locked || pending.length === 0} title={why} onClick={approveAgents}>{busy === 'approve' ? 'Waiting for signature…' : 'Approve agent'}</button>
+                  <button disabled={locked || pending.length === 0 || approvalBlocked} title={approvalBlocked ? 'Fund the legs first' : why} onClick={approveAgents}>{busy === 'approve' ? 'Waiting for signature…' : 'Approve agent'}</button>
                 </li>
                 <li className="stack">
                   <div className="row">
                     <div>
-                      <strong>4. Enable agent</strong>
+                      <strong>5. Enable agent</strong>
                       <p className="muted small">Name the NEAR account that may rebalance between your legs, with a daily cap and a cooldown.</p>
                     </div>
                     <span className={policy?.agent ? 'ok' : 'todo'}>{policy?.agent ? 'done' : 'to do'}</span>
@@ -371,18 +434,29 @@ export function App({ auth }: { auth: Auth }) {
                   )}
                 </li>
               </ol>
-              <div className="freeze">
-                <div>
-                  <strong>{policy?.frozen ? 'Account is frozen' : 'Emergency stop'}</strong>
-                  <p className="muted small">Halts everything the contract signs and revokes the agents' Hyperliquid trading keys. The agent then cancels the resting orders on those legs. Withdrawals to you still work.</p>
-                </div>
-                <button className={policy?.frozen ? '' : 'danger'} disabled={locked || legs.length === 0} title={why} onClick={toggleFreeze}>
-                  {busy === 'freeze' ? 'Waiting for signature…' : policy?.frozen ? 'Unfreeze' : 'Freeze'}
-                </button>
-              </div>
-              <FreezeSteps events={mine} show={Boolean(policy?.frozen) || (dry && mine.some((e) => e.type === 'agents.revoked' || e.type === 'orders.swept'))} />
             </section>
 
+            <HostingCard
+              state={tee}
+              error={teeErr}
+              teeUrl={TEE_AGENT_URL}
+              legs={legs}
+              feeActivation={view?.config?.teeFeeActivation}
+              chainTag={chainTag}
+              canSign={canSign}
+              busy={busy}
+              why={why}
+              lookup={(a) => lookupTeeAgent(a, { dryRun: Boolean(view?.dryRun), chainTag, contractId })}
+              onSwitch={switchTee}
+              onPay={payTee}
+              onLeave={leaveTee}
+            />
+          </Panel>
+          )}
+
+          {route.tab === 'hedge' && (
+          <Panel id="hedge">
+          <div className="grid">
             <div className="col">
               <DecisionPanel d={decision} mode={view?.decision?.mode} canSign={canSign} busy={busy} onAccept={acceptDecision} onDismiss={dismissDecision} onMode={setMode} onAsk={askProposal} />
               <section className="card" aria-labelledby="hedge-h">
@@ -407,13 +481,47 @@ export function App({ auth }: { auth: Auth }) {
                   <button disabled={locked} title={why} onClick={() => hedge(false)}>{busy === 'close' ? 'Waiting for signature…' : 'Close hedge'}</button>
                 </div>
               </section>
+            </div>
+            <div className="col">
               <BreakevenCard view={view} />
+              <section className="card" aria-labelledby="freeze-h">
+                <h2 id="freeze-h">{policy?.frozen ? 'Account is frozen' : 'Emergency stop'}</h2>
+                <div className="freeze">
+                  <p className="muted small">Halts everything the contract signs and revokes the agents' Hyperliquid trading keys. The agent then cancels the resting orders on those legs. Withdrawals to you still work.</p>
+                  <button className={policy?.frozen ? '' : 'danger'} disabled={locked || legs.length === 0} title={why} onClick={toggleFreeze}>
+                    {busy === 'freeze' ? 'Waiting for signature…' : policy?.frozen ? 'Unfreeze' : 'Freeze'}
+                  </button>
+                </div>
+                <FreezeSteps events={mine} show={Boolean(policy?.frozen) || (dry && mine.some((e) => e.type === 'agents.revoked' || e.type === 'orders.swept'))} />
+              </section>
             </div>
           </div>
+          </Panel>
+          )}
 
-          <StrategiesPanel legs={legs} owner={owner} canSign={canSign} events={mine} sign={signCommand} tick={view?.snapshot.at} />
+          {route.tab === 'strategies' && (
+            <Panel id="strategies">
+              <StrategiesPanel legs={legs} owner={owner} canSign={canSign} events={mine} sign={signCommand} tick={view?.snapshot.at} leg={route.params.get('leg') === null ? undefined : Number(route.params.get('leg'))} />
+            </Panel>
+          )}
 
-          <Activity events={mine.filter((e) => !e.type.startsWith('strategy.'))} stream={stream} scan={nearScan(chainTag)} />
+          {route.tab === 'fund' && (
+            <Panel id="fund">
+              <FundTab view={view} owner={owner} leg={route.params.get('leg') === null ? undefined : Number(route.params.get('leg'))} canSign={canSign} dry={dry} locked={locked} busy={busy} why={why} onGo={go} onMove={moveToTrading} onChanged={() => void refresh()} />
+            </Panel>
+          )}
+
+          {route.tab === 'activity' && (
+            <Panel id="activity">
+              <Activity events={mine.filter((e) => !e.type.startsWith('strategy.'))} stream={stream} scan={nearScan(chainTag)} />
+            </Panel>
+          )}
+
+          {route.tab === 'learn' && (
+            <Panel id="learn">
+              <Learn slug={route.rest[0]} />
+            </Panel>
+          )}
         </main>
       )}
     </>

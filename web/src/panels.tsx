@@ -14,9 +14,9 @@ const FACTORS: Record<string, string> = {
 };
 
 const missing = (s: unknown) => s === null || s === undefined || s === '' || Number.isNaN(Number(s));
-const n = (s: string | number | null | undefined, dp = 2, min = 0) =>
+export const n = (s: string | number | null | undefined, dp = 2, min = 0) =>
   missing(s) ? 'n/a' : (Number(s) || 0).toLocaleString('en-US', { minimumFractionDigits: min, maximumFractionDigits: dp });
-const usd = (s: string | number | null | undefined, dp = 2) => (missing(s) ? 'n/a' : `${Number(s) < 0 ? '-' : ''}$${n(Math.abs(Number(s)), dp, 2)}`);
+export const usd = (s: string | number | null | undefined, dp = 2) => (missing(s) ? 'n/a' : `${Number(s) < 0 ? '-' : ''}$${n(Math.abs(Number(s)), dp, 2)}`);
 export const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
 function Addr({ a }: { a: string }) {
@@ -127,7 +127,7 @@ interface BeRow { coin: string; kind: string; breakEvenPx: number | null; locked
 const parseBreakeven = (b: unknown): BeRow[] => (Array.isArray(b) ? (b as BeRow[]) : []);
 
 /** Leg roles of the demo layout (agent fixtures and the README flow). */
-const ROLES: Record<number, string> = { 0: 'long', 1: 'hedge', 2: 'reserve, source for the guard' };
+export const ROLES: Record<number, string> = { 0: 'long', 1: 'hedge', 2: 'reserve, source for the guard' };
 
 export function BreakevenCard({ view }: { view?: OwnerView }) {
   const rows = parseBreakeven(view?.breakeven);

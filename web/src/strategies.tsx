@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Hex } from 'viem';
 import { newCommand, type Command } from '@hypernear/client';
-import { ApiError, getJson, post, specHashOf, type AgentEvent, type LegSnap, type DraftOk, type DraftRefused, type SpecChange, type StrategySpec, type StrategyStatus } from './api';
+import { ApiError, getJson, post, specHashOf, type AgentEvent, type LegSnap, type DraftOk, type DraftRefused, type LibraryListing, type SpecChange, type StrategySpec, type StrategyStatus } from './api';
 import { short } from './panels';
 
 const usd = (n: number | string) => `$${Number(n).toLocaleString('en-US', { maximumFractionDigits: 4 })}`;
@@ -49,6 +49,60 @@ function eventText(e: AgentEvent): string {
 }
 const bad = (t: string) => /refused|rejected|error|lost|skipped:/.test(t);
 
+/** The template form: every field is kept as typed (a string), and turned into a spec only when it is sent to be checked. */
+interface Edit {
+  templateId: string;
+  id: string;
+  type: StrategySpec['type'];
+  coin: string;
+  leg: number;
+  fields: Record<string, string>;
+  limits: Record<string, string>;
+  onStop: string;
+}
+type Field = { key: string; label: string; kind: 'num' | 'int' | 'dec' | 'side' };
+const PARAMS: Record<StrategySpec['type'], Field[]> = {
+  grid: [
+    { key: 'lower', label: 'Lowest price', kind: 'num' },
+    { key: 'upper', label: 'Highest price', kind: 'num' },
+    { key: 'levels', label: 'Levels (2 to 20)', kind: 'int' },
+    { key: 'sizePerLevel', label: 'Size per level', kind: 'dec' },
+  ],
+  twap: [
+    { key: 'side', label: 'Side', kind: 'side' },
+    { key: 'sizePerSlice', label: 'Size per slice', kind: 'dec' },
+    { key: 'slices', label: 'Slices (2 to 50)', kind: 'int' },
+    { key: 'intervalSec', label: 'Seconds between slices', kind: 'int' },
+    { key: 'limitPx', label: 'Price limit', kind: 'num' },
+  ],
+};
+const LIMITS = [
+  { key: 'maxNotional', label: 'Largest exposure, USD' },
+  { key: 'maxLeverage', label: 'Leverage up to' },
+  { key: 'maxDailyLoss', label: 'Stop after losing, USD' },
+  { key: 'topUpCapPerDay', label: 'Guard top-ups, USD a day' },
+];
+
+const fromSpec = (spec: StrategySpec, templateId: string): Edit => ({
+  templateId,
+  id: spec.id,
+  type: spec.type,
+  coin: spec.coin,
+  leg: spec.leg,
+  fields: Object.fromEntries(Object.entries(spec.params).map(([k, v]) => [k, String(v)])),
+  limits: Object.fromEntries(Object.entries(spec.limits).map(([k, v]) => [k, String(v)])),
+  onStop: spec.onStop,
+});
+
+/** An empty or non-numeric field becomes null, which the agent's validator names as an error next to the field it belongs to. */
+function toSpec(e: Edit): StrategySpec {
+  const num = (s: string | undefined) => (s === undefined || s.trim() === '' || Number.isNaN(Number(s)) ? null : Number(s));
+  const params: Record<string, number | string | null> = {};
+  for (const f of PARAMS[e.type]) params[f.key] = f.kind === 'num' || f.kind === 'int' ? num(e.fields[f.key]) : (e.fields[f.key] ?? '').trim();
+  const limits = Object.fromEntries(LIMITS.map((l) => [l.key, num(e.limits[l.key])]));
+  return { id: e.id, type: e.type, leg: e.leg, coin: e.coin, params, limits, onStop: e.onStop } as unknown as StrategySpec;
+}
+
 type Draft = { kind: 'ok'; text: string; res: DraftOk; hashOk: boolean | null } | { kind: 'refused'; text: string; errors: string[]; draft?: unknown };
 
 export function StrategiesPanel(p: {
@@ -59,12 +113,20 @@ export function StrategiesPanel(p: {
   sign: (c: Command) => Promise<Hex>;
   /** a refreshed /owner view tells the panel the agent state may have changed */
   tick: unknown;
+  /** from a leg card's "Start a strategy" link */
+  leg?: number;
 }) {
   const [text, setText] = useState('');
   const [draft, setDraft] = useState<Draft>();
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ kind: 'ok' | 'err'; text: string }>();
   const [list, setList] = useState<{ state: 'loading' } | { state: 'off' | 'error'; message: string } | { state: 'ok'; rows: StrategyStatus[] }>({ state: 'loading' });
+  const [lib, setLib] = useState<{ state: 'loading' } | { state: 'error'; message: string } | { state: 'ok'; data: LibraryListing }>({ state: 'loading' });
+  const [libCoin, setLibCoin] = useState<string>();
+  const [libLeg, setLibLeg] = useState<number | undefined>(p.leg);
+  const [edit, setEdit] = useState<Edit>();
+  const [jsonText, setJsonText] = useState<string>();
+  const checkSeq = useRef(0);
 
   const refresh = useCallback(async () => {
     if (!p.owner) return;
@@ -80,6 +142,29 @@ export function StrategiesPanel(p: {
     void refresh();
   }, [refresh, p.tick]);
 
+  useEffect(() => setLibLeg(p.leg), [p.leg]);
+  // the templates, sized from the live price for the chosen coin and leg
+  useEffect(() => {
+    if (!p.owner) return;
+    let live = true;
+    const q = new URLSearchParams({ owner: p.owner, ...(libCoin ? { coin: libCoin } : {}), ...(libLeg !== undefined ? { leg: String(libLeg) } : {}) });
+    getJson<LibraryListing>(`/strategy/library?${q}`).then(
+      (data) => {
+        if (!live) return;
+        setLib({ state: 'ok', data });
+        // a new coin or leg re-sizes the template that is open
+        setEdit((e) => {
+          const item = e && data.items.find((i) => i.id === e.templateId);
+          return item ? fromSpec(item.spec, item.id) : e;
+        });
+      },
+      (e) => live && setLib({ state: 'error', message: (e as Error).message }),
+    );
+    return () => {
+      live = false;
+    };
+  }, [p.owner, libCoin, libLeg]);
+
   const act = async (key: string, fn: () => Promise<string>) => {
     setBusy(key);
     setNotice(undefined);
@@ -93,27 +178,67 @@ export function StrategiesPanel(p: {
     }
   };
 
+  type Answer = Partial<DraftOk> & Partial<DraftRefused> & { error?: string };
+  /** 200 {ok:true, spec, ...}; 422 {ok:false, errors, draft?} when the agent refuses a spec; anything else is thrown. */
+  const ask = async (path: string, body: unknown): Promise<Answer> => {
+    try {
+      return (await post(path, body)) as Answer;
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 422 && Array.isArray(e.body.errors)) return e.body as Answer;
+      throw e;
+    }
+  };
+  /** Show the agent's answer. The owner signs the hash, so it is recomputed from the spec shown here instead of trusting the server's copy. */
+  const show = async (out: Answer, from: string): Promise<boolean> => {
+    if (out.ok === false || !out.spec) {
+      setDraft({ kind: 'refused', text: from, errors: out.errors ?? [out.error ?? 'The agent returned no strategy.'], draft: from === 'template' ? undefined : out.draft });
+      return false;
+    }
+    const res = out as DraftOk;
+    setDraft({ kind: 'ok', text: from, res, hashOk: null });
+    const mine = await specHashOf(res.spec);
+    setDraft({ kind: 'ok', text: from, res, hashOk: mine === res.specHash.toLowerCase() });
+    return true;
+  };
+
   const doDraft = () =>
     act('draft', async () => {
-      // 200 {ok:true, spec, ...}; 422 {ok:false, errors, draft?} when the agent refuses the draft; 400 bad text; 503 builder off
-      let out: Partial<DraftOk> & Partial<DraftRefused> & { error?: string };
-      try {
-        out = (await post('/strategy/draft', { owner: p.owner, text })) as typeof out;
-      } catch (e) {
-        if (e instanceof ApiError && e.status === 422 && Array.isArray(e.body.errors)) out = e.body as typeof out;
-        else throw e;
-      }
-      if (out.ok === false || !out.spec) {
-        setDraft({ kind: 'refused', text, errors: out.errors ?? [out.error ?? 'The agent returned no strategy.'], draft: out.draft });
-        return 'The draft was refused. Nothing was started.';
-      }
-      const res = out as DraftOk;
-      setDraft({ kind: 'ok', text, res, hashOk: null });
-      // the owner signs this hash, so recompute it from the spec shown here instead of trusting the server's copy
-      const mine = await specHashOf(res.spec);
-      setDraft({ kind: 'ok', text, res, hashOk: mine === res.specHash.toLowerCase() });
-      return 'Draft ready. Read the spec and the warnings, then start it or discard it.';
+      setEdit(undefined);
+      const ok = await show(await ask('/strategy/draft', { owner: p.owner, text }), text);
+      return ok ? 'Draft ready. Read the spec and the warnings, then start it or discard it.' : 'The draft was refused. Nothing was started.';
     });
+
+  // every change to the template form is checked by the agent shortly after the last keystroke
+  useEffect(() => {
+    if (!edit || !p.owner) return;
+    const seq = ++checkSeq.current;
+    const t = setTimeout(async () => {
+      try {
+        const out = await ask('/strategy/check', { owner: p.owner, spec: toSpec(edit) });
+        if (seq === checkSeq.current) await show(out, 'template');
+      } catch (e) {
+        if (seq === checkSeq.current) setDraft({ kind: 'refused', text: 'template', errors: [(e as Error).message] });
+      }
+    }, 350);
+    return () => clearTimeout(t);
+  }, [edit, p.owner, p.tick]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const pick = (item: { id: string; spec: StrategySpec }) => {
+    setText('');
+    setJsonText(undefined);
+    setEdit(fromSpec(item.spec, item.id));
+  };
+  const setField = (group: 'fields' | 'limits', key: string, value: string) => setEdit((e) => (e ? { ...e, [group]: { ...e[group], [key]: value } } : e));
+  const applyJson = () => {
+    try {
+      const spec = JSON.parse(jsonText ?? '') as StrategySpec;
+      if (!spec || typeof spec !== 'object' || !spec.params || !spec.limits || !(spec.type in PARAMS)) throw new Error('not a strategy spec');
+      setEdit(fromSpec(spec, edit?.templateId ?? ''));
+      setJsonText(undefined);
+    } catch (e) {
+      setNotice({ kind: 'err', text: `That JSON is not a strategy spec: ${(e as Error).message}` });
+    }
+  };
 
   const start = () =>
     act('start', async () => {
@@ -124,6 +249,7 @@ export function StrategiesPanel(p: {
       const sig = await p.sign(command);
       await post('/strategy/start', { command, sig, spec });
       setDraft(undefined);
+      setEdit(undefined);
       setText('');
       return `Strategy ${spec.id} started on leg ${spec.leg}.`;
     });
@@ -163,6 +289,92 @@ export function StrategiesPanel(p: {
       <div className="strat-grid">
         <div>
           <h3>New strategy</h3>
+          <h4>Start from a template</h4>
+          {lib.state === 'loading' && <p className="state">Reading templates…</p>}
+          {lib.state === 'error' && <p className="state err" role="alert">{lib.message}</p>}
+          {lib.state === 'ok' && (
+            <>
+              <div className="fields inline">
+                <label>
+                  Coin
+                  <select value={lib.data.coin} onChange={(e) => setLibCoin(e.target.value)}>
+                    {lib.data.coins.map((c) => <option key={c}>{c}</option>)}
+                  </select>
+                </label>
+                <label>
+                  Leg
+                  <select value={lib.data.leg} onChange={(e) => setLibLeg(Number(e.target.value))}>
+                    {[...new Set([...lib.data.freeLegs, lib.data.leg])].sort((a, b) => a - b).map((l) => <option key={l} value={l}>Leg {l}</option>)}
+                  </select>
+                </label>
+              </div>
+              <p className="muted small">
+                {lib.data.coin} is at {usd(lib.data.mid)}; every size below is worked out from that price.
+                {lib.data.freeLegs.length === 0 && ' No leg is free for a strategy: register one on the Legs tab first.'}
+              </p>
+              <fieldset className="tpl-list">
+                <legend className="sr">Template</legend>
+                {lib.data.items.map((i) => (
+                  <label key={i.id} className={`tpl${edit?.templateId === i.id ? ' on' : ''}`}>
+                    <input type="radio" name="tpl" checked={edit?.templateId === i.id} onChange={() => pick(i)} />
+                    <strong>{i.title}</strong>
+                    <span className="muted small">{i.blurb}</span>
+                  </label>
+                ))}
+              </fieldset>
+            </>
+          )}
+
+          {edit && (
+            <div className="tpl-form">
+              <h5>Adjust it</h5>
+              <p className="muted small">{lib.state === 'ok' ? lib.data.items.find((i) => i.id === edit.templateId)?.risk : ''}</p>
+              <div className="fields inline">
+                <label>
+                  Name
+                  <input value={edit.id} onChange={(e) => setEdit({ ...edit, id: e.target.value })} spellCheck={false} />
+                </label>
+                {PARAMS[edit.type].map((f) =>
+                  f.kind === 'side' ? (
+                    <label key={f.key}>
+                      {f.label}
+                      <select value={edit.fields[f.key] ?? 'buy'} onChange={(e) => setField('fields', f.key, e.target.value)}>
+                        <option value="buy">buy</option>
+                        <option value="sell">sell</option>
+                      </select>
+                    </label>
+                  ) : (
+                    <label key={f.key}>
+                      {f.label}
+                      <input value={edit.fields[f.key] ?? ''} onChange={(e) => setField('fields', f.key, e.target.value)} inputMode="decimal" />
+                    </label>
+                  ),
+                )}
+                {LIMITS.map((l) => (
+                  <label key={l.key}>
+                    {l.label}
+                    <input value={edit.limits[l.key] ?? ''} onChange={(e) => setField('limits', l.key, e.target.value)} inputMode="decimal" />
+                  </label>
+                ))}
+                <label>
+                  When stopped
+                  <select value={edit.onStop} onChange={(e) => setEdit({ ...edit, onStop: e.target.value })}>
+                    <option value="cancel">cancel orders, keep the position</option>
+                    <option value="flatten">close the position</option>
+                  </select>
+                </label>
+              </div>
+              <details>
+                <summary>Edit as JSON</summary>
+                <textarea rows={10} spellCheck={false} value={jsonText ?? JSON.stringify(toSpec(edit), null, 2)} onChange={(e) => setJsonText(e.target.value)} aria-label="Strategy spec as JSON" />
+                <div className="actions tight">
+                  <button disabled={jsonText === undefined} onClick={applyJson}>Use this JSON</button>
+                </div>
+              </details>
+            </div>
+          )}
+
+          <h4>Or describe it in words</h4>
           <label>
             Your rules
             <textarea value={text} maxLength={600} rows={4} onChange={(e) => setText(e.target.value)} placeholder="Example: buy BTC in a grid from 70000 to 80000 with 10 levels, 0.0002 each, on leg 3" />
@@ -170,7 +382,7 @@ export function StrategiesPanel(p: {
           <p className="muted small">{text.length} of 600 characters. Free text only ever produces a proposal.</p>
           <div className="actions">
             <button className="primary" disabled={!p.owner || busy !== null || text.trim() === ''} onClick={doDraft}>{busy === 'draft' ? 'Drafting…' : 'Draft strategy'}</button>
-            {draft && <button disabled={busy !== null} onClick={() => setDraft(undefined)}>Discard draft</button>}
+            {draft && <button disabled={busy !== null} onClick={() => (setDraft(undefined), setEdit(undefined))}>Discard draft</button>}
           </div>
 
           {draft?.kind === 'refused' && (

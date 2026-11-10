@@ -1,25 +1,55 @@
-import { StrictMode } from 'react';
+import { StrictMode, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { PrivyProvider, usePrivy, useSignTypedData, useWallets } from '@privy-io/react-auth';
 import type { Hex } from 'viem';
 import { HYPERNEAR_DOMAIN_TYPE, type OwnerIntentTypedData } from '@hypernear/client';
 import { App, type Auth } from './App';
+import type { AuthAccount } from './account';
 import './styles.css';
 
 const APP_ID = import.meta.env.VITE_PRIVY_APP_ID as string | undefined;
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
+/** localStorage read, or write when a value is given; blocked storage (private windows) just means no pin. */
+function store(key: string, value?: string): string | undefined {
+  try {
+    if (value === undefined) return localStorage.getItem(key) ?? undefined;
+    localStorage.setItem(key, value);
+  } catch {
+    /* no storage: the owner is then whatever Privy lists first */
+  }
+  return value;
+}
+
 /** Signs typed data with the logged-in wallet: Privy's hook first, then the raw provider; both errors if both fail. */
 function WithPrivy() {
-  const { ready, authenticated, login, logout, user } = usePrivy();
+  const privy = usePrivy();
+  const { ready, authenticated, login, logout, user } = privy;
+  // linkWallet and exportWallet exist on the Privy hook; typed loosely so a version rename only costs the menu entry
+  const extra = privy as unknown as { linkWallet?: () => void; exportWallet?: () => Promise<unknown> };
   const { wallets } = useWallets();
   const { signTypedData } = useSignTypedData();
-  const primary = user?.wallet?.address?.toLowerCase();
-  const wallet = wallets.find((w) => w.address.toLowerCase() === primary) ?? wallets[0];
+  // The owner is the first wallet this browser saw for this user. Linking another wallet for deposits must never change it.
+  const pinKey = user ? `hypernear-owner:${user.id}` : undefined;
+  const pinned = pinKey ? store(pinKey) : undefined;
+  const primary = (pinned ?? user?.wallet?.address)?.toLowerCase();
+  const wallet = pinned ? wallets.find((w) => w.address.toLowerCase() === primary) : (wallets.find((w) => w.address.toLowerCase() === primary) ?? wallets[0]);
+  useEffect(() => {
+    if (pinKey && !pinned && wallet) store(pinKey, wallet.address.toLowerCase());
+  }, [pinKey, pinned, wallet]);
+  const linked = (user?.linkedAccounts ?? []) as unknown as { type: string; address?: string; walletClientType?: string }[];
+  const account: AuthAccount = {
+    method: linked.find((a) => a.type === 'passkey') ? 'passkey' : linked.find((a) => a.type === 'email') ? 'email' : (linked.find((a) => a.type === 'wallet' && a.walletClientType !== 'privy')?.walletClientType ?? 'wallet'),
+    email: linked.find((a) => a.type === 'email')?.address,
+    wallets: wallets.map((w) => ({ address: w.address, kind: w.walletClientType === 'privy' ? 'embedded' : 'external' })),
+    linkWallet: extra.linkWallet,
+    exportWallet: extra.exportWallet && (() => void extra.exportWallet!()),
+  };
   const auth: Auth = {
     ready,
     authenticated,
     address: authenticated && wallet ? (wallet.address.toLowerCase() as Hex) : undefined,
+    account,
     login,
     logout,
     sign: async (td: OwnerIntentTypedData) => {

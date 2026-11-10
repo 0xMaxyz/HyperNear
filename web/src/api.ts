@@ -235,6 +235,25 @@ export interface StrategyStatus {
   spec?: StrategySpec;
 }
 
+/** GET /strategy/library: every template instantiated for one coin and leg at the current price (agent/src/strategy/library.ts). */
+export interface LibraryItem {
+  id: string;
+  title: string;
+  blurb: string;
+  risk: string;
+  type: 'grid' | 'twap';
+  spec: StrategySpec;
+  specHash: string;
+}
+export interface LibraryListing {
+  coin: string;
+  coins: string[];
+  mid: number;
+  leg: number;
+  freeLegs: number[];
+  items: LibraryItem[];
+}
+
 /** Canonical JSON (keys sorted), the same as agent/src/strategy/spec.ts canonicalJson, so the hash can be recomputed here. */
 export function canonicalJson(v: unknown): string {
   if (Array.isArray(v)) return `[${v.map(canonicalJson).join(',')}]`;
