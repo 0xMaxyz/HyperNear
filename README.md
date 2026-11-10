@@ -56,7 +56,7 @@ Not guaranteed:
 - **Resting orders need a second step after a freeze.** Freeze revokes the old API wallets, but orders already on the book stay until someone calls `cancel_orders`. Our agent does it right after a freeze it relays (claim C20); if our server is gone, anyone with a NEAR account can run `node agent/scripts/clear-frozen.ts 0x<owner>`. Between the freeze and that sweep (18.5 s on testnet), a resting order can still fill.
 - **The owner must be an EOA** (for example MetaMask; a Privy embedded wallet is untested, C13). Smart-contract wallets (Safe, ERC-1271) are not supported.
 - Funding a fresh leg costs 1 USDC of Hyperliquid activation fee; withdrawals cost 1 USDC. The activation fee falls in one of two places: a never-seen address loses 1 USDC from its first credit (testnet, C10), and on mainnet an account that was funded without a fee pays 1 USDC extra on its first transfer to another address, the receiver getting the full amount ([example tx](https://app.hyperliquid.xyz/explorer/tx/0x7b92cb810b73780d7d0c044856007802044f0066a67696df1f5b76d3ca7751f8)). The agent reads which applies (`agent/src/activation.ts`) and sends the extra USDC.
-- After a mainnet deploy the runbook deletes the contract's full-access keys (step 10; the mainnet run has not happened yet). That makes the contract account the custody root: nobody, including us, can upgrade it afterwards.
+- After a mainnet deploy the runbook deletes the contract's full-access keys (step 10; we have not deployed to mainnet, see [Live evidence](#live-evidence-near-testnet-and-hyperliquid-testnet-2026-11-07)). That makes the contract account the custody root: nobody, including us, can upgrade it afterwards.
 
 ## Optional TEE mode (not yet run on real hardware)
 
@@ -70,12 +70,18 @@ By default our server runs the agent, so the owner trusts us with the order poli
 
 **Status, plainly:** the owner-binding, payment and revocation logic passed 14 of 14 live checks on NEAR and Hyperliquid testnet (claim C21), but with a **dev registration** (`register_tee_agent_dev`, testnet builds only) instead of a TDX quote. On-chain quote verification is shown only by T0's recorded quote. The agent has **not yet run on a real Phala TDX machine**, so the full chain (real quote → registration → trading) is unproven. Even when it runs: the TEE gives no liveness (freeze and the `cancel_orders` sweep stay the fallback), the agent's AI API keys are passed as unmeasured environment variables, and TDX itself has known side-channel limits.
 
+**TEE pricing (planned, not built).** The contract today has one TEE price and fee address, fixed when it is created. That is fine on testnet but too rigid for a contract whose keys are deleted after deploy, so the mainnet design changes it:
+
+- **Two offers, priced off-chain.** A *dedicated* TEE (one owner per instance: the full machine cost, about $42 a month for a Phala `tdx.small`, plus a margin and a setup fee) and a *shared* seat (one instance serving up to about 10 owners: the machine cost divided by expected occupancy plus a margin, about $8 to $10 a month). The contract already supports both, because each owner names their own TEE agent account and code measurement; only the price differs. Sharing changes liveness and blast radius (one crash stops every owner on that instance), not key safety: every instance runs the same measured code, and each owner's trading keys stay in their own slot of its memory.
+- **The owner signs the exact amount.** `payTee {leg, amount, feeAddress}`: the contract keeps one published fee address and checks only that, so nobody can charge more than the owner signed and the guarantee line holds. Prices, tiers and how long a payment covers live with each TEE agent, which checks the Hyperliquid ledger before serving (as it does now), so prices can follow the machine cost without a new contract.
+- **No escrow pool.** A pay-when-full escrow for shared instances would add refund logic to an unupgradable contract to save about $42 a month of risk; we would rather pay for the first shared instance ourselves.
+
 ## NEAR features used
 
 - **Chain Signatures** (`v1.signer`; `v1.signer-prod.testnet` on testnet): the contract calls `sign` for every Hyperliquid action. The MPC network holds the keys; the contract pays the 1 yoctoNEAR deposit from its own balance (claims C1, C7, C14).
 - **A NEAR smart contract** (Rust, near-sdk 5, [`contract/`](contract)): legs, owner intents, agent policy, freeze, and Hyperliquid order cancels signed with a leg's master key (the L1 "phantom agent" scheme, msgpack encoded in the contract; claim C20).
 - **Function-call access keys:** the agent's NEAR account can only call `rebalance` and `agent_usd_class_transfer` on the contract. On testnet the agent key tries `owner_execute` and NEAR refuses it.
-- **NEAR Intents 1Click (dry quotes only; mainnet funding run pending):** funding script `agent/scripts/fund-leg-1click.ts`. So far we have only run dry quotes (documented in [docs/mainnet-runbook.md](docs/mainnet-runbook.md)); the mainnet funding run is part of the runbook.
+- **NEAR Intents 1Click (dry quotes only):** funding script `agent/scripts/fund-leg-1click.ts`. 1Click has no testnet, so we ran dry quotes (`dry: true`, as the hackathon FAQ recommends, Q-007), documented in [docs/mainnet-runbook.md](docs/mainnet-runbook.md); a live funding run is part of the mainnet runbook.
 - **FastNEAR RPC** (`test.rpc.fastnear.com`): a full master action (NEAR sign, Hyperliquid post, balance change) takes 7.75 s p50 / 8.78 s p95 end to end; the NEAR side alone is about 5.7 s p50 through FastNEAR, against about 12 s through `rpc.testnet.near.org` (claim C6).
 
 Also used: **Jev** by TypeSafe AI (decision layer), **Claude** (escalation and chat), **Privy** (owner login).
@@ -194,7 +200,7 @@ Every claim has a committed test or script and a result file; the full ledger wi
 - `withdraw` with a forged signature was refused by the contract: `owner_execute failed: Smart contract panicked: signature: bad v`.
 - The agent's NEAR key cannot call `owner_execute`: `Access key does not allow method owner_execute`.
 
-Mainnet: not run yet. The plan, costs and abort points are in [docs/mainnet-runbook.md](docs/mainnet-runbook.md); explorer links will be added here after the run.
+Mainnet: not deployed. The project runs on NEAR and Hyperliquid testnet (testnet-only projects are eligible, FAQ Q-010). A mainnet deploy locks the contract for good, so it waits for the pricing design above and a real-hardware TEE run; the plan, costs and abort points are ready in [docs/mainnet-runbook.md](docs/mainnet-runbook.md).
 
 ## Phase 2: strategies, each on its own leg
 
