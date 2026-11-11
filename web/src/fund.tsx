@@ -265,8 +265,8 @@ export function FundTab({ view, owner, leg: legParam, canSign, dry, locked, busy
         )}
         {real && (
           <p className="attention" role="note">
-            <strong>Real money.</strong> Delivery to a leg has been tested by the project owner but is not yet recorded in docs/claims.md. Start with a small amount (the limit is ${info.data.maxUsd} a deposit). A new leg loses 1 USDC to Hyperliquid's
-            activation fee.
+            <strong>Real money.</strong> Delivery to a leg has been tested by the project owner but is not yet recorded in docs/claims.md. Start with a small amount (the limit is ${info.data.maxUsd} a deposit). On a new leg, Hyperliquid's 1 USDC activation fee is paid by the sender (1Click),
+            not taken from the leg; check the amount that arrives on your first deposit.
           </p>
         )}
 
@@ -289,7 +289,7 @@ export function FundTab({ view, owner, leg: legParam, canSign, dry, locked, busy
           <dt>Trading balance</dt>
           <dd>{usd(perp)}</dd>
         </dl>
-        {active.activation === 'owed-on-credit' && <p className="flag small">New leg: its first deposit loses 1 USDC to Hyperliquid's activation fee.</p>}
+        {active.activation === 'owed-on-credit' && <p className="flag small">New leg: the first HyperCore deposit activates it. The sender pays Hyperliquid's 1 USDC fee, and the leg owes nothing later (on testnet it comes out of the amount that arrives).</p>}
         {err && <p className="notice err" role="alert">{err}</p>}
       </section>
 
@@ -351,7 +351,7 @@ export function FundTab({ view, owner, leg: legParam, canSign, dry, locked, busy
                   {quote.q.activationFeeUsd > 0 && (
                     <>
                       <dt>Leg ends with</dt>
-                      <dd>about {usd(quote.q.expectedCredit)} (after the 1 USDC activation fee)</dd>
+                      <dd>about {usd(quote.q.expectedCredit)} (the 1 USDC activation fee of a new leg is paid by the sender, not by the leg)</dd>
                     </>
                   )}
                   <dt>Time</dt>
@@ -410,7 +410,7 @@ export function FundTab({ view, owner, leg: legParam, canSign, dry, locked, busy
           ) : (
             <>
               <p className="muted small">
-                On Hyperliquid testnet, send test USDC to this leg's address from any testnet account with a Hyperliquid transfer, or ask whoever runs this agent to send some. A new leg loses 1 USDC to the activation fee, so send a few. Then come back and move it to the trading balance.
+                On Hyperliquid testnet, send test USDC to this leg's address from any testnet account with a Hyperliquid transfer, or ask whoever runs this agent to send some. A new leg is charged 1 USDC on its first credit (on testnet it comes out of what arrives), so send a few more. Then come back and move it to the trading balance.
               </p>
               <p><code className="addr-full">{active.address}</code> <button className="small-btn" onClick={() => copy(active.address)}>{copied === active.address ? 'Copied' : 'Copy'}</button></p>
             </>

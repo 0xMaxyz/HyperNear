@@ -55,7 +55,7 @@ export interface FundQuote {
   /** HyperCore USDC the swap delivers */
   amountOut: number;
   minAmountOut: number;
-  /** what the leg ends up holding: amountOut minus the 1 USDC activation fee of a never-seen leg */
+  /** what the leg ends up holding: 1Click is a HyperCore sender, so the 1 USDC activation fee of a never-seen leg is paid by 1Click, not taken from the leg (owner-reported on mainnet; check the first real deposit) */
   expectedCredit: number;
   activationFeeUsd: number;
   firstTransferOutFeeUsd: number;
@@ -147,7 +147,7 @@ export function fundingService(o: FundingOptions) {
       const usd = Number(q.amount) * token.price;
       if (token.price > 0 && usd < minUsd) throw new HttpError(400, `the minimum is about $${minUsd} (this is $${usd.toFixed(2)})`);
       if (token.price > 0 && usd > maxUsd) throw new HttpError(400, `the maximum per deposit is $${maxUsd} (this is $${usd.toFixed(2)})`);
-      const activationFee = q.activation === 'owed-on-credit' ? 1 : 0;
+      const activationFee = q.activation === 'owed-on-credit' ? 1 : 0; // the fee a new leg's first credit carries; the sender pays it
       const dry = o.network !== 'mainnet' || q.dry !== false; // a real address only ever comes from an explicit request on mainnet
       const res = await call('/v0/quote', {
         method: 'POST',
@@ -168,7 +168,6 @@ export function fundingService(o: FundingOptions) {
       });
       const r = res.quote ?? {};
       const amountOut = num(r.amountOut, HYPERCORE_USDC.decimals);
-      if (activationFee && amountOut <= activationFee) throw new HttpError(422, `after the swap only ${amountOut.toFixed(2)} USDC would arrive, which the 1 USDC activation fee of a new leg takes: send more`);
       return {
         dry,
         token: token.label,
@@ -176,7 +175,7 @@ export function fundingService(o: FundingOptions) {
         amountInUsd: token.price > 0 ? usd : null,
         amountOut,
         minAmountOut: num(r.minAmountOut, HYPERCORE_USDC.decimals),
-        expectedCredit: Math.max(0, amountOut - activationFee),
+        expectedCredit: amountOut,
         activationFeeUsd: activationFee,
         firstTransferOutFeeUsd: q.activation === 'owed-on-first-send' ? 1 : 0,
         withdrawFeeUsd: num(r.withdrawFee, HYPERCORE_USDC.decimals),

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { OwnerState } from '@hypernear/client';
-import { activationStatus } from '../src/activation.ts';
+import { activatedByCredit, activationStatus } from '../src/activation.ts';
 import { evaluateGuard, DEFAULT_GUARD_CONFIG } from '../src/guard.ts';
 import { DEFAULT_LOOP_CONFIG, planRebalance } from '../src/guardLoop.ts';
 import { guardInputs, type OwnerSnapshot } from '../src/legs.ts';
@@ -42,6 +42,18 @@ describe('activationStatus', () => {
     expect(r.some((x) => x.delta.destination === B && x.delta.user === B)).toBe(true);
     expect(r.some((x) => x.delta.destination === B && x.delta.fee === '1.0')).toBe(true);
     expect(await activationStatus(hl('user', r), B)).toBe('owed-on-first-send');
+  });
+
+  it('a leg whose first row is a HyperCore credit carrying fee 1.0 (the sender paid) owes nothing, even though it never sent', async () => {
+    // testnet 2026-11-11: a lab wallet sent 25 to a new leg; the row has usdc 25.0 and fee 1.0, the leg holds ~24 and its later sends carry fee 0.0
+    const leg = '0x61ad9ffd844dda0bc5eb3c6c8bd32d5243b92930';
+    const credit = { time: 10, hash: '0x0', delta: { type: 'internalTransfer', usdc: '25.0', user: A, destination: leg, fee: '1.0' } };
+    expect(activatedByCredit(leg, [credit])).toEqual({ fee: 1 });
+    expect(await activationStatus(hl('user', [credit]), leg)).toBe('paid');
+    // the same fee on a LATER credit is the sender's own first-send fee (mainnet account B): not this account's activation
+    const early = { time: 1, hash: '0x0', delta: { type: 'send', usdc: '5.0', user: B, destination: leg, fee: '0.0' } };
+    expect(activatedByCredit(leg, [early, { ...credit, time: 20 }])).toBeUndefined();
+    expect(await activationStatus(hl('user', [early, { ...credit, time: 20 }]), leg)).toBe('owed-on-first-send');
   });
 
   it('caches paid forever, never missing', async () => {

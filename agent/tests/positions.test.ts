@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { HlUserFill, HlUserFunding } from '@perps-platform/core';
 import { makeCloid } from '../src/cloid.ts';
-import { ACTIVATION_FEE_USD, buildCycles, historyRows, nextFundingAt, openComposites, openTime, type LegHistory } from '../src/positions.ts';
+import { buildCycles, historyRows, nextFundingAt, openComposites, openTime, setupFeePaid, type LegHistory } from '../src/positions.ts';
 import { ch, snap } from './agent-helpers.ts';
 
 let t = 1_000;
@@ -53,7 +53,7 @@ const hedged = (u0: string, u1: string) => {
   s.legs[1]!.clearinghouse.assetPositions[0]!.position.unrealizedPnl = u1;
   return s;
 };
-const legData = (leg: number, over: Partial<LegHistory>): LegHistory => ({ leg, address: snap(ch()).legs[leg]!.address, fills: [], funding: [], ledger: [], takerRate: 0.00045, activation: 'paid', ...over });
+const legData = (leg: number, over: Partial<LegHistory>): LegHistory => ({ leg, address: snap(ch()).legs[leg]!.address, fills: [], funding: [], ledger: [], takerRate: 0.00045, activation: 'paid', setupFeeUsd: 1, ...over });
 
 describe('openComposites', () => {
   it('pairs legs 0 and 1 into a hedge; position PnL adds every line, the setup fee once per leg', () => {
@@ -70,7 +70,7 @@ describe('openComposites', () => {
     expect(c!.totals.unrealized).toBeCloseTo(1, 9);
     expect(c!.totals.fees).toBeCloseTo(0.03, 9);
     expect(c!.totals.funding).toBeCloseTo(-0.01, 9);
-    expect(c!.totals.activationFee).toBe(2 * ACTIVATION_FEE_USD);
+    expect(c!.totals.activationFee).toBe(2);
     expect(c!.totals.pnl).toBeCloseTo(1 - 0.03 - 0.01 - 2, 9);
     // closing both legs at 100000: (0.0004 + 0.0002) x 100000 x 0.00045 = 0.027
     expect(c!.totals.closeFeesEst).toBeCloseTo(0.027, 9);
@@ -88,7 +88,7 @@ describe('openComposites', () => {
     const [c] = openComposites(s, [legData(0, { fills: [...first, second] })], {}, 9_000);
     expect(c).toMatchObject({ kind: 'one-sided', legs: [{ leg: 0, activationFee: 0, realized: 0 }] });
     const [only] = openComposites(s, [legData(0, { fills: [second] })], {}, 9_000);
-    expect(only!.totals.activationFee).toBe(ACTIVATION_FEE_USD);
+    expect(only!.totals.activationFee).toBe(1);
   });
 
   it('the same side on both legs is not a hedge', () => {
@@ -144,5 +144,23 @@ describe('historyRows', () => {
     expect(twap).toHaveLength(1);
     expect(twap[0]).toMatchObject({ size: 0.002 });
     expect(rows.filter((r) => r.kind === 'transfer').map((r) => r.amount)).toEqual([-3, 24]);
+  });
+});
+
+describe('setupFeePaid', () => {
+  const leg = '0x61ad9ffd844dda0bc5eb3c6c8bd32d5243b92930';
+  const row = (time: number, delta: Record<string, unknown>) => ({ time, hash: `0x${'0'.repeat(64)}` as `0x${string}`, delta: delta as never });
+  const credit = row(1, { type: 'internalTransfer', usdc: '25.0', user: '0xaaaa', destination: leg, fee: '1.0' });
+  it('a fee-carrying HyperCore credit was paid out of the amount on testnet, by the sender on mainnet', () => {
+    expect(setupFeePaid([credit], leg, 'testnet')).toBe(1);
+    expect(setupFeePaid([credit], leg, 'mainnet')).toBe(0);
+  });
+  it('a leg credited without a fee pays on its first outgoing transfer; a withdrawal fee is not the activation', () => {
+    const free = row(1, { type: 'send', usdc: '5.0', user: '0xbbbb', destination: leg, fee: '0.0' });
+    const withdraw = row(2, { type: 'withdraw', usdc: '3.0', fee: '1.0' });
+    expect(setupFeePaid([free], leg, 'mainnet')).toBe(0);
+    expect(setupFeePaid([free, withdraw], leg, 'mainnet')).toBe(0);
+    expect(setupFeePaid([free, row(3, { type: 'send', usdc: '1.0', user: leg, destination: '0xcccc', fee: '1.0' })], leg, 'mainnet')).toBe(1);
+    expect(setupFeePaid([], leg, 'testnet')).toBe(0);
   });
 });

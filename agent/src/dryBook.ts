@@ -207,6 +207,7 @@ export function createDryBook(snap: OwnerSnapshot) {
         ledger: [],
         takerRate: DEFAULT_TAKER_RATE,
         activation: l.activation,
+        setupFeeUsd: 1,
       }));
     },
   };

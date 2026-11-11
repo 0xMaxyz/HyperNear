@@ -5,13 +5,11 @@
 import type { HlClient, HlUserFill, HlUserFunding, HlLedgerUpdate } from '@perps-platform/core';
 import type { Hex } from 'viem';
 import { parseCloid, type CloidKind } from './cloid.ts';
-import type { Activation } from './activation.ts';
+import { activatedByCredit, type Activation } from './activation.ts';
 import type { OwnerSnapshot } from './legs.ts';
 
 /** HL base taker rate (fallback when userFees is not read, e.g. --dry-run). */
 export const DEFAULT_TAKER_RATE = 0.00045;
-/** Hyperliquid's one-off fee to activate a new account (activation.ts). Counted once per leg, in that leg's first position. */
-export const ACTIVATION_FEE_USD = 1;
 const HOUR_MS = 3_600_000;
 
 export interface LegHistory {
@@ -22,6 +20,28 @@ export interface LegHistory {
   ledger: HlLedgerUpdate[];
   takerRate: number;
   activation: Activation;
+  /** the one-off activation fee this leg's own balance paid (see setupFeePaid); 0 if the sender or nobody has paid it yet */
+  setupFeeUsd: number;
+}
+
+/**
+ * What activating this account cost the ACCOUNT itself, from its ledger (activation.ts has the rules):
+ *  - first row is a fee-carrying HyperCore credit: the sender paid. On testnet the fee came out of the amount that arrived (send 25, leg holds 24),
+ *    so the leg bore it; on mainnet the owner reports the sender pays on top, so the leg bore nothing (unverified, re-measure on a first deposit);
+ *  - otherwise the account pays on its first outgoing transfer: the fee on that row, if any.
+ * Withdrawals carry Hyperliquid's ordinary 1 USDC withdrawal fee, shown in the history; they are not counted here.
+ */
+export function setupFeePaid(ledger: HlLedgerUpdate[], address: string, network: 'testnet' | 'mainnet'): number {
+  const credit = activatedByCredit(address, ledger);
+  if (credit) return network === 'testnet' ? credit.fee : 0;
+  const a = address.toLowerCase();
+  const out = [...ledger]
+    .sort((x, y) => x.time - y.time)
+    .find((r) => {
+      const d = r.delta as Record<string, unknown>;
+      return d.type !== 'withdraw' && typeof d.user === 'string' && d.user.toLowerCase() === a && typeof d.destination === 'string' && d.destination.toLowerCase() !== a && Number(d.fee ?? 0) > 0;
+    });
+  return out ? Number((out.delta as { fee?: string }).fee) : 0;
 }
 
 /** Hourly funding rate per coin, from the asset contexts (signed: positive means longs pay shorts). */
@@ -160,13 +180,13 @@ export function openComposites(s: OwnerSnapshot, data: LegHistory[], rates: Fund
       const since = cycle?.openedAt ?? null;
       const funding = sum((d?.funding ?? []).filter((f) => f.delta.coin === p.coin && since !== null && f.time >= since).map((f) => num(f.delta.usdc)));
       // the leg's setup fee belongs to the first position it ever held
-      const first = d && cycles.length > 0 && cycles[0] === cycle && d.activation !== 'owed-on-credit';
+      const first = d && cycles.length > 0 && cycles[0] === cycle;
       const mark = Number(s.market.mids[p.coin] ?? p.entryPx);
       const rate = rates[p.coin] ?? 0;
       const unrealized = Number(p.unrealizedPnl);
       const realized = cycle?.realized ?? 0;
       const fees = cycle?.fees ?? 0;
-      const activationFee = first ? ACTIVATION_FEE_USD : 0;
+      const activationFee = first && d ? d.setupFeeUsd : 0;
       legPositions.push({
         leg: l.leg,
         address: l.address,
@@ -327,12 +347,12 @@ async function allFunding(hl: Pick<HlClient, 'userFunding'>, user: Hex, startTim
 }
 
 /** Reads fills (the latest 2000: shortcut, widen with userFillsByTime if a leg trades more), funding, ledger and fee rate of every registered leg. */
-export async function readLegHistory(hl: HlClient, s: OwnerSnapshot): Promise<LegHistory[]> {
+export async function readLegHistory(hl: HlClient, s: OwnerSnapshot, network: 'testnet' | 'mainnet' = 'testnet'): Promise<LegHistory[]> {
   return Promise.all(
     s.legs.map(async (l) => {
       const [fills, fees, ledger] = await Promise.all([hl.userFills({ user: l.address }), hl.userFees({ user: l.address }), hl.userNonFundingLedgerUpdates({ user: l.address, startTime: 0 }).catch(() => [])]);
       const funding = await allFunding(hl, l.address, fills.length ? Math.min(...fills.map((f) => f.time)) : Date.now() - 30 * 86_400_000);
-      return { leg: l.leg, address: l.address, fills, funding, ledger, takerRate: Number(fees.userCrossRate), activation: l.activation };
+      return { leg: l.leg, address: l.address, fills, funding, ledger, takerRate: Number(fees.userCrossRate), activation: l.activation, setupFeeUsd: setupFeePaid(ledger, l.address, network) };
     }),
   );
 }

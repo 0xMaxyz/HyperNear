@@ -53,7 +53,7 @@ describe('funding', () => {
     const body = s.calls.find((c) => c.path === '/v0/quote')!.body;
     expect(body).toMatchObject({ dry: true, originAsset: 'nep141:usdc-arb', destinationAsset: HYPERCORE_USDC.id, recipient: LEG, refundTo: EOA, amount: '10000000', swapType: 'EXACT_INPUT', recipientType: 'DESTINATION_CHAIN' });
     expect(q).toMatchObject({ dry: true, depositAddress: null, amountOut: 9.82, activationFeeUsd: 1, etaSec: 35 });
-    expect(q.expectedCredit).toBeCloseTo(8.82, 6); // the new leg's 1 USDC activation fee comes off the credit
+    expect(q.expectedCredit).toBeCloseTo(9.82, 6); // 1Click is a HyperCore sender: it pays the new leg's 1 USDC activation fee, the leg gets all of amountOut
     expect(q.withdrawFeeUsd).toBeCloseTo(0.3153, 6);
   });
 
@@ -90,9 +90,9 @@ describe('funding', () => {
     expect(s.calls.filter((c) => c.path === '/v0/quote')).toHaveLength(0);
   });
 
-  it('refuses a deposit that the activation fee would eat entirely', async () => {
+  it('a small deposit to a new leg is not eaten by the activation fee: the sender pays it, the leg gets what arrives', async () => {
     const { f } = svc('testnet', stub({ quote: { quote: { amountOut: '90000000' } } })); // 0.9 USDC arrives
-    await expect(f.quote({ ...req, amount: '3', activation: 'owed-on-credit' })).rejects.toMatchObject({ status: 422, message: expect.stringMatching(/activation fee/) });
+    expect(await f.quote({ ...req, amount: '3', activation: 'owed-on-credit' })).toMatchObject({ amountOut: 0.9, expectedCredit: 0.9, activationFeeUsd: 1 });
   });
 
   it('reports a 1Click error and an unreachable 1Click as errors the page can show', async () => {

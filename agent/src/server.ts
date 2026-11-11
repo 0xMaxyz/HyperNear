@@ -384,7 +384,7 @@ export function handler(d: Deps) {
       if (req.method === 'GET' && positionsPath) {
         const owner = ownerOf(positionsPath[2]);
         const snapshot = await d.legs.snapshot(owner);
-        const data = await (d.legHistory ?? ((s) => readLegHistory(d.legs.hl, s)))(snapshot);
+        const data = await (d.legHistory ?? ((s) => readLegHistory(d.legs.hl, s, d.legs.network)))(snapshot);
         if (positionsPath[1] === 'history') return reply(200, { owner, at: Date.now(), rows: historyRows(data, { limit: Number(url.searchParams.get('limit') ?? 300) || 300 }) });
         const rates = await (d.fundingRates ?? ((s) => readFundingRates(d.legs.hl, s)))(snapshot).catch(() => ({}) as FundingRates);
         return reply(200, { owner, at: Date.now(), positions: openComposites(snapshot, data, rates) });
