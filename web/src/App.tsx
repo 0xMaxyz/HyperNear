@@ -393,7 +393,7 @@ export function App({ auth }: { auth: Auth }) {
               {unread > 0 && <span className="count">{unread > 99 ? '99+' : unread}</span>}
             </a>
           )}
-          <a className="icon-btn" href="#/learn" aria-label="Help and how it works">?</a>
+          <a className="icon-btn help" href="#/learn" aria-label="Help and how it works">?</a>
           {owner && (
             <button className="addr" aria-haspopup="dialog" title={`Account ${owner}`} onClick={() => setMenu(true)}>
               {short(owner)}
@@ -405,7 +405,7 @@ export function App({ auth }: { auth: Auth }) {
           {owner && view && (
             <button className={policy?.frozen ? 'freeze-btn on' : 'freeze-btn'} disabled={locked || legs.length === 0} title={why ?? (policy?.frozen ? 'Unfreeze: the contract signs again and new agent keys must be approved' : 'Freeze: stop everything the contract signs and revoke every trading key. Withdrawals to you still work.')} onClick={toggleFreeze}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
-              {busy === 'freeze' ? 'Signing…' : policy?.frozen ? 'Frozen · Unfreeze' : 'Freeze all'}
+              <span className="lbl">{busy === 'freeze' ? 'Signing…' : policy?.frozen ? 'Frozen · Unfreeze' : 'Freeze all'}</span>
             </button>
           )}
         </div>
@@ -628,6 +628,32 @@ export function App({ auth }: { auth: Auth }) {
           )}
         </main>
       )}
+      {owner && (
+        <nav className="bottom-nav" aria-label="Sections">
+          {tabDefs.map((t) => (
+            <a key={t.id} href={`#/${t.id}`} aria-current={route.tab === t.id ? 'page' : undefined}>
+              <NavIcon id={t.id} />
+              <span>{t.label}</span>
+              {t.dot && <span className="dot" role="img" aria-label={t.dot} />}
+            </a>
+          ))}
+        </nav>
+      )}
     </>
+  );
+}
+
+const ICONS: Record<string, string> = {
+  trade: 'M3 3v18h18 M7 15l4-4 3 3 5-6',
+  portfolio: 'M3 7h18v13H3z M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2',
+  strategies: 'M4 6h16 M4 12h10 M4 18h6',
+  fund: 'M12 3v18 M17 7H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6',
+  protect: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
+};
+function NavIcon({ id }: { id: string }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {(ICONS[id] ?? '').split(' M').map((d, i) => <path key={i} d={i ? `M${d}` : d} />)}
+    </svg>
   );
 }

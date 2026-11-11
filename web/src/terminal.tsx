@@ -190,8 +190,11 @@ export function PriceChart({ candles, lines, interval, onInterval, note, error, 
 
 /* ---------- order book and trades ---------- */
 
-export function BookPanel({ book, trades, mark, coin, recorded, grouping, onGrouping, onPrice }: { book?: Book; trades: Trade[]; mark: number; coin: string; recorded: boolean; grouping: number; onGrouping: (g: number) => void; onPrice: (px: number) => void }) {
-  const [tab, setTab] = useState<'book' | 'trades'>('book');
+export function BookPanel({ book, trades, mark, coin, recorded, grouping, onGrouping, onPrice, tab: shown, onTab }: { book?: Book; trades: Trade[]; mark: number; coin: string; recorded: boolean; grouping: number; onGrouping: (g: number) => void; onPrice: (px: number) => void; tab?: 'book' | 'trades'; onTab?: (t: 'book' | 'trades') => void }) {
+  // controlled by the phone's Chart | Book | Trades switch when given, otherwise its own
+  const [own, setOwn] = useState<'book' | 'trades'>('book');
+  const tab = shown ?? own;
+  const setTab = (t: 'book' | 'trades') => (onTab ? onTab(t) : setOwn(t));
   const max = book ? Math.max(book.bids[book.bids.length - 1]?.total ?? 0, book.asks[book.asks.length - 1]?.total ?? 0) : 0;
   const bestBid = book?.bids[0]?.px;
   const bestAsk = book?.asks[0]?.px;
@@ -333,7 +336,23 @@ export function Blotter(p: BlotterProps) {
         {tab === 'positions' &&
           (!p.positions ? <p className="t-empty">Reading positions…</p> : comps.length === 0 ? <p className="t-empty">No open positions{leg !== 'all' ? ` on leg ${leg}` : ''}.</p> : (
             <>
-              <table className="t-table">
+              <div className="t-cards phone">
+                {comps.map((c) => (
+                  <div key={c.id} className="t-cardgroup">
+                    {c.kind === 'hedge' && (
+                      <div className="t-group-line card-head">
+                        <span className="t-tag info">Hedge</span>
+                        <b>{c.coin}</b>
+                        <span className="t-spacer" />
+                        <span className={`t-num ${tone(c.totals.netIfClosed)}`}>{signedUsd(c.totals.netIfClosed)}</span>
+                        <button disabled={p.locked} title={p.why} onClick={() => p.onCloseHedge(c.coin)}>Close hedge</button>
+                      </div>
+                    )}
+                    {c.legs.map((l) => <PositionCard key={l.leg} l={l} dp={p.decimals(l.coin)} {...p} />)}
+                  </div>
+                ))}
+              </div>
+              <table className="t-table desk">
                 <thead>
                   <tr><th>Leg</th><th>Coin</th><th className="num">Size</th><th className="num">Value</th><th className="num">Entry</th><th className="num">Mark</th><th className="num">PnL (ROE)</th><th className="num">Liq. price</th><th className="num">Margin</th><th className="num">Funding</th><th className="end">Close</th></tr>
                 </thead>
@@ -370,7 +389,26 @@ export function Blotter(p: BlotterProps) {
 
         {tab === 'orders' &&
           (!p.orders ? <p className="t-empty">Reading open orders…</p> : orders.length === 0 ? <p className="t-empty">Nothing is resting{leg !== 'all' ? ` on leg ${leg}` : ''}. A freeze cancels resting orders, protective ones included.</p> : (
-            <table className="t-table">
+            <>
+            <ul className="t-cards phone">
+              {orders.map((o) => (
+                <li key={o.oid} className="t-pcard">
+                  <div className="t-pcard-top">
+                    <span className="t-leg">Leg {o.leg}</span>
+                    <b>{o.coin}</b>
+                    <span className={o.side === 'buy' ? 'up' : 'down'}>{o.orderType} {o.side}</span>
+                    <span className="t-spacer" />
+                    <button disabled={p.locked} title={p.why} onClick={() => p.onCancel(o)}>Cancel</button>
+                  </div>
+                  <div className="t-pcard-row t-num muted">
+                    <span>{o.isPositionTpsl ? 'Position' : o.size}</span>
+                    <span>@ {o.isTrigger && o.orderType.includes('Market') ? 'Market' : pxFmt(Number(o.limitPx))}</span>
+                    {o.isTrigger && Number(o.triggerPx) > 0 && <span>trigger {pxFmt(Number(o.triggerPx))}</span>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <table className="t-table desk">
               <thead><tr><th>Leg</th><th>Placed</th><th>Coin</th><th>Type</th><th className="num">Size</th><th className="num">Price</th><th className="num">Trigger</th><th>Flags</th><th className="end" /></tr></thead>
               <tbody>
                 {orders.map((o) => (
@@ -388,6 +426,7 @@ export function Blotter(p: BlotterProps) {
                 ))}
               </tbody>
             </table>
+            </>
           ))}
 
         {tab === 'twap' &&
@@ -474,6 +513,33 @@ function PositionRow({ l, kind, dp, locked, why, onReduce, onProtect, onLimitClo
         </div>
       </td>
     </tr>
+  );
+}
+
+function PositionCard({ l, dp, locked, why, onReduce, onProtect, onLimitClose }: { l: LegPosition; dp: number } & Pick<BlotterProps, 'locked' | 'why' | 'onReduce' | 'onProtect' | 'onLimitClose'>) {
+  const long = l.side === 'long';
+  const roe = l.marginUsed > 0 ? l.unrealized / l.marginUsed : 0;
+  return (
+    <div className="t-pcard">
+      <div className="t-pcard-top">
+        <span className="t-leg">Leg {l.leg}</span>
+        <b>{l.coin}</b>
+        <span className={`small ${long ? 'up' : 'down'}`}>{long ? 'Long' : 'Short'} {l.leverage.value}x</span>
+        <span className="t-spacer" />
+        <span className={`t-num ${tone(l.unrealized)}`}>{signedUsd(l.unrealized)} ({pct(roe, 1)})</span>
+      </div>
+      <dl className="t-pcard-kv t-num">
+        <dt>Size</dt><dd>{n(l.size, dp)}</dd>
+        <dt>Entry</dt><dd>{pxFmt(l.entryPx)}</dd>
+        <dt>Mark</dt><dd>{pxFmt(l.markPx)}</dd>
+        <dt>Liq.</dt><dd className="liq">{l.liquidationPx === null ? 'None' : pxFmt(l.liquidationPx)}</dd>
+      </dl>
+      <div className="t-actions">
+        <button disabled={locked} title={why} onClick={() => onProtect(l)}>TP/SL</button>
+        <button disabled={locked} title={why} onClick={() => onLimitClose(l)}>Limit close</button>
+        <button disabled={locked} title={why} onClick={() => onReduce(l, 1)}>Market close</button>
+      </div>
+    </div>
   );
 }
 

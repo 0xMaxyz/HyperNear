@@ -630,3 +630,57 @@ main.wide { max-width: none; padding: 8px; gap: 8px; }
   .top .tabs { order: 3; flex-basis: 100%; }
   .top .tabs [role='tab'] { min-height: 44px; }
 }
+
+/* ---------- phones (step 5) ---------- */
+.t-phone-tabs, .t-phone-bar, .t-sheet-head, .t-backdrop, .bottom-nav, .t-cards.phone { display: none; }
+.t-sheet { display: contents; }
+@media (max-width: 820px) {
+  body { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
+  .top { min-height: 48px; padding: 0 12px; flex-wrap: nowrap; }
+  .top .tabs, .top .badge, .top .net { display: none; }
+  .top .brand h1, .top .help { display: none; }
+  .top .who { gap: 6px; }
+  .top .who button.addr { padding: 0 10px; }
+  .freeze-btn .lbl { display: none; }
+  .freeze-btn { padding: 0 10px !important; }
+
+  .bottom-nav { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; padding-bottom: env(safe-area-inset-bottom); background: var(--surface); border-top: 1px solid var(--line); }
+  .bottom-nav a { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 56px; color: var(--muted); text-decoration: none; font-size: 11px; font-weight: 600; }
+  .bottom-nav a[aria-current='page'] { color: var(--ink); }
+  .bottom-nav .dot { position: absolute; top: 8px; right: calc(50% - 16px); width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+
+  .terminal { grid-template-areas: 'bar' 'ptabs' 'chart' 'book' 'side' 'blotter'; grid-template-rows: auto auto auto auto auto auto; }
+  .t-phone-tabs { grid-area: ptabs; display: flex; flex-direction: row; gap: 4px; padding: 6px 8px; }
+  .t-phone-tabs button { flex: 1 1 0; border: 0; min-height: 36px !important; color: var(--muted); font-weight: 600; }
+  .t-phone-tabs button[aria-selected='true'] { background: var(--line); color: var(--ink); }
+  .terminal[data-pane='chart'] .t-book { display: none; }
+  .terminal:not([data-pane='chart']) .t-chart { display: none; }
+  .terminal .t-chart { height: 360px; }
+  .terminal .t-book > .t-tabs { display: none; }
+
+  /* the ticket is a sheet over the page, opened from the bar */
+  .t-sheet { display: none; }
+  .t-sheet.open { display: flex; flex-direction: column; position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; max-height: 88vh; overflow-y: auto; background: var(--surface); border-top: 1px solid var(--line); border-radius: 14px 14px 0 0; padding-bottom: env(safe-area-inset-bottom); }
+  .t-sheet-head { display: flex; align-items: center; gap: 8px; padding: 6px 12px 0; position: relative; }
+  .t-sheet-head b { flex: 1 1 auto; font-size: 15px; padding-top: 10px; }
+  .t-sheet-head button { border: 0; font-size: 22px; min-width: 44px; }
+  .t-grab { position: absolute; left: 50%; top: 6px; width: 40px; height: 4px; margin-left: -20px; border-radius: 2px; background: var(--line); }
+  .t-backdrop { display: block; position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, 0.55); }
+  .t-phone-bar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; position: fixed; left: 0; right: 0; bottom: calc(56px + env(safe-area-inset-bottom)); z-index: 25; padding: 8px 12px; background: var(--surface); border-top: 1px solid var(--line); }
+  .terminal { margin-bottom: 64px; }
+
+  /* blotter: cards instead of tables */
+  .t-table.desk { display: none; }
+  .t-cards.phone { display: block; list-style: none; margin: 0; padding: 0; }
+  .t-cardgroup { border-bottom: 1px solid var(--line); }
+  .card-head { padding: 8px 12px; background: var(--surface-2); }
+  .t-pcard { padding: 10px 12px; border-bottom: 1px solid var(--grid); display: flex; flex-direction: column; gap: 8px; }
+  .t-pcard-top { display: flex; align-items: center; gap: 8px; }
+  .t-pcard-row { display: flex; gap: 12px; font-size: 12px; }
+  .t-pcard-kv { display: grid; grid-template-columns: repeat(4, auto 1fr); gap: 2px 8px; margin: 0; font-size: 12px; }
+  .t-pcard-kv dt { color: var(--muted); font-family: system-ui, sans-serif; }
+  .t-pcard-kv dd { margin: 0; }
+  .t-pcard .t-actions { justify-content: stretch; }
+  .t-pcard .t-actions button { flex: 1 1 0; }
+}
+@media (max-width: 420px) { .t-pcard-kv { grid-template-columns: repeat(2, auto 1fr); } }

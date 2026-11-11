@@ -54,6 +54,9 @@ export function TradeTab(p: TradeProps) {
   const [interval, setInterval_] = useState<Interval>('15m');
   const [grouping, setGrouping] = useState(5);
   const ticketRef = useRef<HTMLDivElement>(null);
+  // phones: one market pane at a time, and the ticket as a sheet opened from the Buy / Sell bar
+  const [pane, setPane] = useState<'chart' | 'book' | 'trades'>('chart');
+  const [sheet, setSheet] = useState(false);
 
   const recorded = Boolean(view?.dryRun);
   const network = view?.config?.hlNetwork ?? 'testnet';
@@ -77,6 +80,7 @@ export function TradeTab(p: TradeProps) {
   const bump = () => setVersion((v) => v + 1);
   const toTicket = (patch: Partial<OrderForm>) => {
     set(patch);
+    setSheet(true);
     ticketRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     ticketRef.current?.querySelector<HTMLElement>('select, input')?.focus({ preventScroll: true });
   };
@@ -105,8 +109,13 @@ export function TradeTab(p: TradeProps) {
   if (!view) return <p className="state">Waiting for data.</p>;
 
   return (
-    <div className="terminal">
+    <div className="terminal" data-pane={pane}>
       <MarketBar coin={f.coin} coins={coins} onCoin={(coin) => set({ coin })} market={market} fallbackMark={mid} network={network} />
+      <div className="t-panel t-phone-tabs" role="tablist" aria-label="Market view">
+        {(['chart', 'book', 'trades'] as const).map((x) => (
+          <button key={x} role="tab" aria-selected={pane === x} onClick={() => setPane(x)}>{x === 'chart' ? 'Chart' : x === 'book' ? 'Order book' : 'Trades'}</button>
+        ))}
+      </div>
       <PriceChart candles={market.candles} lines={lines} interval={recorded ? '15m' : interval} onInterval={setInterval_} note={market.note} error={market.error} fixed={recorded} />
       <BookPanel
         book={market.book}
@@ -116,10 +125,19 @@ export function TradeTab(p: TradeProps) {
         recorded={recorded}
         grouping={grouping}
         onGrouping={setGrouping}
+        tab={pane === 'trades' ? 'trades' : pane === 'book' ? 'book' : undefined}
+        onTab={(t) => setPane(t)}
         onPrice={(px) => toTicket({ limitPx: roundPx(px, szDecimals), ...(f.type === 'market' ? { type: 'limit' as const } : {}) })}
       />
       <div className="t-side-col" ref={ticketRef}>
-        <Ticket view={view} owner={owner} f={f} set={set} mid={mid} locked={p.locked} why={p.why} sign={p.sign} session={p.session} run={p.run} done={p.done} onPlaced={bump} onCloseHedge={p.onCloseHedge} onGo={p.onGo} initialMode={p.mode} />
+        <div className={`t-sheet ${sheet ? 'open' : ''}`} role={sheet ? 'dialog' : undefined} aria-label={sheet ? `${f.coin} order` : undefined}>
+          <div className="t-sheet-head">
+            <span className="t-grab" aria-hidden="true" />
+            <b>{f.coin} order</b>
+            <button aria-label="Close the order sheet" onClick={() => setSheet(false)}>×</button>
+          </div>
+          <Ticket view={view} owner={owner} f={f} set={set} mid={mid} locked={p.locked} why={p.why} sign={p.sign} session={p.session} run={p.run} done={p.done} onPlaced={() => (bump(), setSheet(false))} onCloseHedge={p.onCloseHedge} onGo={p.onGo} initialMode={p.mode} />
+        </div>
         <LegAccount leg={f.leg} snap={leg} guardFloor={GUARD_FLOOR} onGo={p.onGo} />
       </div>
       <Blotter
@@ -139,6 +157,11 @@ export function TradeTab(p: TradeProps) {
         onCancel={cancel}
         onCancelAll={cancelAll}
       />
+      {sheet && <div className="t-backdrop" onClick={() => setSheet(false)} aria-hidden="true" />}
+      <div className="t-phone-bar">
+        <button className="t-submit buy" onClick={() => toTicket({ side: 'buy' })}>Buy / Long</button>
+        <button className="t-submit sell" onClick={() => toTicket({ side: 'sell' })}>Sell / Short</button>
+      </div>
     </div>
   );
 }
