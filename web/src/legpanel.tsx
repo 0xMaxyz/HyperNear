@@ -19,10 +19,9 @@ function Chart({ candles, lines, summary }: { candles: Candle[]; lines: Line[]; 
   const linesKey = JSON.stringify(lines);
   const [scheme, setScheme] = useState(0); // bumps when the colour scheme changes, so the chart is redrawn with the new tokens
   useEffect(() => {
-    const m = window.matchMedia('(prefers-color-scheme: dark)');
-    const bump = () => setScheme((n) => n + 1);
-    m.addEventListener('change', bump);
-    return () => m.removeEventListener('change', bump);
+    const mo = new MutationObserver(() => setScheme((n) => n + 1)); // the theme is the data-theme attribute (dark by default)
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => mo.disconnect();
   }, []);
   useEffect(() => {
     if (!box.current || candles.length === 0) return;

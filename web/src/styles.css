@@ -1,40 +1,39 @@
-/* Palette: paper and ink neutrals plus one accent (vermilion), used only for guard triggers and the freeze control.
+/* Palette: dark by default (a trading screen is read for hours, and dark keeps price colours legible); the paper and ink
+   palette stays as the light theme, chosen with data-theme="light". Buy/sell colours always come with a label or a sign,
+   never colour alone. The vermilion accent is kept for guard triggers, liquidation and the freeze control.
    Type: system sans for text, system mono for addresses and prices so digits line up. No web fonts, no network. */
 :root {
+  color-scheme: dark;
+  --bg: #0e0f11;
+  --surface: #15171a;
+  --surface-2: #1b1e22;
+  --ink: #e6e8eb;
+  --ink-inverse: #0e0f11;
+  --muted: #8e959f;
+  --line: #262a30;
+  --accent: #f0825d;
+  --ok: #33c28e;
+  --buy: #33c28e;
+  --sell: #f2545f;
+  --info: #9db8ff;
+  --focus: #9db8ff;
+  --mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+}
+:root[data-theme='light'] {
+  color-scheme: light;
   --bg: #f4f1ea;
   --surface: #fbfaf6;
+  --surface-2: #efebe1;
   --ink: #1b1a17;
   --ink-inverse: #f4f1ea;
   --muted: #5d5a52;
   --line: #d4cfc1;
   --accent: #b03512;
   --ok: #2b6a3d;
+  --buy: #1e7a55;
+  --sell: #c23a45;
+  --info: #2f56b0;
   --focus: #1b1a17;
-  --mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    --bg: #15140f;
-    --surface: #1d1c16;
-    --ink: #ece8dc;
-    --ink-inverse: #15140f;
-    --muted: #a9a496;
-    --line: #36342b;
-    --accent: #f0825d;
-    --ok: #7fc293;
-    --focus: #ece8dc;
-  }
-}
-:root[data-theme='dark'] {
-  --bg: #15140f;
-  --surface: #1d1c16;
-  --ink: #ece8dc;
-  --ink-inverse: #15140f;
-  --muted: #a9a496;
-  --line: #36342b;
-  --accent: #f0825d;
-  --ok: #7fc293;
-  --focus: #ece8dc;
 }
 
 * { box-sizing: border-box; }
@@ -343,3 +342,10 @@ dialog.hiw h2 { margin-bottom: 8px; }
 dialog.hiw h3 { margin: 14px 0 4px; font-size: 15px; }
 dialog.hiw ol { padding-left: 22px; display: grid; gap: 4px; }
 dialog.hiw .ill { margin: 12px 0; }
+
+/* 1-click trading line under the order ticket */
+.session { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 13px; }
+.session select { width: auto; }
+.session.on { color: var(--info); }
+button.link { min-height: 32px; padding: 0 8px; border: 0; color: var(--info); text-decoration: underline; text-underline-offset: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }

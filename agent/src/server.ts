@@ -9,6 +9,10 @@
 //   POST /decision/:id/accept     {command, sig}: command.action/coin must equal the proposal's; executed within the order policy
 //   POST /decision/:id/reject     {command, sig}: action reject, coin = the proposal's; emits decision.rejected {reason:'owner'}
 //   POST /decision/mode           {command, sig}: action setDecisionMode, mode ('off'|'propose'|'auto') in command.coin
+//   POST /session/start   {command, sig, spec}: action startSession (owner only), command.specHash = specHash(SessionSpec); 1-click trading key
+//   POST /session/end     {command, sig}: action endSession, command.coin = the session key; signed by the owner or that key
+//   GET  /sessions/:owner live sessions (public data only). /order/place|cancel also take commands signed by a live session key,
+//                         checked against the order policy narrowed by the session's caps. A relayed freeze or TEE switch ends them all.
 //   POST /strategy/start  {command, sig, spec}: action startStrategy, command.specHash = specHash(validated spec)
 //   POST /strategy/resume {command, sig}: action startStrategy, command.coin = strategy id, command.specHash = hash of the stored spec of a paused/restored strategy
 //   POST /strategy/pause|stop {command, sig}: action pauseStrategy|stopStrategy, command.coin = strategy id (kill switch)
@@ -27,7 +31,8 @@ import type { Hex } from 'viem';
 import { HyperNearClient, nearAccount, specHashOfJson } from '@hypernear/client';
 import { loadConfig, type AgentConfig } from './config.ts';
 import { EventBus } from './events.ts';
-import { ReplayCache, verifyCommand } from './commands.ts';
+import { ReplayCache, verifyCommand, verifySessionCommand } from './commands.ts';
+import { parseSessionSpec, publicSession, sessionPolicy, SessionStore } from './sessions.ts';
 import { DEFAULT_GUARD_CONFIG, evaluateGuard, type GuardConfig } from './guard.ts';
 import { GuardLoop } from './guardLoop.ts';
 import { HedgeRefused, Hedger, parseHedgeSpec, type HedgeSpec } from './hedge.ts';
@@ -63,6 +68,8 @@ export interface Deps {
   relayer: Relayer;
   bus: EventBus;
   replay: ReplayCache;
+  /** 1-click trading sessions (in memory; created by handler() when absent) */
+  sessions?: SessionStore;
   guardConfig: GuardConfig;
   guardLoop?: GuardLoop;
   /** proposals, accept, modes; its loop runs only with TYPESAFE_API_KEY and ANTHROPIC_API_KEY set (or in the dry run) */
@@ -161,6 +168,12 @@ async function assertServed(d: Deps, owner: Hex) {
 const verifier = (d: Deps) => ({ chainTag: async () => (await d.client.getConfig()).chain_tag, contractId: d.client.contractId, cache: d.replay });
 
 export function handler(d: Deps) {
+  const sessions = (d.sessions ??= new SessionStore());
+  /** a freeze or a hosting switch ends every 1-click session of the owner */
+  const endSessions = (owner: Hex, why: string) => {
+    const n = sessions.revokeAll(owner);
+    if (n) d.bus.emit('session.ended', { owner, count: n, reason: why });
+  };
   return async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', 'http://x');
     const reply = (status: number, body: unknown) => send(res, status, body, Boolean(d.dryRun));
@@ -186,6 +199,7 @@ export function handler(d: Deps) {
           policy,
           orderPolicy: d.config.policy,
           guard,
+          sessions: sessions.list(owner).map(publicSession),
           decision: d.decider && { mode: d.decider.d.modes.get(owner), latest: latest ? { ...proposalEvent(latest), status: latest.status, at: latest.at } : null },
         });
       }
@@ -193,10 +207,14 @@ export function handler(d: Deps) {
         const ip = req.socket.remoteAddress ?? 'unknown';
         if (d.dryRun) {
           if (!d.relayer.limiter.allow(ip)) throw new HttpError(429, 'rate limited');
-          return reply(200, await d.dryRun.relay(await readJson(req)));
+          const body = (await readJson(req)) as { owner?: unknown; intent?: { type?: unknown } };
+          const out = await d.dryRun.relay(body);
+          if (body?.intent?.type === 'freeze' || body?.intent?.type === 'setTee') endSessions(ownerOf(body.owner), String(body.intent.type));
+          return reply(200, out);
         }
         const out = await d.relayer.relay(ip, await readJson(req));
         d.bus.emit('relay', out);
+        if ((out.kind === 'freeze' || out.kind === 'teeSwitch') && 'owner' in out) endSessions(out.owner, out.kind);
         // the sweep for orders that survived the revocation: after the freeze answer is built, off the response path, reported on /events
         if (out.kind === 'freeze' && d.sweeper) {
           const t0 = Date.now();
@@ -282,16 +300,17 @@ export function handler(d: Deps) {
       if (req.method === 'POST' && (url.pathname === '/order/place' || url.pathname === '/order/cancel')) {
         const place = url.pathname === '/order/place';
         const body = (await readJson(req)) as { spec?: unknown };
-        const cmd = await verifyCommand(verifier(d), body, place ? 'placeOrder' : 'cancelOrder');
+        // the owner, or a live 1-click session key of the owner, signed the command
+        const { cmd, session } = await verifySessionCommand(verifier(d), body, place ? 'placeOrder' : 'cancelOrder', sessions);
         // the owner signed these exact bytes: hash what arrived, validate it without rewriting it
         if (specHashOfJson(body.spec) !== cmd.specHash) throw new HttpError(401, 'command.specHash must be the specHash of the spec (the owner signed another spec)');
         await assertOptedIn(d, cmd.owner);
         const ctx = {
           snapshot: await d.legs.snapshot(cmd.owner),
-          policy: d.config.policy,
+          policy: sessionPolicy(d.config.policy, session),
           busyLegs: (d.strategies?.list(cmd.owner) ?? []).filter((s) => s.state !== 'stopped').map((s) => s.leg),
         };
-        d.bus.emit('command', { ...cmd });
+        d.bus.emit('command', { ...cmd, ...(session && { session: session.key }) });
         if (place) {
           const v = validateOrderSpec(body.spec, ctx);
           if (!v.ok) throw new HttpError(422, v.errors.join('; '));
@@ -310,6 +329,29 @@ export function handler(d: Deps) {
         }
         if (!d.orders) throw new HttpError(503, 'orders off');
         return reply(200, await d.orders.cancel(cmd.owner, v.spec, v.asset));
+      }
+      if (req.method === 'POST' && url.pathname === '/session/start') {
+        const body = (await readJson(req)) as { spec?: unknown };
+        const cmd = await verifyCommand(verifier(d), body, 'startSession');
+        if (specHashOfJson(body.spec) !== cmd.specHash) throw new HttpError(401, 'command.specHash must be the specHash of the session spec (the owner signed another spec)');
+        const v = parseSessionSpec(body.spec, cmd.owner, d.config.policy, Math.floor(Date.now() / 1000));
+        if (!v.ok) throw new HttpError(422, v.error);
+        await assertOptedIn(d, cmd.owner);
+        const s = sessions.start(cmd.owner, v.spec);
+        d.bus.emit('session.started', { owner: cmd.owner, ...publicSession(s) });
+        return reply(200, { owner: cmd.owner, session: publicSession(s), policy: sessionPolicy(d.config.policy, s) });
+      }
+      if (req.method === 'POST' && url.pathname === '/session/end') {
+        const { cmd } = await verifySessionCommand(verifier(d), await readJson(req), 'endSession', sessions);
+        if (!ADDR.test(cmd.coin)) throw new HttpError(400, 'command.coin must be the session key (0x + 40 lowercase hex)');
+        const ended = sessions.end(cmd.owner, cmd.coin as Hex);
+        if (ended) d.bus.emit('session.ended', { owner: cmd.owner, key: cmd.coin, reason: 'endSession' });
+        return reply(200, { owner: cmd.owner, key: cmd.coin, ended });
+      }
+      const sessionsPath = /^\/sessions\/(0x[0-9a-fA-F]{40})$/.exec(url.pathname);
+      if (req.method === 'GET' && sessionsPath) {
+        const owner = ownerOf(sessionsPath[1]);
+        return reply(200, { owner, sessions: sessions.list(owner).map(publicSession) });
       }
       const positionsPath = /^\/(positions|history)\/(0x[0-9a-fA-F]{40})$/.exec(url.pathname);
       if (req.method === 'GET' && positionsPath) {

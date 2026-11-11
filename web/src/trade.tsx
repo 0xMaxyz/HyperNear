@@ -5,6 +5,7 @@ import type { Hex } from 'viem';
 import type { OwnerView } from './api';
 import { n, usd } from './panels';
 import { buildSpec, CLOSING_TYPES, describeSpec, emptyForm, TYPE_LABEL, type OrderForm } from './orderForm';
+import { SessionControl, type SessionApi } from './session';
 import { cancelOrder, getOrders, ORDER_TYPES, placeOrder, type OpenOrder, type RunningTwap, type Sign } from './trading';
 
 export interface TradeProps {
@@ -14,6 +15,8 @@ export interface TradeProps {
   locked: boolean;
   why?: string;
   sign: Sign;
+  /** 1-click trading session (signs orders and cancels without the wallet) */
+  session?: SessionApi;
   run: (key: string, fn: () => Promise<string>) => Promise<void>;
   done: (out: Record<string, unknown>, what: string) => string;
   onGo: (to: string) => void;
@@ -104,7 +107,7 @@ export function TradeTab(p: TradeProps) {
         <section className="card" aria-labelledby="trade-h">
           <h2 id="trade-h">Order ticket</h2>
           <p className="muted small">
-            Trade one leg on its own, or build the first half of a hedge. Hyperliquid fills and holds it; you sign the exact order below, it expires in 30 s. The agent refuses leverage above {view.orderPolicy.maxLeverage}x and opening orders above ${cap}.
+            Trade one leg on its own, or build the first half of a hedge. Hyperliquid fills and holds it; you sign the exact order below (with your wallet, or the 1-click session key if it is on), it expires in 30 s. The agent refuses leverage above {view.orderPolicy.maxLeverage}x and opening orders above ${cap}.
           </p>
           <div className="fields inline">
             <label>
@@ -208,6 +211,7 @@ export function TradeTab(p: TradeProps) {
             <button className="primary" disabled={p.locked || Boolean(err)} title={p.why} onClick={submit}>{'Sign and send'}</button>
             {pos && <button onClick={() => p.onGo(`hedge?coin=${f.coin}`)}>Hedge this on leg 1</button>}
           </div>
+          {p.session && <SessionControl s={p.session} run={p.run} locked={p.locked} why={p.why} />}
         </section>
       </div>
 

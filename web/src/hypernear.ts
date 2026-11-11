@@ -2,3 +2,4 @@
 export * from '../../packages/hypernear-client/src/intents';
 export * from '../../packages/hypernear-client/src/commands';
 export * from '../../packages/hypernear-client/src/specHash';
+export * from '../../packages/hypernear-client/src/session';

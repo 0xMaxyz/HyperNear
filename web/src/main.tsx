@@ -85,23 +85,14 @@ const noPrivy: Auth = {
   loginOff: true,
 };
 
-/** Whether the page is dark: a forced data-theme wins, otherwise the system setting. Re-reads when either changes. */
+/** Whether the page is dark: dark is the default, data-theme="light" opts out. Re-reads when the attribute changes. */
 function useDark() {
-  const read = () => {
-    const forced = document.documentElement.dataset.theme;
-    return forced ? forced === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
-  };
+  const read = () => document.documentElement.dataset.theme !== 'light';
   const [dark, setDark] = useState(read);
   useEffect(() => {
-    const mq = matchMedia('(prefers-color-scheme: dark)');
-    const on = () => setDark(read());
-    mq.addEventListener('change', on);
-    const mo = new MutationObserver(on);
+    const mo = new MutationObserver(() => setDark(read()));
     mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-    return () => {
-      mq.removeEventListener('change', on);
-      mo.disconnect();
-    };
+    return () => mo.disconnect();
   }, []);
   return dark;
 }
@@ -119,8 +110,8 @@ function ThemedPrivy({ appId }: { appId: string }) {
       embeddedWallets: { ethereum: { createOnLogin: 'users-without-wallets' as const } },
       appearance: {
         walletChainType: 'ethereum-only' as const,
-        theme: (dark ? '#1d1c16' : '#fbfaf6') as `#${string}`,
-        accentColor: (dark ? '#ece8dc' : '#1b1a17') as `#${string}`,
+        theme: (dark ? '#15171a' : '#fbfaf6') as `#${string}`,
+        accentColor: (dark ? '#e6e8eb' : '#1b1a17') as `#${string}`,
         landingHeader: 'Log in to HyperNear',
       },
     }),

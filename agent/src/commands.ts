@@ -2,10 +2,11 @@
 import type { Hex } from 'viem';
 import { recoverCommandSigner, ZERO_SPEC_HASH, type ChainTag, type Command, type CommandAction } from '@hypernear/client';
 import { HttpError } from './relayer.ts';
+import type { Session, SessionStore } from './sessions.ts';
 
 export const MAX_COMMAND_TTL_SEC = 60;
 /** Actions whose command signs the hash of a spec sent beside it. Every other action signs a zero hash (openHedge may bind a hedge spec: see `optionalSpec`). */
-export const SPEC_ACTIONS: ReadonlySet<CommandAction> = new Set<CommandAction>(['startStrategy', 'placeOrder', 'cancelOrder']);
+export const SPEC_ACTIONS: ReadonlySet<CommandAction> = new Set<CommandAction>(['startStrategy', 'placeOrder', 'cancelOrder', 'startSession']);
 const ADDR = /^0x[0-9a-f]{40}$/;
 const SIG = /^0x[0-9a-fA-F]{130}$/;
 const BYTES32 = /^0x[0-9a-f]{64}$/;
@@ -34,8 +35,19 @@ export interface CommandVerifier {
   now?: () => number;
 }
 
-/** Returns the command after checking shape, route action, expiry window, signature and replay; throws HttpError otherwise. */
+/** Returns the command after checking shape, route action, expiry window, signature and replay; throws HttpError otherwise.
+ * Owner signatures only: a session key is never accepted here (see verifySessionCommand). */
 export async function verifyCommand(v: CommandVerifier, body: unknown, expected: CommandAction, optionalSpec = false): Promise<Command> {
+  return (await verifyCommandAuth(v, body, expected, optionalSpec)).cmd;
+}
+
+/** Like verifyCommand, but a live session key of command.owner may also sign `expected` when its session lists that action
+ * (or `endSession` of that same key). `session` is set when a session key signed, so the route can narrow the order policy. */
+export async function verifySessionCommand(v: CommandVerifier, body: unknown, expected: CommandAction, sessions: SessionStore): Promise<{ cmd: Command; session?: Session }> {
+  return verifyCommandAuth(v, body, expected, false, sessions);
+}
+
+async function verifyCommandAuth(v: CommandVerifier, body: unknown, expected: CommandAction, optionalSpec: boolean, sessions?: SessionStore): Promise<{ cmd: Command; session?: Session }> {
   const b = body as { command?: Record<string, unknown>; sig?: unknown };
   const c = b?.command;
   if (!c || typeof c !== 'object') throw new HttpError(401, 'signed command required: {command, sig}');
@@ -60,7 +72,13 @@ export async function verifyCommand(v: CommandVerifier, body: unknown, expected:
   } catch {
     throw new HttpError(401, 'bad signature');
   }
-  if (signer !== cmd.owner) throw new HttpError(401, 'signature does not match command.owner');
+  let session: Session | undefined;
+  if (signer !== cmd.owner) {
+    session = sessions?.get(cmd.owner, signer);
+    if (!session) throw new HttpError(401, 'signature does not match command.owner');
+    const own = expected === 'endSession' && cmd.coin === signer;
+    if (!own && !(session.actions as CommandAction[]).includes(expected)) throw new HttpError(403, `session key may not sign ${expected}`);
+  }
   if (!v.cache.claim(`${cmd.owner}:${cmd.nonce}`, expiry, nowSec)) throw new HttpError(401, 'command replayed');
-  return cmd;
+  return { cmd, session };
 }

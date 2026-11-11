@@ -10,6 +10,8 @@ export const TEE_AGENT_URL = (import.meta.env.VITE_TEE_AGENT_URL as string | und
 /** Which agent the owner API calls go to: the server agent, or the TEE agent once the owner is in TEE mode. */
 let agentBase = AGENT_URL;
 export const pointAgentAt = (tee: boolean) => { agentBase = tee && TEE_AGENT_URL ? TEE_AGENT_URL : AGENT_URL; };
+/** the agent the owner calls go to right now (a 1-click session lives on one agent only) */
+export const currentAgent = () => agentBase;
 /** Read-only demo owner: the dry-run agent serves the same fixtures for any address. */
 export const DEMO_OWNER = '0x2c7536e3605d9c16a7a3d7b1898e529396a65c23' as Hex;
 
@@ -58,6 +60,8 @@ export interface OwnerView {
   config?: { contractId: string; chainTag: ChainTag; agentAccount: string | null; hlNetwork: 'testnet' | 'mainnet'; teeFeeActivation?: Activation | null };
   /** the exact approveAgent intents to sign, one per leg whose key Hyperliquid has not approved */
   pendingApprovals?: PendingApproval[];
+  /** live 1-click trading sessions on this agent (public data; the keys stay in the browser that made them) */
+  sessions?: { key: Hex; startedAt: number; expiresAt: number; actions: string[]; maxNotionalUsd?: number; maxLeverage?: number; coins?: string[] }[];
   decision?: { mode: DecisionMode; latest: (Decision & { status: 'open' | 'accepted' | 'rejected' | 'expired'; at: number }) | null };
 }
 export interface AgentEvent {

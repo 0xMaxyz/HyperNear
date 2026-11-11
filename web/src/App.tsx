@@ -16,6 +16,7 @@ import { AccountMenu, type AuthAccount } from './account';
 import { FundTab } from './fund';
 import { Learn } from './learn';
 import { Panel, Tabs, useRoute, type TabDef } from './tabs';
+import { useSession } from './session';
 
 export interface Auth {
   ready: boolean;
@@ -111,6 +112,9 @@ export function App({ auth }: { auth: Auth }) {
 
   const chainTag = view?.config?.chainTag ?? CHAIN_TAG;
   const contractId = view?.config?.contractId ?? CONTRACT_ID;
+  const walletSign = (c: Command) => auth.sign(commandTypedData(chainTag, contractId, c));
+  // 1-click trading: orders and cancels go to the session key when this tab holds a live session, everything else to the wallet
+  const session = useSession(canSign ? owner : undefined, view, walletSign, chainTag, contractId);
   const coins = view?.orderPolicy.allowedCoins ?? ['BTC', 'ETH'];
   const legs = view?.snapshot.legs ?? [];
   const topLegs = view?.legs ?? [];
@@ -287,7 +291,7 @@ export function App({ auth }: { auth: Auth }) {
       return done(out, 'Asked the agent for a proposal. It arrives in the log and here in a few seconds');
     });
 
-  const signCommand = (c: Command) => auth.sign(commandTypedData(chainTag, contractId, c));
+  const signCommand = (c: Command) => session.signFor(c) ?? walletSign(c);
   const why = canSign ? undefined : 'Log in to sign';
   const locked = !canSign || busy !== null;
 
@@ -395,6 +399,7 @@ export function App({ auth }: { auth: Auth }) {
                 locked={locked}
                 why={why}
                 sign={signCommand}
+                session={session}
                 run={run}
                 done={done}
                 onGo={go}

@@ -11,8 +11,11 @@ export type DecisionAction = 'hold' | 'close_both' | 'reduce_hedge' | 'add_hedge
  * startStrategy: coin "", specHash = specHash(spec) of the spec sent beside the command;
  * pauseStrategy / stopStrategy: coin = the strategy id. ratio "0" for all three.
  * placeOrder / cancelOrder: coin "", ratio "0", specHash = specHash(spec) of the order or cancel spec sent beside the command
- * (agent/src/order.ts), so the owner signs exactly the order that runs. */
-export type CommandAction = 'openHedge' | 'closeHedge' | DecisionAction | 'setDecisionMode' | 'prepareAgents' | 'reject' | 'startStrategy' | 'pauseStrategy' | 'stopStrategy' | 'placeOrder' | 'cancelOrder' | 'continue_strategy' | 'pause_strategy' | 'adjust_strategy';
+ * (agent/src/order.ts), so the owner signs exactly the order that runs.
+ * startSession: coin "", ratio "0", specHash = specHash(SessionSpec) sent beside the command (owner only, never a session key).
+ * endSession: coin = the session key's address, ratio "0", zero specHash; signed by the owner or by that session key.
+ * placeOrder / cancelOrder may also be signed by a live session key of `owner` (session.ts). */
+export type CommandAction = 'openHedge' | 'closeHedge' | DecisionAction | 'setDecisionMode' | 'prepareAgents' | 'reject' | 'startStrategy' | 'pauseStrategy' | 'stopStrategy' | 'placeOrder' | 'cancelOrder' | 'startSession' | 'endSession' | 'continue_strategy' | 'pause_strategy' | 'adjust_strategy';
 
 export interface Command {
   owner: Hex;
