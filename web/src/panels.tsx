@@ -124,7 +124,7 @@ export function LegsTable({ view, loading, error }: { view?: OwnerView; loading:
 /** Leg roles of the demo layout (agent fixtures and the README flow). */
 export const ROLES: Record<number, string> = { 0: 'long', 1: 'hedge', 2: 'reserve, source for the guard' };
 
-function summarize(e: AgentEvent): string {
+export function summarize(e: AgentEvent): string {
   const d = e.data as Record<string, any>;
   const who = d.owner ? `${short(String(d.owner))} ` : '';
   switch (e.type) {

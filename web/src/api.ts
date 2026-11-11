@@ -29,7 +29,7 @@ export interface LegSnap {
   leg: number;
   address: Hex;
   agent: { address: Hex; name: string; approvedAt?: number | null } | null;
-  clearinghouse: { marginSummary: { accountValue: string }; withdrawable: string; assetPositions: { position: Position }[] };
+  clearinghouse: { marginSummary: { accountValue: string; totalMarginUsed?: string }; crossMaintenanceMarginUsed?: string; withdrawable: string; assetPositions: { position: Position }[] };
   spotUsdc: number;
   activation: Activation;
 }

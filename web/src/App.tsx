@@ -372,7 +372,7 @@ export function App({ auth }: { auth: Auth }) {
           <p className="muted small">Your owner address must be an ordinary wallet (Privy embedded wallet or MetaMask). Smart-contract wallets are not supported.</p>
         </main>
       ) : (
-        <main>
+        <main className={route.tab === 'trade' ? 'wide' : undefined}>
           <div aria-live="polite" className="notice-slot">
             {notice && <p className={`notice ${notice.kind}`} role={notice.kind === 'err' ? 'alert' : 'status'}>{notice.text}</p>}
           </div>
@@ -400,8 +400,10 @@ export function App({ auth }: { auth: Auth }) {
                 why={why}
                 sign={signCommand}
                 session={session}
+                events={mine}
                 run={run}
                 done={done}
+                onCloseHedge={(c) => hedge(false, c)}
                 onGo={go}
                 initial={{
                   ...(route.params.get('leg') !== null ? { leg: Number(route.params.get('leg')) } : {}),

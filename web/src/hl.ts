@@ -20,7 +20,7 @@ export interface OpenOrder {
   reduceOnly?: boolean;
 }
 
-export const INTERVALS = { '5m': 300_000, '15m': 900_000, '1h': 3_600_000 } as const;
+export const INTERVALS = { '1m': 60_000, '5m': 300_000, '15m': 900_000, '1h': 3_600_000, '4h': 14_400_000, '1d': 86_400_000 } as const;
 export type Interval = keyof typeof INTERVALS;
 
 const infoUrl = (network: 'testnet' | 'mainnet') => `https://api.hyperliquid${network === 'testnet' ? '-testnet' : ''}.xyz/info`;

@@ -11,6 +11,8 @@
   --ink-inverse: #0e0f11;
   --muted: #8e959f;
   --line: #262a30;
+  --grid: #1c1f24;
+  --warn: #f2c14e;
   --accent: #f0825d;
   --ok: #33c28e;
   --buy: #33c28e;
@@ -28,6 +30,8 @@
   --ink-inverse: #f4f1ea;
   --muted: #5d5a52;
   --line: #d4cfc1;
+  --grid: #e8e3d6;
+  --warn: #8a6100;
   --accent: #b03512;
   --ok: #2b6a3d;
   --buy: #1e7a55;
@@ -349,3 +353,204 @@ dialog.hiw .ill { margin: 12px 0; }
 .session.on { color: var(--info); }
 button.link { min-height: 32px; padding: 0 8px; border: 0; color: var(--info); text-decoration: underline; text-underline-offset: 2px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* ---------- Trade terminal ----------
+   Panels sit edge to edge on a 1px grid of the line colour (gap over a --line background), like an exchange terminal.
+   Desktop: market bar over chart | book | ticket column, blotter under chart and book. Narrower: the book moves under the
+   chart; on a phone everything stacks with the ticket right after the chart. */
+main.wide { max-width: none; padding: 8px; gap: 8px; }
+.terminal {
+  display: grid;
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+  grid-template-columns: minmax(0, 1fr) 280px 340px;
+  grid-template-areas:
+    'bar bar bar'
+    'chart book side'
+    'blotter blotter side';
+  grid-template-rows: auto 540px auto;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.t-bar { grid-area: bar; }
+.t-chart { grid-area: chart; }
+.t-book { grid-area: book; }
+.t-side-col { grid-area: side; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.t-blotter { grid-area: blotter; }
+@media (max-width: 1280px) {
+  .terminal {
+    grid-template-columns: minmax(0, 1fr) 340px;
+    grid-template-areas: 'bar bar' 'chart side' 'book side' 'blotter blotter';
+    grid-template-rows: auto 480px auto auto;
+  }
+  /* the book's row is no longer stretched by a fixed-height grid row: give each side its own height */
+  .terminal .t-ladder .asks, .terminal .t-ladder .bids { flex: none; height: 200px; overflow: hidden; }
+}
+@media (max-width: 820px) {
+  main.wide { padding: 0; }
+  .terminal { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'bar' 'chart' 'side' 'book' 'blotter'; grid-template-rows: auto 380px auto auto auto; border-radius: 0; }
+}
+
+.terminal button { min-height: 32px; padding: 0 10px; border-color: var(--line); border-radius: 4px; font-size: 12px; }
+.terminal select, .terminal input:not([type='checkbox']) { min-height: 36px; padding: 0 10px; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; font-size: 13px; }
+.terminal input:not([type='checkbox']) { font-family: var(--mono); }
+@media (max-width: 820px) { .terminal button, .terminal select, .terminal input:not([type='checkbox']) { min-height: 44px; } }
+.t-panel { background: var(--surface); min-width: 0; display: flex; flex-direction: column; }
+.t-num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.up { color: var(--buy); }
+.down { color: var(--sell); }
+.warn { color: var(--warn); }
+.liq { color: var(--accent); }
+.t-spacer { flex: 1 1 auto; }
+.t-empty { padding: 24px 12px; color: var(--muted); text-align: center; }
+.t-note { padding: 6px 12px; color: var(--muted); font-size: 11px; border-top: 1px solid var(--line); }
+.t-note.err { color: var(--accent); }
+
+/* market bar */
+.t-panel.t-bar { flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 24px; padding: 6px 12px; overflow-x: auto; min-height: 52px; }
+.t-panel.t-bar > * { flex: none; }
+.t-coin select { font-family: inherit; font-weight: 700; font-size: 16px; border: 0; background: transparent; padding: 0 4px; }
+.t-last { font-family: var(--mono); font-size: 18px; font-weight: 600; white-space: nowrap; }
+.t-stat { display: flex; flex-direction: column; white-space: nowrap; }
+.t-stat-l { font-size: 11px; color: var(--muted); }
+.t-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border: 1px solid var(--line); border-radius: 999px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.t-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.t-chip.live .t-dot { background: var(--buy); }
+.t-chip.reconnecting .t-dot, .t-chip.connecting .t-dot { background: var(--warn); }
+
+/* toolbars and tabs */
+.t-toolbar, .t-tabs { display: flex; align-items: center; gap: 4px 8px; padding: 0 8px; min-height: 38px; border-bottom: 1px solid var(--line); }
+.t-tabs.wrap { flex-wrap: wrap; }
+.t-seg { display: flex; gap: 2px; }
+.t-seg button { border: 0; min-height: 28px; padding: 0 8px; color: var(--muted); font-weight: 600; }
+.t-seg button[aria-pressed='true'] { background: var(--line); color: var(--ink); }
+.t-ohlc { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.t-tabs [role='tab'], .t-tablist [role='tab'] { border: 0; border-bottom: 2px solid transparent; border-radius: 0; min-height: 38px; padding: 0 10px; color: var(--muted); font-weight: 600; white-space: nowrap; }
+.t-tabs [role='tab'][aria-selected='true'] { color: var(--ink); border-bottom-color: var(--ink); }
+.t-tablist { display: flex; overflow-x: auto; }
+.t-count { margin-left: 6px; padding: 1px 6px; border-radius: 8px; background: var(--line); font-size: 11px; color: var(--ink); }
+.t-filter select { min-height: 28px !important; font-size: 12px !important; }
+.t-check { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.t-check input { width: auto; accent-color: var(--info); }
+.t-group select { min-height: 28px !important; font-size: 12px !important; }
+
+/* chart */
+.t-chart-box { flex: 1 1 auto; min-height: 0; position: relative; }
+
+/* book and trades */
+.t-book { overflow: hidden; }
+.t-ladder { display: flex; flex-direction: column; font-size: 12px; flex: 1 1 auto; min-height: 0; }
+.t-ladder ol, .t-trades { list-style: none; margin: 0; padding: 0; }
+.t-ladder .asks { display: flex; flex-direction: column; justify-content: flex-end; flex: 1 1 0; overflow: hidden; }
+.t-ladder .bids { flex: 1 1 0; overflow: hidden; }
+.t-lvl { position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; min-height: 20px !important; height: 20px; padding: 0 12px !important; border: 0 !important; border-radius: 0 !important; text-align: right; background: transparent; }
+.t-lvl > span { position: relative; }
+.t-lvl > span:first-of-type, .t-lvl .px { text-align: left; }
+.t-lvl.head { color: var(--muted); font-size: 11px; height: 24px; align-items: center; }
+.t-lvl.ask .px { color: var(--sell); }
+.t-lvl.bid .px { color: var(--buy); }
+.t-lvl .t-depth { position: absolute; right: 0; top: 1px; bottom: 1px; }
+.t-lvl.ask .t-depth { background: color-mix(in srgb, var(--sell) 14%, transparent); }
+.t-lvl.bid .t-depth { background: color-mix(in srgb, var(--buy) 14%, transparent); }
+.t-lvl:hover { background: color-mix(in srgb, var(--ink) 6%, transparent) !important; }
+.t-mid { display: flex; justify-content: space-between; align-items: center; padding: 6px 12px; background: var(--surface-2); font-size: 12px; }
+.t-mid .t-num { font-size: 14px; font-weight: 600; }
+.t-trades { overflow-y: auto; flex: 1 1 auto; font-size: 12px; }
+.t-trades li { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 0 12px; height: 20px; align-items: center; }
+.t-trades li > span:not(:first-child) { text-align: right; }
+.t-trades li.head { color: var(--muted); font-size: 11px; height: 24px; }
+
+/* ticket */
+.t-ticket { padding: 12px; gap: 10px; }
+.t-ticket h2 { font-size: 13px; }
+.t-row { display: flex; gap: 8px; }
+.t-row > * { flex: 1 1 0; min-width: 0; }
+.t-row > .grow { flex: 1.6 1 0; }
+.t-field { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--muted); }
+.t-field select, .t-field input { color: var(--ink); width: 100%; }
+.t-sides { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.t-side { min-height: 36px !important; font-weight: 700; font-size: 13px !important; color: var(--muted); }
+.t-side.buy[aria-pressed='true'] { background: var(--buy); border-color: var(--buy); color: #06150f; }
+.t-side.sell[aria-pressed='true'] { background: var(--sell); border-color: var(--sell); color: #1a0507; }
+.t-fracs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+.t-fracs button { min-height: 26px; color: var(--muted); }
+.t-kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 12px; margin: 0; }
+.t-kv dt { color: var(--muted); }
+.t-kv dd { text-align: right; margin: 0; }
+.t-policy { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: 6px; border: 1px solid color-mix(in srgb, var(--info) 30%, var(--line)); background: color-mix(in srgb, var(--info) 6%, var(--surface)); font-size: 11px; }
+.t-policy-l { display: flex; justify-content: space-between; gap: 8px; }
+.t-policy-l > span:first-child { font-weight: 600; color: var(--info); }
+.t-policy-l.muted > span:first-child { font-weight: 400; color: var(--muted); }
+.t-meter { position: relative; height: 4px; border-radius: 2px; background: var(--line); }
+.t-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px; background: var(--info); }
+.t-fill.up { background: var(--buy); }
+.t-fill.down { background: var(--sell); }
+.t-fill.warn { background: var(--warn); }
+.t-mark { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--accent); }
+.t-msg { font-size: 12px; color: var(--muted); min-height: 1.5em; }
+.t-msg.err { color: var(--accent); font-weight: 600; }
+.t-submit { min-height: 44px !important; border: 0 !important; font-weight: 700; font-size: 14px !important; }
+.t-submit.buy { background: var(--buy); color: #06150f; }
+.t-submit.sell { background: var(--sell); color: #1a0507; }
+.t-submit:disabled { background: var(--line); color: var(--muted); opacity: 1; }
+.t-link { border: 0 !important; color: var(--info); text-decoration: underline; text-underline-offset: 2px; align-self: flex-start; padding: 0 !important; }
+.t-ticket .session { margin-top: 0; padding-top: 10px; font-size: 12px; }
+
+/* account */
+.t-account { padding: 12px; gap: 10px; flex: 1 1 auto; }
+.t-head { display: flex; justify-content: space-between; align-items: baseline; }
+.t-head h2 { font-size: 13px; margin: 0; }
+.t-health { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+.t-health .t-meter { height: 6px; }
+.t-health-l { display: flex; justify-content: space-between; }
+.t-actions { display: flex; gap: 4px; align-items: center; justify-content: flex-end; }
+.t-actions.three { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: auto; }
+.t-actions select { min-height: 28px !important; width: auto; font-size: 12px !important; padding: 0 6px !important; }
+.t-actions button { min-height: 28px; }
+
+/* blotter */
+.t-blotter { min-height: 280px; }
+.t-scroll { overflow-x: auto; }
+.t-table { width: 100%; min-width: 900px; border-collapse: collapse; font-size: 12px; }
+.t-table th { text-align: left; font-weight: 500; font-size: 11px; color: var(--muted); padding: 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.t-table td { padding: 5px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+.t-table .num { text-align: right; }
+.t-table .end { text-align: right; }
+.t-group-row td { background: var(--surface-2); padding: 6px 12px; }
+.t-group-line { display: flex; align-items: center; gap: 10px; }
+.t-group-line button { min-height: 26px; }
+.t-leg { display: inline-block; padding: 1px 6px; margin-right: 4px; border-radius: 3px; background: var(--line); font-size: 11px; }
+.t-tag { display: inline-block; padding: 1px 8px; border-radius: 10px; background: var(--line); font-size: 11px; margin-left: 4px; }
+.t-tag.info { background: color-mix(in srgb, var(--info) 18%, transparent); color: var(--info); }
+.t-tag.warn { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+.t-tag.violet { background: color-mix(in srgb, #c59bff 18%, transparent); color: #c59bff; }
+:root[data-theme='light'] .t-tag.violet { color: #6b3fb0; }
+.t-totals { display: flex; flex-wrap: wrap; gap: 8px 24px; padding: 10px 12px; color: var(--muted); font-size: 12px; }
+.t-totals b { font-weight: 500; color: var(--ink); margin-left: 4px; }
+.t-totals b.up { color: var(--buy); }
+.t-totals b.down { color: var(--sell); }
+.t-events { list-style: none; margin: 0; padding: 0; font-size: 12px; }
+.t-events li { display: flex; gap: 12px; align-items: baseline; padding: 6px 12px; border-bottom: 1px solid var(--grid); }
+.t-events li.flag { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+
+/* the app turns tables into stacked blocks on phones; the blotter instead keeps its columns and scrolls sideways */
+@media (max-width: 820px) {
+  .t-table { display: table; }
+  .t-table thead { display: table-header-group; position: static; width: auto; height: auto; overflow: visible; clip: auto; }
+  .t-table tbody { display: table-row-group; }
+  .t-table tr { display: table-row; padding: 0; border-bottom: 0; }
+  .t-table th, .t-table td { display: table-cell; }
+  .t-table td::before { content: none; }
+  .t-table td.num { text-align: right; }
+}
+/* lightweight-charts lays its canvases out in a <table>: keep the phone "tables become blocks" rule away from every chart */
+@media (max-width: 820px) {
+  .tv-lightweight-charts table { display: table; }
+  .tv-lightweight-charts tbody { display: table-row-group; }
+  .tv-lightweight-charts tr { display: table-row; padding: 0; border-bottom: 0; }
+  .tv-lightweight-charts td { display: table-cell; padding: 0; }
+  .tv-lightweight-charts td::before { content: none; }
+}
