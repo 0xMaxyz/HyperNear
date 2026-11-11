@@ -140,6 +140,18 @@ export class Relayer {
     return r;
   }
 
+  /**
+   * Posts the contract-signed withdraw3 or usdClassTransfer to HL; emits 'funds.moved'. The contract only signs: nothing reaches
+   * Hyperliquid unless this posts it. HL's refusal (nothing to withdraw, minimum, not enough balance) comes back as ok: false, never a throw.
+   */
+  async postUserAction(owner: Hex, intent: Extract<OwnerIntent, { type: 'withdraw' | 'usdClassTransfer' }>, out: SignOut) {
+    const chain = (await this.client.getConfig()).hl_mainnet ? 'Mainnet' : 'Testnet';
+    const hl = this.post ? await this.post(exchangeBody(out, chain)).catch((e) => ({ status: 'err', response: String(e) })) : 'not posted';
+    const r = { leg: intent.leg, action: intent.type, amount: intent.amount, ok: (hl as { status?: string })?.status === 'ok', hl };
+    this.bus?.emit('funds.moved', { owner, ...r });
+    return r;
+  }
+
   async relay(ip: string, raw: unknown) {
     if (!this.limiter.allow(ip)) throw new HttpError(429, 'rate limited');
     const b = parseRelayBody(raw);
@@ -163,6 +175,9 @@ export class Relayer {
       }
       if (b.intent.type === 'payTee' && value) {
         return { kind: 'payTee' as const, owner, txHash, hlSignature: signOutToHex(value as SignOut), ...(await this.postPayment(owner, b.intent, value as SignOut)) };
+      }
+      if ((b.intent.type === 'withdraw' || b.intent.type === 'usdClassTransfer') && value) {
+        return { kind: 'ownerExecute' as const, owner, txHash, result: value, hlSignature: signOutToHex(value as SignOut), ...(await this.postUserAction(owner, b.intent, value as SignOut)) };
       }
       return { kind: 'ownerExecute' as const, txHash, result: value, hlSignature: value ? signOutToHex(value as SignOut) : null };
     } catch (e) {
