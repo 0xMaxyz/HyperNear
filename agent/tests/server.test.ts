@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
-import { commandTypedData, HyperNearClient, newCommand, type Command, type NearBackend } from '@hypernear/client';
+import { commandTypedData, HyperNearClient, newCommand, specHashOfJson, type Command, type NearBackend } from '@hypernear/client';
 import { privateKeyToAccount } from 'viem/accounts';
 import { ReplayCache, verifyCommand } from '../src/commands.ts';
 import { DEFAULT_GUARD_CONFIG } from '../src/guard.ts';
@@ -85,7 +85,7 @@ function deps(o: { owner?: Record<string, unknown> | null; legs?: Record<number,
   legs.snapshot = async () => snap(ch({ accountValue: 10, maint: 6, positions: [{ coin: 'BTC', szi: '0.0003', liq: '99000' }] }));
   const bus = new EventBus();
   const hedger = new Hedger(legs, config.policy, bus);
-  const d: Deps = { config, client, legs, hedger, bus, relayer: new Relayer(client, new RateLimiter(2)), replay: new ReplayCache(), guardConfig: DEFAULT_GUARD_CONFIG, pnlData: async () => [] };
+  const d: Deps = { config, client, legs, hedger, bus, relayer: new Relayer(client, new RateLimiter(2)), replay: new ReplayCache(), guardConfig: DEFAULT_GUARD_CONFIG, legHistory: async () => [] };
   return { d, calls };
 }
 
@@ -213,6 +213,23 @@ describe('Command specHash', () => {
     const ok = await verifyCommand(v(), await signed(newCommand(OWNER, 'startStrategy', '', '0', 30, Date.now(), spec)), 'startStrategy');
     expect(ok.specHash).toBe(spec);
   });
+
+  it('placeOrder and cancelOrder bind a spec like startStrategy; openHedge accepts one only when the route allows it', async () => {
+    const spec = `0x${'ab'.repeat(32)}` as const;
+    for (const action of ['placeOrder', 'cancelOrder'] as const) {
+      await expect(verifyCommand(v(), await signed(newCommand(OWNER, action, '')), action)).rejects.toThrow(/must be the spec hash/);
+      expect((await verifyCommand(v(), await signed(newCommand(OWNER, action, '', '0', 30, Date.now(), spec)), action)).specHash).toBe(spec);
+    }
+    const hedge = await signed(newCommand(OWNER, 'openHedge', 'BTC', '0.5', 30, Date.now(), spec));
+    await expect(verifyCommand(v(), hedge, 'openHedge')).rejects.toThrow(/must be zero/);
+    expect((await verifyCommand(v(), hedge, 'openHedge', true)).specHash).toBe(spec);
+  });
+
+  it('canonicalJson ignores key order, so the browser and the agent hash the same spec to the same value', () => {
+    expect(specHashOfJson({ a: 1, b: { c: [1, { y: 2, x: 1 }], d: 'z' } })).toBe(specHashOfJson({ b: { d: 'z', c: [1, { x: 1, y: 2 }] }, a: 1 }));
+    expect(specHashOfJson({ a: 1 })).not.toBe(specHashOfJson({ a: 2 }));
+    expect(specHashOfJson({ a: 1 })).toBe('0x015abd7f5cc57a2dd94b7590f04ad8084273905ee33ec5cebeae62276a97f862');
+  });
 });
 
 describe('signed commands on /hedge/*', () => {
@@ -306,6 +323,24 @@ describe('approveAgent end to end', () => {
     expect(d.bus.since().find((e) => e.type === 'agents.approved')?.data).toMatchObject({ owner: OWNER, leg: 0, agent, ok: true });
     const o = await (await fetch(`${base}/owner/${OWNER}`)).json();
     expect(o.pendingApprovals.map((p: any) => p.leg)).toEqual([1]);
+  });
+
+  it('/relay posts a contract-signed withdraw and class transfer to HL (the contract only signs); a refusal is ok: false', async () => {
+    const out = (action: Record<string, unknown>) => ({ payload: '00', big_r: `02${'aa'.repeat(32)}`, s: 'bb'.repeat(32), recovery_id: 0, action });
+    const run = async (value: ReturnType<typeof out>, intent: Record<string, unknown>, hl: unknown) => {
+      const { d } = deps({ value });
+      const posted: any[] = [];
+      const d2: Deps = { ...d, relayer: new Relayer(d.client, new RateLimiter(5), async (b) => (posted.push(b), hl), d.bus) };
+      const r = await (await post(`${await serve(d2)}/relay`, { owner: OWNER, nonce: 3, intent, sig: SIG })).json();
+      return { r, posted, d: d2 };
+    };
+    const w = await run(out({ type: 'withdraw3', destination: OWNER, amount: '3.0', time: 456 }), { type: 'withdraw', leg: 0, amount: '3.0', hlTime: 456 }, { status: 'ok', response: { type: 'default' } });
+    expect(w.r).toMatchObject({ kind: 'ownerExecute', leg: 0, action: 'withdraw', amount: '3.0', ok: true });
+    expect(w.posted[0]).toMatchObject({ action: { type: 'withdraw3', destination: OWNER, hyperliquidChain: 'Testnet' }, nonce: 456 });
+    expect(w.d.bus.since().find((e) => e.type === 'funds.moved')?.data).toMatchObject({ owner: OWNER, leg: 0, action: 'withdraw', ok: true });
+    const m = await run(out({ type: 'usdClassTransfer', amount: '5.0', toPerp: true, nonce: 789 }), { type: 'usdClassTransfer', leg: 0, amount: '5.0', toPerp: true, hlNonce: 789 }, { status: 'err', response: 'Insufficient balance' });
+    expect(m.r).toMatchObject({ kind: 'ownerExecute', action: 'usdClassTransfer', ok: false, hl: { response: 'Insufficient balance' } });
+    expect(m.posted[0]).toMatchObject({ action: { type: 'usdClassTransfer', toPerp: true }, nonce: 789 });
   });
 
   it('an HL refusal comes back as ok: false with the HL text (200); the key stays unapproved', async () => {

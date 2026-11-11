@@ -1,0 +1,148 @@
+import { describe, expect, it } from 'vitest';
+import type { HlUserFill, HlUserFunding } from '@perps-platform/core';
+import { makeCloid } from '../src/cloid.ts';
+import { ACTIVATION_FEE_USD, buildCycles, historyRows, nextFundingAt, openComposites, openTime, type LegHistory } from '../src/positions.ts';
+import { ch, snap } from './agent-helpers.ts';
+
+let t = 1_000;
+let tid = 0;
+const fill = (x: { side: 'B' | 'A'; sz: string; px?: string; start: string; pnl?: string; fee?: string; cloid?: string; coin?: string; twapId?: number; oid?: number; dir?: string }): HlUserFill => ({
+  coin: x.coin ?? 'BTC', px: x.px ?? '100000', sz: x.sz, side: x.side, time: (t += 1000), startPosition: x.start, dir: x.dir ?? 'Open Long', closedPnl: x.pnl ?? '0',
+  hash: `0x${'0'.repeat(64)}`, oid: x.oid ?? ++tid, crossed: true, fee: x.fee ?? '0.1', tid: ++tid, feeToken: 'USDC', twapId: x.twapId ?? null, ...(x.cloid ? { cloid: x.cloid as `0x${string}` } : {}),
+});
+const fund = (time: number, usdc: string, coin = 'BTC'): HlUserFunding => ({ time, hash: `0x${'0'.repeat(64)}`, delta: { type: 'funding', coin, usdc } as HlUserFunding['delta'] });
+
+describe('buildCycles', () => {
+  it('a cycle runs from flat to flat; adds and partial closes stay in it', () => {
+    const cycles = buildCycles(
+      [
+        fill({ side: 'B', sz: '0.01', start: '0', fee: '0.4' }),
+        fill({ side: 'B', sz: '0.01', start: '0.01', fee: '0.4' }),
+        fill({ side: 'A', sz: '0.005', start: '0.02', pnl: '1', fee: '0.2', dir: 'Close Long' }),
+        fill({ side: 'A', sz: '0.015', start: '0.015', pnl: '3', fee: '0.6', dir: 'Close Long' }),
+        fill({ side: 'A', sz: '0.01', start: '0', fee: '0.4', dir: 'Open Short' }),
+      ],
+      'BTC',
+    );
+    expect(cycles).toHaveLength(2);
+    expect(cycles[0]).toMatchObject({ side: 'long', realized: 4, closedAt: expect.any(Number) });
+    expect(cycles[0]!.fees).toBeCloseTo(1.6, 9);
+    expect(cycles[1]).toMatchObject({ side: 'short', realized: 0, fees: 0.4 });
+    expect(cycles[1]!.closedAt).toBeUndefined();
+  });
+
+  it('a fill that flips through zero is split: its fee is shared by size, the PnL belongs to the closing part', () => {
+    const [a, b] = buildCycles([fill({ side: 'B', sz: '0.01', start: '0', fee: '0.1' }), fill({ side: 'A', sz: '0.015', start: '0.01', pnl: '2', fee: '0.3', dir: 'Long > Short' })], 'BTC');
+    expect(a).toMatchObject({ side: 'long', realized: 2 });
+    expect(a!.fees).toBeCloseTo(0.1 + 0.2, 9); // 0.01 of the 0.015 closes the long
+    expect(b).toMatchObject({ side: 'short', realized: 0 });
+    expect(b!.fees).toBeCloseTo(0.1, 9);
+  });
+
+  it('openTime is the last fill from flat', () => {
+    const f = [fill({ side: 'B', sz: '1', start: '0' }), fill({ side: 'B', sz: '1', start: '1' }), fill({ side: 'A', sz: '2', start: '2' }), fill({ side: 'B', sz: '1', start: '0' })];
+    expect(openTime(f, 'BTC')).toBe(f[3]!.time);
+    expect(openTime(f, 'ETH')).toBe(0);
+  });
+});
+
+/** a snapshot where leg 0 is long and leg 1 short, both with a given unrealized PnL */
+const hedged = (u0: string, u1: string) => {
+  const s = snap(ch({ positions: [{ coin: 'BTC', szi: '0.0004' }] }), ch({ positions: [{ coin: 'BTC', szi: '-0.0002' }] }), '100000');
+  s.legs[0]!.clearinghouse.assetPositions[0]!.position.unrealizedPnl = u0;
+  s.legs[1]!.clearinghouse.assetPositions[0]!.position.unrealizedPnl = u1;
+  return s;
+};
+const legData = (leg: number, over: Partial<LegHistory>): LegHistory => ({ leg, address: snap(ch()).legs[leg]!.address, fills: [], funding: [], ledger: [], takerRate: 0.00045, activation: 'paid', ...over });
+
+describe('openComposites', () => {
+  it('pairs legs 0 and 1 into a hedge; position PnL adds every line, the setup fee once per leg', () => {
+    const open0 = fill({ side: 'B', sz: '0.0004', start: '0', fee: '0.02' });
+    const open1 = fill({ side: 'A', sz: '0.0002', start: '0', fee: '0.01', dir: 'Open Short', cloid: makeCloid('hedgeOpen') });
+    const data = [
+      legData(0, { fills: [open0], funding: [fund(open0.time + 10, '-0.03')] }),
+      legData(1, { fills: [open1], funding: [fund(open1.time + 10, '0.02')] }),
+    ];
+    const [c, ...more] = openComposites(hedged('1.5', '-0.5'), data, { BTC: 0.0000125 }, 5_000);
+    expect(more).toEqual([]);
+    expect(c).toMatchObject({ kind: 'hedge', coin: 'BTC' });
+    expect(c!.netSize).toBeCloseTo(0.0002, 12);
+    expect(c!.totals.unrealized).toBeCloseTo(1, 9);
+    expect(c!.totals.fees).toBeCloseTo(0.03, 9);
+    expect(c!.totals.funding).toBeCloseTo(-0.01, 9);
+    expect(c!.totals.activationFee).toBe(2 * ACTIVATION_FEE_USD);
+    expect(c!.totals.pnl).toBeCloseTo(1 - 0.03 - 0.01 - 2, 9);
+    // closing both legs at 100000: (0.0004 + 0.0002) x 100000 x 0.00045 = 0.027
+    expect(c!.totals.closeFeesEst).toBeCloseTo(0.027, 9);
+    expect(c!.totals.netIfClosed).toBeCloseTo(c!.totals.pnl - 0.027, 9);
+    // a long pays a positive rate and a short receives it: the hedge nets to about 0 when the legs match, here 0.0002 net long pays
+    expect(c!.totals.nextFundingEstimate).toBeCloseTo(-(0.0004 - 0.0002) * 100000 * 0.0000125, 9);
+    expect(c!.nextFundingAt).toBe(nextFundingAt(5_000));
+    expect(c!.nextFundingAt % 3_600_000).toBe(0);
+  });
+
+  it('a lone position is one-sided; a second cycle on the same leg carries no setup fee', () => {
+    const s = snap(ch({ positions: [{ coin: 'BTC', szi: '0.0004' }] }), ch());
+    const first = [fill({ side: 'B', sz: '0.0004', start: '0' }), fill({ side: 'A', sz: '0.0004', start: '0.0004', pnl: '0.5', dir: 'Close Long' })];
+    const second = fill({ side: 'B', sz: '0.0004', start: '0' });
+    const [c] = openComposites(s, [legData(0, { fills: [...first, second] })], {}, 9_000);
+    expect(c).toMatchObject({ kind: 'one-sided', legs: [{ leg: 0, activationFee: 0, realized: 0 }] });
+    const [only] = openComposites(s, [legData(0, { fills: [second] })], {}, 9_000);
+    expect(only!.totals.activationFee).toBe(ACTIVATION_FEE_USD);
+  });
+
+  it('the same side on both legs is not a hedge', () => {
+    const s = snap(ch({ positions: [{ coin: 'BTC', szi: '0.0004' }] }), ch({ positions: [{ coin: 'BTC', szi: '0.0002' }] }));
+    expect(openComposites(s, []).map((c) => c.kind)).toEqual(['one-sided', 'one-sided']);
+  });
+
+  it('works with no fills known: PnL is the exchange unrealized figure only', () => {
+    const [c] = openComposites(hedged('1', '1'), []);
+    expect(c!.totals).toMatchObject({ realized: 0, fees: 0, funding: 0, unrealized: 2 });
+  });
+});
+
+describe('historyRows', () => {
+  it('collapses a hedge action across both legs, labels by cloid, and keeps outside trades honest', () => {
+    const g = 'aabbccddee';
+    const hc = makeCloid('hedgeClose', g);
+    const rows = historyRows([
+      legData(0, {
+        fills: [
+          fill({ side: 'B', sz: '0.0004', start: '0', cloid: makeCloid('open') }),
+          fill({ side: 'A', sz: '0.0004', start: '0.0004', pnl: '1.2', fee: '0.02', dir: 'Close Long', cloid: hc }),
+          fill({ side: 'B', sz: '0.001', start: '0', oid: 77, dir: 'Open Long' }),
+        ],
+        funding: [fund(3_600_000 * 5 + 10, '0.01'), fund(3_600_000 * 5 + 20, '0.02')],
+      }),
+      legData(1, { fills: [fill({ side: 'B', sz: '0.0002', start: '-0.0002', pnl: '-0.4', fee: '0.01', dir: 'Close Short', cloid: hc })] }),
+    ]);
+    const kinds = rows.map((r) => r.kind);
+    expect(kinds.filter((k) => k === 'hedge-close')).toHaveLength(1);
+    const close = rows.find((r) => r.kind === 'hedge-close')!;
+    expect(close).toMatchObject({ legs: [0, 1], group: g, closedPnl: expect.closeTo(0.8, 9), fee: expect.closeTo(0.03, 9) });
+    expect(close.label).toMatch(/Hedge closed: BTC on both legs/);
+    expect(rows.find((r) => r.kind === 'open')!.label).toMatch(/One-sided: opened long on leg 0/);
+    expect(rows.find((r) => r.kind === 'external')!.label).toMatch(/Outside HyperNear/);
+    const funding = rows.filter((r) => r.kind === 'funding');
+    expect(funding).toHaveLength(1); // one row per hour and coin
+    expect(funding[0]!.amount).toBeCloseTo(0.03, 9);
+    expect(rows.map((r) => r.time)).toEqual([...rows.map((r) => r.time)].sort((a, b) => b - a));
+  });
+
+  it('TWAP slices merge into one row, and transfers come from the ledger', () => {
+    const rows = historyRows([
+      legData(0, {
+        fills: [fill({ side: 'B', sz: '0.001', start: '0', twapId: 5 }), fill({ side: 'B', sz: '0.001', start: '0.001', twapId: 5 })],
+        ledger: [
+          { time: 10, hash: `0x${'0'.repeat(64)}`, delta: { type: 'deposit', usdc: '24.0' } },
+          { time: 20, hash: `0x${'0'.repeat(64)}`, delta: { type: 'withdraw', usdc: '3.0', fee: '1.0' } },
+        ],
+      }),
+    ]);
+    const twap = rows.filter((r) => r.kind === 'twap');
+    expect(twap).toHaveLength(1);
+    expect(twap[0]).toMatchObject({ size: 0.002 });
+    expect(rows.filter((r) => r.kind === 'transfer').map((r) => r.amount)).toEqual([-3, 24]);
+  });
+});

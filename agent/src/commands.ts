@@ -4,6 +4,8 @@ import { recoverCommandSigner, ZERO_SPEC_HASH, type ChainTag, type Command, type
 import { HttpError } from './relayer.ts';
 
 export const MAX_COMMAND_TTL_SEC = 60;
+/** Actions whose command signs the hash of a spec sent beside it. Every other action signs a zero hash (openHedge may bind a hedge spec: see `optionalSpec`). */
+export const SPEC_ACTIONS: ReadonlySet<CommandAction> = new Set<CommandAction>(['startStrategy', 'placeOrder', 'cancelOrder']);
 const ADDR = /^0x[0-9a-f]{40}$/;
 const SIG = /^0x[0-9a-fA-F]{130}$/;
 const BYTES32 = /^0x[0-9a-f]{64}$/;
@@ -33,7 +35,7 @@ export interface CommandVerifier {
 }
 
 /** Returns the command after checking shape, route action, expiry window, signature and replay; throws HttpError otherwise. */
-export async function verifyCommand(v: CommandVerifier, body: unknown, expected: CommandAction): Promise<Command> {
+export async function verifyCommand(v: CommandVerifier, body: unknown, expected: CommandAction, optionalSpec = false): Promise<Command> {
   const b = body as { command?: Record<string, unknown>; sig?: unknown };
   const c = b?.command;
   if (!c || typeof c !== 'object') throw new HttpError(401, 'signed command required: {command, sig}');
@@ -47,10 +49,10 @@ export async function verifyCommand(v: CommandVerifier, body: unknown, expected:
   if (expiry < nowSec) throw new HttpError(401, 'command expired');
   if (expiry - nowSec > MAX_COMMAND_TTL_SEC) throw new HttpError(401, `command expiry more than ${MAX_COMMAND_TTL_SEC} s ahead`);
   if (typeof c.specHash !== 'string' || !BYTES32.test(c.specHash)) throw new HttpError(400, 'command.specHash must be bytes32 (0x + 64 lowercase hex)');
-  // only startStrategy binds a spec; everything else signs zero (the route compares a nonzero hash with the spec it got)
-  if ((expected === 'startStrategy') === (c.specHash === ZERO_SPEC_HASH)) {
-    throw new HttpError(400, expected === 'startStrategy' ? 'command.specHash must be the spec hash' : 'command.specHash must be zero for this action');
-  }
+  // spec actions bind a spec (the route compares the hash with the spec it got); the rest sign zero, unless the route allows an optional spec
+  const binds = SPEC_ACTIONS.has(expected);
+  if (binds && c.specHash === ZERO_SPEC_HASH) throw new HttpError(400, 'command.specHash must be the spec hash');
+  if (!binds && !optionalSpec && c.specHash !== ZERO_SPEC_HASH) throw new HttpError(400, 'command.specHash must be zero for this action');
   const cmd: Command = { owner: c.owner as Hex, action: expected, coin: c.coin, ratio: c.ratio, expiry, nonce: c.nonce as number, specHash: c.specHash as Hex };
   let signer: Hex;
   try {

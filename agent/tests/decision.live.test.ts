@@ -50,7 +50,7 @@ describe.skipIf(!live)('live: one real proposal, accepted by the owner', () => {
       relayer: new Relayer(client, new RateLimiter(100)),
       replay: new ReplayCache(),
       guardConfig: DEFAULT_GUARD_CONFIG,
-      pnlData: async () => [],
+      legHistory: async () => [],
     };
     d.decider = new Decider({
       legs, bus, policy: config.policy, annualVol: config.guard.annualVol,

@@ -42,7 +42,7 @@ describe.skipIf(process.env.LIVE !== '1')('live: approveAgent end to end through
       relayer: new Relayer(client, new RateLimiter(100), hlPoster('testnet'), bus),
       replay: new ReplayCache(),
       guardConfig: DEFAULT_GUARD_CONFIG,
-      pnlData: async () => [],
+      legHistory: async () => [],
     };
     const server = createServer(handler(d));
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));

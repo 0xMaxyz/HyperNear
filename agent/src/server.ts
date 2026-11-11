@@ -24,20 +24,23 @@
 //      node agent/src/server.ts --dry-run --serve  (same HTTP API from the fixtures, every response marked dryRun: true)
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { Hex } from 'viem';
-import { HyperNearClient, nearAccount } from '@hypernear/client';
+import { HyperNearClient, nearAccount, specHashOfJson } from '@hypernear/client';
 import { loadConfig, type AgentConfig } from './config.ts';
 import { EventBus } from './events.ts';
 import { ReplayCache, verifyCommand } from './commands.ts';
 import { DEFAULT_GUARD_CONFIG, evaluateGuard, type GuardConfig } from './guard.ts';
 import { GuardLoop } from './guardLoop.ts';
-import { HedgeRefused, Hedger } from './hedge.ts';
+import { HedgeRefused, Hedger, parseHedgeSpec, type HedgeSpec } from './hedge.ts';
+import { OrderExecutor, OrderRefused } from './orders.ts';
+import { validateCancelSpec, validateOrderSpec, type CancelSpec, type OrderPlan, type OrderSpec } from './order.ts';
+import { parseCloid } from './cloid.ts';
 import { activationStatus } from './activation.ts';
 import { guardInputs, Legs, pendingApprovals, type OwnerSnapshot } from './legs.ts';
 import { claudeEscalator } from './claude.ts';
 import { ACTION_IDS, proposeAction, type Action } from './decide.ts';
 import { Decider, DECISION_MODES, DecisionModes, proposalEvent, type DecisionMode } from './decisions.ts';
 import { jevAsk } from './jev.ts';
-import { breakevens, openTime, readPnlData, type LegPnlData } from './pnl.ts';
+import { historyRows, openComposites, openTime, readFundingRates, readLegHistory, type FundingRates, type LegHistory } from './positions.ts';
 import { hlPoster, HttpError, RateLimiter, Relayer } from './relayer.ts';
 import { livePorts, sweepFrozen, sweptEvent, type LegSweep } from './sweep.ts';
 import { claudeAsk, drafter, MAX_DRAFT_TEXT, type Draft } from './strategy/builder.ts';
@@ -55,6 +58,8 @@ export interface Deps {
   client: HyperNearClient;
   legs: Legs;
   hedger: Hedger;
+  /** signed single orders on one leg (placeOrder / cancelOrder); the dry run simulates them instead */
+  orders?: OrderExecutor;
   relayer: Relayer;
   bus: EventBus;
   replay: ReplayCache;
@@ -77,8 +82,10 @@ export interface Deps {
   scope?: OwnerScope;
   /** tee mode: the agent account's contract client (shade-agent-js signs), its account and registered measurement hash */
   tee?: TeeRuntime;
-  /** fills, fee rate, funding per leg for the break-even (default: read from HL) */
-  pnlData?: (s: OwnerSnapshot) => Promise<LegPnlData[]>;
+  /** fills, funding, ledger and fee rate per leg for positions, PnL and history (default: read from HL) */
+  legHistory?: (s: OwnerSnapshot) => Promise<LegHistory[]>;
+  /** hourly funding rate per coin (default: read from HL) */
+  fundingRates?: (s: OwnerSnapshot) => Promise<FundingRates>;
   /** --dry-run --serve: no NEAR/HL calls; commands are verified, then simulated */
   dryRun?: DryRunHooks;
 }
@@ -90,7 +97,11 @@ export interface TeeRuntime {
 }
 
 export interface DryRunHooks {
-  hedge: (action: 'openHedge' | 'closeHedge', owner: Hex, coin: string, ratio: number) => Promise<Record<string, unknown>>;
+  hedge: (action: 'openHedge' | 'closeHedge', owner: Hex, coin: string, ratio: number, spec?: HedgeSpec) => Promise<Record<string, unknown>>;
+  /** validated order / cancel specs, simulated against the fixture book */
+  order?: (owner: Hex, spec: OrderSpec, plan: OrderPlan) => Promise<Record<string, unknown>>;
+  cancel?: (owner: Hex, spec: CancelSpec) => Promise<Record<string, unknown>>;
+  openOrders?: (owner: Hex) => { orders: Record<string, unknown>[]; twaps: Record<string, unknown>[] };
   relay: (body: unknown) => Promise<Record<string, unknown>>;
   /** simulated deposit: adds test USDC to a leg's spot balance */
   credit?: (owner: Hex, leg: number, amount: number) => { leg: number; spotUsdc: number };
@@ -163,7 +174,6 @@ export function handler(d: Deps) {
         const owner = ownerOf(ownerPath[1]);
         const [snapshot, policy, cfg] = await Promise.all([d.legs.snapshot(owner), d.client.getOwner(owner), d.client.getConfig()]);
         const guard = evaluateGuard(guardInputs(snapshot, d.annualVol ?? 0.6), d.guardConfig);
-        const breakeven = breakevens(snapshot, await (d.pnlData ?? ((s) => readPnlData(d.legs.hl, s)))(snapshot));
         const latest = d.decider?.latest(owner);
         return reply(200, {
           owner,
@@ -176,7 +186,6 @@ export function handler(d: Deps) {
           policy,
           orderPolicy: d.config.policy,
           guard,
-          breakeven,
           decision: d.decider && { mode: d.decider.d.modes.get(owner), latest: latest ? { ...proposalEvent(latest), status: latest.status, at: latest.at } : null },
         });
       }
@@ -259,12 +268,74 @@ export function handler(d: Deps) {
       }
       if (req.method === 'POST' && (url.pathname === '/hedge/open' || url.pathname === '/hedge/close')) {
         const open = url.pathname === '/hedge/open';
-        const cmd = await verifyCommand(verifier(d), await readJson(req), open ? 'openHedge' : 'closeHedge');
+        const body = (await readJson(req)) as { spec?: unknown };
+        // an open may carry the leg 1 leverage choice; then the command signs its hash, otherwise a zero hash
+        const cmd = await verifyCommand(verifier(d), body, open ? 'openHedge' : 'closeHedge', open && body.spec !== undefined);
+        const hedgeSpec = open && body.spec !== undefined ? parseHedgeSpec(body.spec) : undefined;
+        if (hedgeSpec && specHashOfJson(body.spec) !== cmd.specHash) throw new HttpError(401, 'command.specHash must be the specHash of the hedge spec (the owner signed another spec)');
         await assertOptedIn(d, cmd.owner);
         d.bus.emit('command', { ...cmd });
-        if (d.dryRun) return reply(200, await d.dryRun.hedge(open ? 'openHedge' : 'closeHedge', cmd.owner, cmd.coin, Number(cmd.ratio)));
-        const out = open ? await d.hedger.openHedge(cmd.owner, cmd.coin, Number(cmd.ratio)) : await d.hedger.closeHedge(cmd.owner, cmd.coin);
+        if (d.dryRun) return reply(200, await d.dryRun.hedge(open ? 'openHedge' : 'closeHedge', cmd.owner, cmd.coin, Number(cmd.ratio), hedgeSpec));
+        const out = open ? await d.hedger.openHedge(cmd.owner, cmd.coin, Number(cmd.ratio), hedgeSpec) : await d.hedger.closeHedge(cmd.owner, cmd.coin);
         return reply(200, out);
+      }
+      if (req.method === 'POST' && (url.pathname === '/order/place' || url.pathname === '/order/cancel')) {
+        const place = url.pathname === '/order/place';
+        const body = (await readJson(req)) as { spec?: unknown };
+        const cmd = await verifyCommand(verifier(d), body, place ? 'placeOrder' : 'cancelOrder');
+        // the owner signed these exact bytes: hash what arrived, validate it without rewriting it
+        if (specHashOfJson(body.spec) !== cmd.specHash) throw new HttpError(401, 'command.specHash must be the specHash of the spec (the owner signed another spec)');
+        await assertOptedIn(d, cmd.owner);
+        const ctx = {
+          snapshot: await d.legs.snapshot(cmd.owner),
+          policy: d.config.policy,
+          busyLegs: (d.strategies?.list(cmd.owner) ?? []).filter((s) => s.state !== 'stopped').map((s) => s.leg),
+        };
+        d.bus.emit('command', { ...cmd });
+        if (place) {
+          const v = validateOrderSpec(body.spec, ctx);
+          if (!v.ok) throw new HttpError(422, v.errors.join('; '));
+          if (d.dryRun) {
+            if (!d.dryRun.order) throw new HttpError(501, 'dry run has no order book');
+            return reply(200, await d.dryRun.order(cmd.owner, v.spec, v.plan));
+          }
+          if (!d.orders) throw new HttpError(503, 'orders off');
+          return reply(200, await d.orders.place(cmd.owner, v.spec, v.plan));
+        }
+        const v = validateCancelSpec(body.spec, ctx);
+        if (!v.ok) throw new HttpError(422, v.errors.join('; '));
+        if (d.dryRun) {
+          if (!d.dryRun.cancel) throw new HttpError(501, 'dry run has no order book');
+          return reply(200, await d.dryRun.cancel(cmd.owner, v.spec));
+        }
+        if (!d.orders) throw new HttpError(503, 'orders off');
+        return reply(200, await d.orders.cancel(cmd.owner, v.spec, v.asset));
+      }
+      const positionsPath = /^\/(positions|history)\/(0x[0-9a-fA-F]{40})$/.exec(url.pathname);
+      if (req.method === 'GET' && positionsPath) {
+        const owner = ownerOf(positionsPath[2]);
+        const snapshot = await d.legs.snapshot(owner);
+        const data = await (d.legHistory ?? ((s) => readLegHistory(d.legs.hl, s)))(snapshot);
+        if (positionsPath[1] === 'history') return reply(200, { owner, at: Date.now(), rows: historyRows(data, { limit: Number(url.searchParams.get('limit') ?? 300) || 300 }) });
+        const rates = await (d.fundingRates ?? ((s) => readFundingRates(d.legs.hl, s)))(snapshot).catch(() => ({}) as FundingRates);
+        return reply(200, { owner, at: Date.now(), positions: openComposites(snapshot, data, rates) });
+      }
+      const ordersPath = /^\/orders\/(0x[0-9a-fA-F]{40})$/.exec(url.pathname);
+      if (req.method === 'GET' && ordersPath) {
+        const owner = ownerOf(ordersPath[1]);
+        if (d.dryRun) return reply(200, { owner, ...(d.dryRun.openOrders?.(owner) ?? { orders: [], twaps: [] }) });
+        // open orders with trigger details, and the TWAPs still running, per registered leg
+        const regs = await d.legs.registered(owner);
+        const perLeg = await Promise.all(
+          regs.map(async ({ leg, address }) => {
+            const [open, twaps] = await Promise.all([d.legs.hl.frontendOpenOrders({ user: address }), d.legs.hl.twapHistory({ user: address }).catch(() => [])]);
+            return {
+              orders: open.map((o) => ({ leg, coin: o.coin, oid: o.oid, side: o.side === 'B' ? 'buy' : 'sell', size: o.sz, limitPx: o.limitPx, orderType: o.orderType, isTrigger: o.isTrigger, triggerPx: o.triggerPx, triggerCondition: o.triggerCondition, isPositionTpsl: o.isPositionTpsl, reduceOnly: o.reduceOnly, placedAt: o.timestamp, cloid: o.cloid ?? null, label: parseCloid(o.cloid)?.kind ?? 'external' })),
+              twaps: twaps.filter((t) => String(t.status.status) === 'activated').map((t) => ({ leg, twapId: t.twapId, coin: t.state.coin, side: t.state.side === 'B' ? 'buy' : 'sell', size: t.state.sz, executedSize: t.state.executedSz, minutes: t.state.minutes, startedAt: t.state.timestamp })),
+            };
+          }),
+        );
+        return reply(200, { owner, orders: perLeg.flatMap((p) => p.orders), twaps: perLeg.flatMap((p) => p.twaps) });
       }
       const strategies = /^\/strategies\/(0x[0-9a-fA-F]{40})$/.exec(url.pathname);
       if (req.method === 'GET' && strategies) {
@@ -371,7 +442,7 @@ export function handler(d: Deps) {
       }
       reply(404, { error: 'not found' });
     } catch (e) {
-      const status = e instanceof HttpError ? e.status : e instanceof HedgeRefused ? 422 : e instanceof StartConflict ? 409 : 500;
+      const status = e instanceof HttpError ? e.status : e instanceof HedgeRefused || e instanceof OrderRefused ? 422 : e instanceof StartConflict ? 409 : 500;
       if (status === 500) console.error('request failed:', (e as Error).message);
       reply(status, { error: (e as Error).message });
     }
@@ -410,7 +481,7 @@ export function buildDeps(config: AgentConfig, tee?: TeeRuntime): Deps {
   });
   const hedger = new Hedger(legs, config.policy, bus);
   const d: Deps = {
-    config, client, legs, bus, guardConfig, guardLoop, scope, tee, annualVol: config.guard.annualVol, hedger,
+    config, client, legs, bus, guardConfig, guardLoop, scope, tee, annualVol: config.guard.annualVol, hedger, orders: new OrderExecutor(legs, config.policy, bus),
     replay: new ReplayCache(),
     relayer: new Relayer(client, new RateLimiter(config.relayPerMinute), hlPoster(config.network), bus),
   };
@@ -422,7 +493,7 @@ export function buildDeps(config: AgentConfig, tee?: TeeRuntime): Deps {
     execute: (owner, action, coin, orders) => hedger.runOrders(owner, action, coin, orders),
     checkOwner: (owner) => assertOptedIn(d, owner),
     owners: () => scope.filter(allOwners()),
-    openedAt: async (s, coin) => openTime((await readPnlData(legs.hl, s)).find((x) => x.leg === 1)?.fills ?? [], coin),
+    openedAt: async (s, coin) => openTime((await readLegHistory(legs.hl, s)).find((x) => x.leg === 1)?.fills ?? [], coin),
     intervalMs: config.decide.intervalSec * 1000,
     // strategy decisions (propose only): accept pauses the strategy
     proposeStrategy: (i) => (clients ? proposeStrategyAction(i, strategyClients!) : Promise.reject(new Error('decision layer off'))),

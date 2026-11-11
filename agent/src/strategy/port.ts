@@ -2,6 +2,7 @@
 import type { Hex } from 'viem';
 import { RelayRejectionError } from '@perps-platform/core';
 import type { Legs } from '../legs.ts';
+import { makeCloid } from '../cloid.ts';
 import { position, roundPx } from '../market.ts';
 import { strategyPnl, type PnlBreakdown } from './pnl.ts';
 
@@ -66,7 +67,7 @@ export async function hlPort(legs: Legs, owner: Hex, leg: number, slippage = 0.0
     },
     async place(o) {
       try {
-        const res = await hl.limitOrderOpen({ asset: o.asset, isBuy: o.isBuy, price: o.px, size: o.sz, tif: o.tif ?? 'Alo', reduceOnly: o.reduceOnly });
+        const res = await hl.limitOrderOpen({ asset: o.asset, isBuy: o.isBuy, price: o.px, size: o.sz, tif: o.tif ?? 'Alo', reduceOnly: o.reduceOnly, c: makeCloid('strategy') });
         const st = res.response.data.statuses[0] as Record<string, any> | undefined;
         if (!st || 'error' in st) return { error: st ? String(st.error) : 'no status' };
         const f = st.filled as { totalSz: string; avgPx: string } | undefined;
@@ -103,6 +104,7 @@ export async function hlPort(legs: Legs, owner: Hex, leg: number, slippage = 0.0
         size: Math.abs(szi).toFixed(szDecimals),
         tif: 'Ioc',
         reduceOnly: true,
+        c: makeCloid('strategy'),
       });
     },
     async armDeadman(timeMs) {

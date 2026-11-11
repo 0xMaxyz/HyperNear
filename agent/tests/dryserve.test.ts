@@ -2,7 +2,7 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 import { privateKeyToAccount } from 'viem/accounts';
-import { commandTypedData, newCommand } from '@hypernear/client';
+import { commandTypedData, newCommand, specHashOfJson, type CommandAction } from '@hypernear/client';
 import { buildDryRunDeps, DRY_CONTRACT_ID } from '../src/dryrun.ts';
 import { handler } from '../src/server.ts';
 
@@ -28,14 +28,21 @@ const signed = async (action: 'openHedge' | 'closeHedge', ratio = '0') => {
 };
 
 describe('--dry-run --serve', () => {
-  it('GET /owner: fixture legs, guard and break-even, marked dryRun', async () => {
+  it('GET /owner: fixture legs and guard, marked dryRun; /positions: the hedge with its PnL lines; /history: labelled rows', async () => {
     const base = await serve('hedged');
     const r = await (await fetch(`${base}/owner/${OWNER}`)).json();
     expect(r.dryRun).toBe(true);
     expect(r.legs.map((l: any) => l.leg)).toEqual([0, 1, 2]); // leg2 = the flat reserve
     expect(r.policy.agent).toBe('agent.dry-run');
-    expect(r.breakeven[0]).toMatchObject({ coin: 'BTC', kind: 'price', feesPaid: 0, netFunding: 0 });
-    expect(r.breakeven[0].netSize).toBeCloseTo(0.0002, 12);
+    expect(r.breakeven).toBeUndefined();
+    const { positions } = await (await fetch(`${base}/positions/${OWNER}`)).json();
+    expect(positions).toHaveLength(1);
+    expect(positions[0]).toMatchObject({ coin: 'BTC', kind: 'hedge', legs: [{ leg: 0, side: 'long' }, { leg: 1, side: 'short' }] });
+    expect(positions[0].netSize).toBeCloseTo(0.0002, 12);
+    expect(positions[0].totals.fees).toBeGreaterThan(0);
+    expect(positions[0].totals.funding).not.toBe(0);
+    const { rows } = await (await fetch(`${base}/history/${OWNER}`)).json();
+    expect(rows.map((x: any) => x.kind)).toEqual(expect.arrayContaining(['open', 'hedge-open', 'funding']));
   });
 
   it('commands are verified, then simulated', async () => {
@@ -215,6 +222,68 @@ describe('--dry-run --serve: funding', () => {
     expect(Number(after.clearinghouse.marginSummary.accountValue)).toBeCloseTo(Number(before.clearinghouse.marginSummary.accountValue) + 20, 6);
     expect(Number(after.clearinghouse.withdrawable)).toBeCloseTo(Number(before.clearinghouse.withdrawable) + 20, 6);
     expect((await move('500')).status).toBe(422);
+    // withdraw leaves the trading balance; more than there is, or no more than the 1 USDC fee, is refused
+    const w = (amount: string) => post(`${base}/relay`, { owner: OWNER, nonce: 0, intent: { type: 'withdraw', leg: 2, amount, hlTime: 1 }, sig: `0x${'11'.repeat(65)}` });
+    const ok = await w('5');
+    expect(await ok.json()).toMatchObject({ kind: 'ownerExecute', action: 'withdraw', leg: 2, ok: true });
+    expect(Number((await leg(2)).clearinghouse.withdrawable)).toBeCloseTo(Number(after.clearinghouse.withdrawable) - 5, 6);
+    expect((await w('1')).status).toBe(422);
+    expect((await w('9999')).status).toBe(422);
     expect((await post(`${base}/fund/credit`, { owner: OWNER, leg: 2, amount: -1 })).status).toBe(400);
+  });
+});
+
+describe('--dry-run --serve: signed orders', () => {
+  let n = 0;
+  /** a command whose specHash is the hash of the exact spec sent beside it */
+  const withSpec = async (action: CommandAction, spec: unknown, coin = '', ratio = '0') => {
+    const command = newCommand(OWNER, action, coin, ratio, 30, Date.now() + ++n, specHashOfJson(spec));
+    return { command, sig: await owner.signTypedData(commandTypedData('near-testnet', DRY_CONTRACT_ID, command) as never), spec };
+  };
+  const legs = async (base: string) => (await (await fetch(`${base}/owner/${OWNER}`)).json()).snapshot.legs as { leg: number; clearinghouse: { assetPositions: { position: { szi: string; leverage: { type: string; value: number } } }[] } }[];
+
+  it('places a market order and a bracket, lists them, cancels them; the book changes', async () => {
+    const base = await serve('hedged');
+    const open = { leg: 2, coin: 'BTC', side: 'buy', type: 'market', size: '0.0002', leverage: 4, isCross: false };
+    const placed = await post(`${base}/order/place`, await withSpec('placeOrder', open));
+    expect(placed.status).toBe(200);
+    expect((await placed.json()).statuses[0].filled.sz).toBe('0.0002');
+    const pos = (await legs(base)).find((l) => l.leg === 2)!.clearinghouse.assetPositions[0]!.position;
+    expect(pos).toMatchObject({ szi: '0.0002', leverage: { type: 'isolated', value: 4 } });
+
+    const bracket = { leg: 2, coin: 'BTC', side: 'sell', type: 'bracket', tpPx: '80000', slPx: '70000' };
+    expect((await post(`${base}/order/place`, await withSpec('placeOrder', bracket))).status).toBe(200);
+    const listed = await (await fetch(`${base}/orders/${OWNER}`)).json();
+    expect(listed.orders.map((x: any) => [x.leg, x.orderType, x.triggerPx, x.isPositionTpsl])).toEqual([[2, 'Take Profit Market', '80000', true], [2, 'Stop Market', '70000', true]]);
+
+    const cancelled = await (await post(`${base}/order/cancel`, await withSpec('cancelOrder', { leg: 2, coin: 'BTC', all: true }))).json();
+    expect(cancelled.cancelled).toHaveLength(2);
+    expect((await (await fetch(`${base}/orders/${OWNER}`)).json()).orders).toEqual([]);
+  });
+
+  it('refuses a spec the owner did not sign, an invalid one, and one for a leg that is not theirs to trade', async () => {
+    const base = await serve('hedged');
+    const good = { leg: 2, coin: 'BTC', side: 'buy', type: 'market', size: '0.0002', leverage: 4 };
+    const other = await withSpec('placeOrder', good);
+    expect((await post(`${base}/order/place`, { ...other, spec: { ...good, size: '0.0003' } })).status).toBe(401);
+    const bad = await post(`${base}/order/place`, await withSpec('placeOrder', { ...good, leverage: 20 }));
+    expect(bad.status).toBe(422);
+    expect((await bad.json()).error).toMatch(/above the policy maximum 5x/);
+    expect((await post(`${base}/order/place`, await withSpec('cancelOrder', good))).status).toBe(400); // wrong action for the route
+  });
+
+  it('a hedge opens at the leverage and margin mode the owner signed for leg 1', async () => {
+    const base = await serve('hedged');
+    // flatten leg 1 (reduce-only buy of its whole short), then hedge leg 0 again with a different setting
+    const closeLeg1 = { leg: 1, coin: 'BTC', side: 'buy', type: 'market', size: '0.0002', reduceOnly: true };
+    expect((await post(`${base}/order/place`, await withSpec('placeOrder', closeLeg1))).status).toBe(200);
+    expect((await legs(base)).find((l) => l.leg === 1)!.clearinghouse.assetPositions).toEqual([]);
+    const hedge = { leg1Leverage: 4, leg1IsCross: false };
+    const opened = await post(`${base}/hedge/open`, await withSpec('openHedge', hedge, 'BTC', '0.5'));
+    expect(opened.status).toBe(200);
+    expect((await legs(base)).find((l) => l.leg === 1)!.clearinghouse.assetPositions[0]!.position).toMatchObject({ szi: '-0.0002', leverage: { type: 'isolated', value: 4 } });
+    // a spec whose hash differs from the signed one is refused
+    const forged = { ...(await withSpec('openHedge', hedge, 'BTC', '0.5')), spec: { leg1Leverage: 5 } };
+    expect((await post(`${base}/hedge/open`, forged)).status).toBe(401);
   });
 });

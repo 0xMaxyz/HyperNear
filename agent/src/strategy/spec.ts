@@ -1,8 +1,7 @@
 // Strategy spec (Phase 2): declarative, validated, checked against the order policy and the contract policy.
 // Each strategy runs on its own leg, so its losses stay on that leg and the contract's cap and cooldown bound how much
 // the margin guard may top it up. Hand-rolled validation, like parseRelayBody: no dependency, every error listed.
-import { createHash } from 'node:crypto';
-import type { OwnerState } from '@hypernear/client';
+import { specHashOfJson, type OwnerState } from '@hypernear/client';
 import type { OrderPolicy } from '../config.ts';
 
 /** Hyperliquid's minimum order value (USD). */
@@ -214,16 +213,11 @@ function validateTwap(p: Record<string, unknown>, ctx: SpecContext, errors: stri
   return (slices as number) * notional;
 }
 
-/** Canonical JSON (keys sorted) so a hash does not depend on key order. */
-export function canonicalJson(v: unknown): string {
-  if (Array.isArray(v)) return `[${v.map(canonicalJson).join(',')}]`;
-  if (isObj(v)) return `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${canonicalJson(v[k])}`).join(',')}}`;
-  return JSON.stringify(v);
-}
+export { canonicalJson } from '@hypernear/client';
 
 /** bytes32 (sha256 of the canonical JSON): the owner signs it as the Command's `specHash` for startStrategy. */
 export function specHash(spec: StrategySpec): string {
-  return `0x${createHash('sha256').update(canonicalJson(spec)).digest('hex')}`;
+  return specHashOfJson(spec);
 }
 
 // ---------------------------------------------------------------- order gate

@@ -2,6 +2,7 @@
 // plan* functions are pure (used by the live path and by --dry-run on fixtures); Hedger executes them.
 import type { Hex } from 'viem';
 import type { HlOrderResult } from '@perps-platform/core';
+import { makeCloid, newGroup } from './cloid.ts';
 import type { OrderPolicy } from './config.ts';
 import type { EventBus } from './events.ts';
 import type { Legs, OwnerSnapshot } from './legs.ts';
@@ -39,8 +40,24 @@ const legOf = (s: OwnerSnapshot, i: number) => s.legs.find((l) => l.leg === i);
 const ioc = (mid: number, isBuy: boolean, slippage: number, szDecimals: number) =>
   roundPx(mid * (isBuy ? 1 + slippage : 1 - slippage), szDecimals);
 
-/** Same leverage as leg0, opposite side, ratio x leg0's size, on leg1. Order policy is checked here, before any signing. */
-export function planOpenHedge(s: OwnerSnapshot, coin: string, ratio: number, policy: OrderPolicy): OpenPlan {
+/** What the owner may choose for the second leg when opening a hedge; both default to leg 0's setting. Signed with the command (HedgeSpec hash). */
+export interface HedgeSpec {
+  leg1Leverage?: number;
+  leg1IsCross?: boolean;
+}
+
+/** Exact-shape check of the optional hedge spec the owner signed: no unknown keys, whole-number leverage. */
+export function parseHedgeSpec(v: unknown): HedgeSpec {
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) throw new HedgeRefused('hedge spec must be a JSON object');
+  const o = v as Record<string, unknown>;
+  for (const k of Object.keys(o)) if (k !== 'leg1Leverage' && k !== 'leg1IsCross') throw new HedgeRefused(`${k} is not a hedge spec field`);
+  if (o.leg1Leverage !== undefined && !(Number.isInteger(o.leg1Leverage) && (o.leg1Leverage as number) >= 1)) throw new HedgeRefused('leg1Leverage must be a whole number of at least 1');
+  if (o.leg1IsCross !== undefined && typeof o.leg1IsCross !== 'boolean') throw new HedgeRefused('leg1IsCross must be true or false');
+  return o as HedgeSpec;
+}
+
+/** Opposite side, ratio x leg0's size, on leg1, at leg0's leverage unless the hedge spec says otherwise. Order policy is checked here, before any signing. */
+export function planOpenHedge(s: OwnerSnapshot, coin: string, ratio: number, policy: OrderPolicy, spec: HedgeSpec = {}): OpenPlan {
   if (!policy.allowedCoins.includes(coin)) return { ok: false, reason: `coin ${coin} not allowed (${policy.allowedCoins.join(',')})` };
   if (!(ratio > 0 && ratio <= 1)) return { ok: false, reason: `ratio must be in (0, 1]: ${ratio}` };
   const m = marketOf(s, coin);
@@ -52,7 +69,7 @@ export function planOpenHedge(s: OwnerSnapshot, coin: string, ratio: number, pol
   const szi = Number(p0?.szi ?? 0);
   if (!p0 || szi === 0) return { ok: false, reason: `leg0 has no ${coin} position to hedge` };
   if (Number(position(l1.clearinghouse, coin)?.szi ?? 0) !== 0) return { ok: false, reason: `leg1 already holds ${coin}; close it first` };
-  const leverage = p0.leverage.value;
+  const leverage = spec.leg1Leverage ?? p0.leverage.value;
   if (leverage > policy.maxLeverage) return { ok: false, reason: `leverage ${leverage}x above policy max ${policy.maxLeverage}x` };
   if (leverage > m.maxLeverage) return { ok: false, reason: `leverage ${leverage}x above ${coin} max ${m.maxLeverage}x` };
   const size = floorSize(Math.abs(szi) * ratio, m.szDecimals);
@@ -64,7 +81,7 @@ export function planOpenHedge(s: OwnerSnapshot, coin: string, ratio: number, pol
   const isBuy = szi < 0;
   return {
     ok: true,
-    leverage: { value: leverage, isCross: p0.leverage.type === 'cross' },
+    leverage: { value: leverage, isCross: spec.leg1IsCross ?? p0.leverage.type === 'cross' },
     order: { leg: 1, coin, asset: m.asset, isBuy, size, price: ioc(m.mid, isBuy, policy.slippage, m.szDecimals), reduceOnly: false, notionalUsd },
   };
 }
@@ -149,9 +166,9 @@ export class Hedger {
     this.bus = bus;
   }
 
-  async openHedge(owner: Hex, coin: string, ratio: number) {
+  async openHedge(owner: Hex, coin: string, ratio: number, spec: HedgeSpec = {}) {
     const snap = await this.legs.snapshot(owner);
-    const plan = planOpenHedge(snap, coin, ratio, this.policy);
+    const plan = planOpenHedge(snap, coin, ratio, this.policy, spec);
     if (!plan.ok) {
       this.bus?.emit('hedge', { owner, op: 'open', coin, ratio, refused: plan.reason });
       throw new HedgeRefused(plan.reason);
@@ -159,7 +176,7 @@ export class Hedger {
     const o = plan.order;
     const hl = this.legs.tradingClient(owner, o.leg);
     const leverage = await hl.updateLeverage({ asset: o.asset, isCross: plan.leverage.isCross, leverage: plan.leverage.value });
-    const res = await hl.limitOrderOpen({ asset: o.asset, isBuy: o.isBuy, price: o.price, size: o.size, tif: 'Ioc' });
+    const res = await hl.limitOrderOpen({ asset: o.asset, isBuy: o.isBuy, price: o.price, size: o.size, tif: 'Ioc', c: makeCloid('hedgeOpen', newGroup()) });
     const fill = fillOf(res);
     this.bus?.emit('hedge', { owner, op: 'open', coin, ratio, order: o, leverage: plan.leverage, fill });
     return { plan, leverage, order: res, fill };
@@ -178,10 +195,11 @@ export class Hedger {
   /** IOC orders in sequence with each leg's agent key; stops at the first rejected order. */
   async runOrders(owner: Hex, op: string, coin: string, orders: PlannedOrder[]) {
     const results = [];
+    const group = newGroup();
     for (const o of orders) {
       const res = await this.legs
         .tradingClient(owner, o.leg)
-        .limitOrderOpen({ asset: o.asset, isBuy: o.isBuy, price: o.price, size: o.size, tif: 'Ioc', reduceOnly: o.reduceOnly });
+        .limitOrderOpen({ asset: o.asset, isBuy: o.isBuy, price: o.price, size: o.size, tif: 'Ioc', reduceOnly: o.reduceOnly, c: makeCloid(o.reduceOnly ? 'hedgeClose' : 'hedgeOpen', group) });
       const fill = fillOf(res);
       this.bus?.emit('hedge', { owner, op, coin, order: o, fill });
       results.push({ order: o, result: res, fill });

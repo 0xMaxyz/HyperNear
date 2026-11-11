@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import type { Hex } from 'viem';
 import { HyperNearClient, type NearBackend } from '@hypernear/client';
 import { ReplayCache } from './commands.ts';
+import { createDryBook } from './dryBook.ts';
 import { loadConfig, type OrderPolicy } from './config.ts';
 import { EventBus } from './events.ts';
 import { DECISION_EVENTS, type Proposal } from './decide.ts';
@@ -214,7 +215,8 @@ export function buildDryRunDeps(fixtureName = 'hedged', opts: { replayStartMs?: 
     const perp = (v: string) => String(Number(v) + c.perp);
     return { ...l, spotUsdc: l.spotUsdc + c.spot, clearinghouse: { ...l.clearinghouse, marginSummary: { ...l.clearinghouse.marginSummary, accountValue: perp(l.clearinghouse.marginSummary.accountValue) }, withdrawable: perp(l.clearinghouse.withdrawable) } };
   };
-  legs.snapshot = async (owner) => ({ ...snap, owner: owner.toLowerCase() as Hex, at: Date.now(), legs: owner.toLowerCase() === snap.owner ? snap.legs.map(withCredits) : [] });
+  const book = createDryBook(snap);
+  legs.snapshot = async (owner) => ({ ...snap, owner: owner.toLowerCase() as Hex, at: Date.now(), legs: owner.toLowerCase() === snap.owner ? snap.legs.map((l) => book.overlay(withCredits(l))) : [] });
   const bus = new EventBus();
   const recorded = JSON.parse(readFileSync(GUARD_DEMO, 'utf8')) as { timeline: { t: number; event: string; detail?: Record<string, unknown> }[] };
   const revoked = (JSON.parse(readFileSync(FREEZE_LIVE, 'utf8')) as { events: { type: string; data: Record<string, unknown> }[] }).events;
@@ -280,17 +282,28 @@ export function buildDryRunDeps(fixtureName = 'hedged', opts: { replayStartMs?: 
     guardConfig: DEFAULT_GUARD_CONFIG,
     hedger: new Hedger(legs, config.policy, bus),
     relayer: new Relayer(client, new RateLimiter(config.relayPerMinute)),
-    pnlData: async () => [], // fixtures carry no fills/funding: fees 0, funding 0, base taker rate
+    legHistory: async () => book.history(), // the fixture has no fills of its own: the book writes them for its positions and for every simulated fill
+    fundingRates: async () => ({ BTC: 0.0000125 }),
     dryRun: {
-      async hedge(action, owner, coin, ratio) {
+      async hedge(action, owner, coin, ratio, spec) {
         const s = await legs.snapshot(owner);
-        const plan = action === 'openHedge' ? planOpenHedge(s, coin, ratio, config.policy) : planCloseHedge(s, coin, config.policy);
+        const plan = action === 'openHedge' ? planOpenHedge(s, coin, ratio, config.policy, spec) : planCloseHedge(s, coin, config.policy);
         if (!plan.ok) throw new HedgeRefused(plan.reason);
         const orders = 'order' in plan ? [plan.order] : plan.orders;
         const mid = Number(s.market.mids[coin]);
+        book.hedge(action, { leverage: 'leverage' in plan ? plan.leverage : undefined, orders });
         bus.emit('hedge', { owner, op: action, coin, simulated: true, orders });
         return { plan, simulatedFills: orders.map((o) => ({ leg: o.leg, oid: 0, totalSz: o.size, avgPx: String(mid) })) };
       },
+      async order(owner, spec, plan) {
+        bus.emit('order', { owner, op: 'place', leg: spec.leg, spec, simulated: true });
+        return book.order(spec, plan);
+      },
+      async cancel(owner, spec) {
+        bus.emit('order', { owner, op: 'cancel', leg: spec.leg, spec, simulated: true });
+        return book.cancel(spec);
+      },
+      openOrders: (owner) => book.open(owner),
       async relay(body) {
         const b = parseRelayBody(body); // same validation as the live relayer
         // the TEE owner steps emit what the live relayer emits, so the page's log shows them in the dry run too
@@ -312,7 +325,18 @@ export function buildDryRunDeps(fixtureName = 'hedged', opts: { replayStartMs?: 
           const have = intent.toPerp ? (base?.spotUsdc ?? 0) + c.spot : Number(base?.clearinghouse.withdrawable ?? 0) + c.perp;
           if (!Number.isFinite(amount) || amount <= 0 || amount > have + 1e-9) throw new HttpError(422, `leg ${intent.leg} has only ${have.toFixed(2)} USDC on ${intent.toPerp ? 'spot' : 'the trading balance'}`);
           credited.set(intent.leg, { spot: c.spot + (intent.toPerp ? -amount : amount), perp: c.perp + (intent.toPerp ? amount : -amount) });
-          return { kind: 'ownerExecute', simulated: true, owner: b.owner, intent, txHash: null, ok: true };
+          return { kind: 'ownerExecute', simulated: true, owner: b.owner, intent, txHash: null, leg: intent.leg, action: 'usdClassTransfer', amount: intent.amount, ok: true };
+        }
+        if (intent.type === 'withdraw') {
+          // leaves the trading balance (the 1 USDC fee comes off what the owner receives, not off the leg)
+          const base = snap.legs.find((l) => l.leg === intent.leg);
+          const c = credited.get(intent.leg) ?? { spot: 0, perp: 0 };
+          const amount = Number(intent.amount);
+          const have = Number(base?.clearinghouse.withdrawable ?? 0) + c.perp;
+          if (!Number.isFinite(amount) || amount <= 1 || amount > have + 1e-9) throw new HttpError(422, `leg ${intent.leg} can withdraw up to ${have.toFixed(2)} USDC, and more than the 1 USDC fee`);
+          credited.set(intent.leg, { ...c, perp: c.perp - amount });
+          bus.emit('funds.moved', { owner: b.owner, leg: intent.leg, action: 'withdraw', amount: intent.amount, ok: true, simulated: true });
+          return { kind: 'ownerExecute', simulated: true, owner: b.owner, intent, txHash: null, leg: intent.leg, action: 'withdraw', amount: intent.amount, ok: true };
         }
         return { kind: b.intent.type === 'registerLeg' ? 'registerLeg' : 'ownerExecute', simulated: true, owner: b.owner, intent: b.intent, txHash: null };
       },

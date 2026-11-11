@@ -9,8 +9,10 @@ export type DecisionAction = 'hold' | 'close_both' | 'reduce_hedge' | 'add_hedge
 /** setDecisionMode: the mode ('off' | 'propose' | 'auto') goes in `coin`, ratio "0". prepareAgents: coin "", ratio "0".
  * reject: dismisses a proposal, coin = the proposal's coin.
  * startStrategy: coin "", specHash = specHash(spec) of the spec sent beside the command;
- * pauseStrategy / stopStrategy: coin = the strategy id. ratio "0" for all three. */
-export type CommandAction = 'openHedge' | 'closeHedge' | DecisionAction | 'setDecisionMode' | 'prepareAgents' | 'reject' | 'startStrategy' | 'pauseStrategy' | 'stopStrategy' | 'continue_strategy' | 'pause_strategy' | 'adjust_strategy';
+ * pauseStrategy / stopStrategy: coin = the strategy id. ratio "0" for all three.
+ * placeOrder / cancelOrder: coin "", ratio "0", specHash = specHash(spec) of the order or cancel spec sent beside the command
+ * (agent/src/order.ts), so the owner signs exactly the order that runs. */
+export type CommandAction = 'openHedge' | 'closeHedge' | DecisionAction | 'setDecisionMode' | 'prepareAgents' | 'reject' | 'startStrategy' | 'pauseStrategy' | 'stopStrategy' | 'placeOrder' | 'cancelOrder' | 'continue_strategy' | 'pause_strategy' | 'adjust_strategy';
 
 export interface Command {
   owner: Hex;
@@ -23,7 +25,7 @@ export interface Command {
   expiry: number;
   /** any unused uint64 (e.g. Date.now()); the service keeps a replay cache */
   nonce: number;
-  /** bytes32: the strategy spec's hash for startStrategy, ZERO_SPEC_HASH for every other action */
+  /** bytes32: the spec's hash for the spec-bearing actions (SPEC_ACTIONS), ZERO_SPEC_HASH for every other one; openHedge may carry a hedge spec's hash */
   specHash: Hex;
 }
 
