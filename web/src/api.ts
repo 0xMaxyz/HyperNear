@@ -1,5 +1,5 @@
 import type { Hex } from 'viem';
-import type { ChainTag } from '@hypernear/client';
+import { specHashOfJson, type ChainTag } from '@hypernear/client';
 
 export const AGENT_URL = (import.meta.env.VITE_AGENT_URL as string | undefined) ?? 'http://localhost:8787';
 export const CONTRACT_ID = (import.meta.env.VITE_CONTRACT_ID as string | undefined) ?? 'leash-spike-1107.testnet';
@@ -51,11 +51,10 @@ export interface OwnerView {
   owner: Hex;
   /** `agent: null` with `needsPrepare`: no key yet, the owner signs a prepareAgents command first */
   legs?: { leg: number; address: Hex; agent: { address: Hex; name: string; approvedAt: number | null } | null; needsPrepare?: boolean }[];
-  snapshot: { at: number; legs: LegSnap[]; market: { mids: Record<string, string> } };
+  snapshot: { at: number; legs: LegSnap[]; market: { mids: Record<string, string>; assets?: { name: string; asset: number; szDecimals: number; maxLeverage: number }[] } };
   policy: OwnerPolicy | null;
   orderPolicy: { maxLeverage: number; maxNotionalUsd: number; allowedCoins: string[]; slippage: number };
   guard: GuardRow[];
-  breakeven?: unknown;
   config?: { contractId: string; chainTag: ChainTag; agentAccount: string | null; hlNetwork: 'testnet' | 'mainnet'; teeFeeActivation?: Activation | null };
   /** the exact approveAgent intents to sign, one per leg whose key Hyperliquid has not approved */
   pendingApprovals?: PendingApproval[];
@@ -254,21 +253,11 @@ export interface LibraryListing {
   items: LibraryItem[];
 }
 
-/** Canonical JSON (keys sorted), the same as agent/src/strategy/spec.ts canonicalJson, so the hash can be recomputed here. */
-export function canonicalJson(v: unknown): string {
-  if (Array.isArray(v)) return `[${v.map(canonicalJson).join(',')}]`;
-  if (v && typeof v === 'object') {
-    const o = v as Record<string, unknown>;
-    return `{${Object.keys(o).sort().map((k) => `${JSON.stringify(k)}:${canonicalJson(o[k])}`).join(',')}}`;
-  }
-  return JSON.stringify(v);
-}
+export { canonicalJson } from '@hypernear/client';
 
-/** sha256 of the canonical JSON, as 0x + 64 hex: the specHash the owner signs. */
-export async function specHashOf(spec: StrategySpec): Promise<Hex> {
-  const bytes = new TextEncoder().encode(canonicalJson(spec));
-  const d = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
-  return `0x${[...d].map((b) => b.toString(16).padStart(2, '0')).join('')}` as Hex;
+/** sha256 of the canonical JSON, as 0x + 64 hex: the specHash the owner signs (shared with the agent through @hypernear/client). */
+export async function specHashOf(spec: unknown): Promise<Hex> {
+  return specHashOfJson(spec);
 }
 
 /** orders.swept (agent/src/sweep.ts sweptEvent): the clean-up after a relayed freeze, contract-signed Hyperliquid cancels. */

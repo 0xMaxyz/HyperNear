@@ -309,3 +309,37 @@ ul.plain { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .tee code { overflow-wrap: anywhere; }
 .leave { margin-top: 8px; display: grid; gap: 8px; }
 .tee a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+
+/* Privy's login and signature modals read these variables from :root. Pinning them to our tokens makes the modal follow the page's
+   light/dark scheme, and fixes the Sign button turning white on hover (the hover colour is --privy-color-accent-dark).
+   :root:root outranks Privy's own :root rule whichever stylesheet loads last. */
+:root:root {
+  --privy-color-background: var(--surface);
+  --privy-color-background-2: var(--bg);
+  --privy-color-background-3: color-mix(in srgb, var(--ink) 6%, var(--surface));
+  --privy-color-background-hover: color-mix(in srgb, var(--ink) 9%, var(--surface));
+  --privy-color-background-clicked: color-mix(in srgb, var(--ink) 16%, var(--surface));
+  --privy-color-foreground: var(--ink);
+  --privy-color-foreground-2: var(--muted);
+  --privy-color-foreground-3: var(--muted);
+  --privy-color-foreground-4: var(--line);
+  --privy-color-border-default: var(--line);
+  --privy-color-accent: var(--ink);
+  --privy-color-accent-hover: var(--ink);
+  --privy-color-accent-dark: color-mix(in srgb, var(--ink) 85%, var(--surface));
+  --privy-color-accent-light: var(--ink);
+  --privy-color-foreground-accent: var(--ink-inverse);
+  --privy-color-error: var(--accent);
+  --privy-border-radius-sm: 4px;
+  --privy-border-radius-md: 6px;
+  --privy-border-radius-lg: 10px;
+}
+#privy-dialog-backdrop { background: rgb(0 0 0 / 0.5); }
+
+.stack-cards { display: grid; gap: 16px; }
+
+dialog.hiw { padding: 20px 24px; width: min(560px, calc(100% - 32px)); }
+dialog.hiw h2 { margin-bottom: 8px; }
+dialog.hiw h3 { margin: 14px 0 4px; font-size: 15px; }
+dialog.hiw ol { padding-left: 22px; display: grid; gap: 4px; }
+dialog.hiw .ill { margin: 12px 0; }

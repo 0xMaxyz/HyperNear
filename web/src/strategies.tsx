@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Hex } from 'viem';
 import { newCommand, type Command } from '@hypernear/client';
 import { ApiError, getJson, post, specHashOf, type AgentEvent, type LegSnap, type DraftOk, type DraftRefused, type LibraryListing, type SpecChange, type StrategySpec, type StrategyStatus } from './api';
+import { HowItWorks } from './howitworks';
 import { short } from './panels';
 
 const usd = (n: number | string) => `$${Number(n).toLocaleString('en-US', { maximumFractionDigits: 4 })}`;
@@ -122,6 +123,7 @@ export function StrategiesPanel(p: {
   const [notice, setNotice] = useState<{ kind: 'ok' | 'err'; text: string }>();
   const [list, setList] = useState<{ state: 'loading' } | { state: 'off' | 'error'; message: string } | { state: 'ok'; rows: StrategyStatus[] }>({ state: 'loading' });
   const [lib, setLib] = useState<{ state: 'loading' } | { state: 'error'; message: string } | { state: 'ok'; data: LibraryListing }>({ state: 'loading' });
+  const [how, setHow] = useState<string>();
   const [libCoin, setLibCoin] = useState<string>();
   const [libLeg, setLibLeg] = useState<number | undefined>(p.leg);
   const [edit, setEdit] = useState<Edit>();
@@ -286,6 +288,7 @@ export function StrategiesPanel(p: {
         {notice && <p className={`notice ${notice.kind}`} role={notice.kind === 'err' ? 'alert' : 'status'}>{notice.text}</p>}
       </div>
 
+      {how && lib.state === 'ok' && <HowItWorks id={how} coin={lib.data.coin} mid={lib.data.mid} onClose={() => setHow(undefined)} />}
       <div className="strat-grid">
         <div>
           <h3>New strategy</h3>
@@ -319,6 +322,7 @@ export function StrategiesPanel(p: {
                     <input type="radio" name="tpl" checked={edit?.templateId === i.id} onChange={() => pick(i)} />
                     <strong>{i.title}</strong>
                     <span className="muted small">{i.blurb}</span>
+                    <button type="button" className="small-btn" style={{ justifySelf: 'start', marginTop: 6 }} onClick={(e) => (e.preventDefault(), e.stopPropagation(), setHow(i.id))}>How it works</button>
                   </label>
                 ))}
               </fieldset>

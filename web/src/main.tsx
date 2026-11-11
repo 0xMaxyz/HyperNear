@@ -1,4 +1,4 @@
-import { StrictMode, useEffect } from 'react';
+import { StrictMode, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { PrivyProvider, usePrivy, useSignTypedData, useWallets } from '@privy-io/react-auth';
 import type { Hex } from 'viem';
@@ -85,21 +85,54 @@ const noPrivy: Auth = {
   loginOff: true,
 };
 
+/** Whether the page is dark: a forced data-theme wins, otherwise the system setting. Re-reads when either changes. */
+function useDark() {
+  const read = () => {
+    const forced = document.documentElement.dataset.theme;
+    return forced ? forced === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  };
+  const [dark, setDark] = useState(read);
+  useEffect(() => {
+    const mq = matchMedia('(prefers-color-scheme: dark)');
+    const on = () => setDark(read());
+    mq.addEventListener('change', on);
+    const mo = new MutationObserver(on);
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => {
+      mq.removeEventListener('change', on);
+      mo.disconnect();
+    };
+  }, []);
+  return dark;
+}
+
+/**
+ * Privy's modal defaults to a light theme. The hex theme and accent mirror our --surface and --ink tokens (Privy needs literal hex,
+ * not CSS variables); styles.css then pins the modal's own variables to the live tokens, so the colours also follow a theme change
+ * without a re-render.
+ */
+function ThemedPrivy({ appId }: { appId: string }) {
+  const dark = useDark();
+  const config = useMemo(
+    () => ({
+      loginMethods: ['passkey', 'email', 'wallet'] as ('passkey' | 'email' | 'wallet')[],
+      embeddedWallets: { ethereum: { createOnLogin: 'users-without-wallets' as const } },
+      appearance: {
+        walletChainType: 'ethereum-only' as const,
+        theme: (dark ? '#1d1c16' : '#fbfaf6') as `#${string}`,
+        accentColor: (dark ? '#ece8dc' : '#1b1a17') as `#${string}`,
+        landingHeader: 'Log in to HyperNear',
+      },
+    }),
+    [dark],
+  );
+  return (
+    <PrivyProvider appId={appId} config={config}>
+      <WithPrivy />
+    </PrivyProvider>
+  );
+}
+
 createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    {APP_ID ? (
-      <PrivyProvider
-        appId={APP_ID}
-        config={{
-          loginMethods: ['passkey', 'email', 'wallet'],
-          embeddedWallets: { ethereum: { createOnLogin: 'users-without-wallets' } },
-          appearance: { walletChainType: 'ethereum-only' },
-        }}
-      >
-        <WithPrivy />
-      </PrivyProvider>
-    ) : (
-      <App auth={noPrivy} />
-    )}
-  </StrictMode>
+  <StrictMode>{APP_ID ? <ThemedPrivy appId={APP_ID} /> : <App auth={noPrivy} />}</StrictMode>
 );

@@ -16,7 +16,7 @@ const FACTORS: Record<string, string> = {
 const missing = (s: unknown) => s === null || s === undefined || s === '' || Number.isNaN(Number(s));
 export const n = (s: string | number | null | undefined, dp = 2, min = 0) =>
   missing(s) ? 'n/a' : (Number(s) || 0).toLocaleString('en-US', { minimumFractionDigits: min, maximumFractionDigits: dp });
-export const usd = (s: string | number | null | undefined, dp = 2) => (missing(s) ? 'n/a' : `${Number(s) < 0 ? '-' : ''}$${n(Math.abs(Number(s)), dp, 2)}`);
+export const usd = (s: string | number | null | undefined, dp = 2) => (missing(s) ? 'n/a' : `${Number(s) < 0 ? '-' : ''}$${n(Math.abs(Number(s)), dp, Math.min(2, dp))}`);
 export const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
 function Addr({ a }: { a: string }) {
@@ -121,43 +121,8 @@ export function LegsTable({ view, loading, error }: { view?: OwnerView; loading:
   );
 }
 
-/** agent/src/pnl.ts CoinBreakeven, one entry per coin held. */
-interface BeRow { coin: string; kind: string; breakEvenPx: number | null; lockedPnl: number | null; feesPaid: number; netFunding: number; estCloseFees: number; netSize: number }
-
-const parseBreakeven = (b: unknown): BeRow[] => (Array.isArray(b) ? (b as BeRow[]) : []);
-
 /** Leg roles of the demo layout (agent fixtures and the README flow). */
 export const ROLES: Record<number, string> = { 0: 'long', 1: 'hedge', 2: 'reserve, source for the guard' };
-
-export function BreakevenCard({ view }: { view?: OwnerView }) {
-  const rows = parseBreakeven(view?.breakeven);
-  return (
-    <section className="card" aria-labelledby="be-h">
-      <h2 id="be-h">Break-even</h2>
-      <p className="muted small">The price where both legs together net to zero after fees and funding. The agent computes it.</p>
-      {rows.length === 0 ? (
-        <p className="state">{view ? 'No open hedge, so there is nothing to break even on.' : 'Waiting for data.'}</p>
-      ) : (
-        rows.map((r) => (
-          <dl key={r.coin} className="kv">
-            <dt>{r.coin}</dt>
-            <dd className="big">
-              {r.kind === 'price' ? usd(r.breakEvenPx) : r.kind === 'locked' ? `Locked at ${usd(r.lockedPnl)}` : r.kind === 'always_profitable' ? 'In profit at every price' : r.kind === 'never_profitable' ? 'At a loss at every price' : 'n/a'}
-            </dd>
-            <dt>Net size</dt>
-            <dd>{n(r.netSize, 5)} {r.coin}</dd>
-            <dt>Fees paid</dt>
-            <dd>{usd(r.feesPaid, 4)}</dd>
-            <dt>Net funding</dt>
-            <dd>{usd(r.netFunding, 4)}</dd>
-            <dt>Est. close fees</dt>
-            <dd>{usd(r.estCloseFees, 4)}</dd>
-          </dl>
-        ))
-      )}
-    </section>
-  );
-}
 
 function summarize(e: AgentEvent): string {
   const d = e.data as Record<string, any>;

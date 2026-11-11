@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 /** Inline SVGs: they take the page's ink and surface colours, and tell series apart by dash and fill, never colour alone. */
-function Figure({ title, desc, children, h = 170, w = 360 }: { title: string; desc: string; children: ReactNode; h?: number; w?: number }) {
+export function Figure({ title, desc, children, h = 170, w = 360 }: { title: string; desc: string; children: ReactNode; h?: number; w?: number }) {
   const id = title.replace(/\W+/g, '-').toLowerCase();
   return (
     <figure className="ill">

@@ -60,11 +60,63 @@ interface Props {
   onGo: (to: string) => void;
   /** sign and send a usdClassTransfer (spot to trading balance) */
   onMove: (leg: number, amount: string) => void;
+  /** sign and send a withdraw to the owner's own wallet */
+  onWithdraw: (leg: number, amount: string) => void;
   /** a refresh of the owner view (after a simulated credit) */
   onChanged: () => void;
 }
 
-export function FundTab({ view, owner, leg: legParam, canSign, dry, locked, busy, why, onGo, onMove, onChanged }: Props) {
+
+/** Hyperliquid's withdrawal fee, taken from the amount: the owner receives amount - 1. A withdrawal must exceed it. */
+const WITHDRAW_FEE = 1;
+
+/** Money leaves a leg only to the owner's own wallet (the contract signs it with no destination field). Pure rules: only the trading balance can be withdrawn. */
+function WithdrawCard({ leg, owner, network, locked, busy, why, onWithdraw, onMove }: { leg: LegSnap; owner?: string; network?: string; locked: boolean; busy: string | null; why?: string; onWithdraw: (leg: number, amount: string) => void; onMove: (leg: number, amount: string) => void }) {
+  const free = Number(leg.clearinghouse.withdrawable);
+  const holds = leg.clearinghouse.assetPositions.some((a) => Number(a.position.szi) !== 0);
+  const [amt, setAmt] = useState<string>();
+  const value = amt ?? (free > WITHDRAW_FEE ? free.toFixed(2) : '');
+  const num = Number(value);
+  const ok = /^\d+(\.\d{1,6})?$/.test(value) && num > WITHDRAW_FEE && num <= free + 1e-9;
+  const stuckOnSpot = free <= WITHDRAW_FEE && leg.spotUsdc > WITHDRAW_FEE;
+  return (
+    <section className="card" aria-labelledby="wd-h">
+      <h2 id="wd-h">Withdraw to my wallet</h2>
+      <p className="muted small">
+        Pays {owner ? short(owner) : 'your owner address'} on {network === 'mainnet' ? 'Arbitrum' : 'Arbitrum Sepolia'}. There is no other destination: the contract signs the withdrawal without one. Hyperliquid charges {usd(WITHDRAW_FEE)}, so you receive the amount minus that, usually within minutes.
+      </p>
+      <dl className="kv">
+        <dt>Can be withdrawn from leg {leg.leg}</dt>
+        <dd>{usd(free)}</dd>
+      </dl>
+      {holds && <p className="state small">This leg has an open position; the amount above already leaves its margin in place. Withdrawing more would need the position reduced first.</p>}
+      {stuckOnSpot ? (
+        <>
+          <p className="state small">{usd(leg.spotUsdc)} sits on the spot balance, and only the trading balance can be withdrawn. Move it first.</p>
+          <div className="actions"><button disabled={locked} title={why} onClick={() => onMove(leg.leg, leg.spotUsdc.toFixed(2))}>Move {usd(leg.spotUsdc)} to the trading balance</button></div>
+        </>
+      ) : (
+        <>
+          <div className="fields inline">
+            <label>
+              Amount, USDC
+              <input value={value} onChange={(e) => setAmt(e.target.value)} inputMode="decimal" aria-invalid={value !== '' && !ok} />
+            </label>
+            <button style={{ alignSelf: 'end' }} onClick={() => setAmt(free.toFixed(2))} disabled={free <= WITHDRAW_FEE}>Max</button>
+          </div>
+          <p className="muted small">{ok ? `You receive ${usd(num - WITHDRAW_FEE)}.` : free <= WITHDRAW_FEE ? 'Nothing to withdraw yet: the trading balance must be above the fee.' : `Enter more than ${usd(WITHDRAW_FEE)} and at most ${usd(free)}.`}</p>
+          <div className="actions">
+            <button className="primary" disabled={locked || !ok} title={why} onClick={() => (onWithdraw(leg.leg, value), setAmt(undefined))}>
+              {busy === 'withdraw' ? 'Waiting for signature…' : 'Withdraw'}
+            </button>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+export function FundTab({ view, owner, leg: legParam, canSign, dry, locked, busy, why, onGo, onMove, onWithdraw, onChanged }: Props) {
   const legs = view?.snapshot.legs ?? [];
   const [legNo, setLegNo] = useState<number | undefined>(legParam);
   const active: LegSnap | undefined = legs.find((l) => l.leg === legNo) ?? legs.find((l) => l.leg === legParam) ?? legs[0];
@@ -258,6 +310,8 @@ export function FundTab({ view, owner, leg: legParam, canSign, dry, locked, busy
           </div>
         </section>
       )}
+
+      <WithdrawCard leg={active} owner={owner} network={view?.config?.hlNetwork} locked={locked} busy={busy} why={why} onWithdraw={onWithdraw} onMove={onMove} />
 
       <section className="card" aria-labelledby="addr-h">
         <h2 id="addr-h">1. Send to a deposit address</h2>

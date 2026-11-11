@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Hex } from 'viem';
-import { commandTypedData, newCommand, ownerIntentTypedData, type Command, type OwnerIntent, type OwnerIntentTypedData } from '@hypernear/client';
+import { commandTypedData, newCommand, ownerIntentTypedData, specHashOfJson, type Command, type OwnerIntent, type OwnerIntentTypedData } from '@hypernear/client';
 import { AGENT_ACCOUNT, AGENT_URL, CHAIN_TAG, CONTRACT_ID, DEMO_OWNER, TEE_AGENT_URL, getOwner, pendingDecision, pointAgentAt, post, streamEvents, type AgentEvent, type DecisionMode, type OwnerView } from './api';
 import { LegPanel } from './legpanel';
-import { Activity, BreakevenCard, DecisionPanel, FreezeSteps, nearScan, short } from './panels';
+import { Activity, DecisionPanel, FreezeSteps, nearScan, short } from './panels';
+import { HedgeSummary, OverviewTab } from './overview';
+import { TradeTab } from './trade';
+import type { HedgeSpec } from './trading';
 import { LegCards } from './legcards';
 import { StrategiesPanel } from './strategies';
+import { ProtectPanel } from './protect';
 import { dryApply, inTeeMode, loadTee, lookupTeeAgent, priceMicro, type TeeState, ZERO_HASH } from './tee';
 import { HostingCard } from './teepanel';
 import { AccountMenu, type AuthAccount } from './account';
@@ -26,7 +30,7 @@ export interface Auth {
   account?: AuthAccount;
 }
 
-const TABS = ['home', 'legs', 'hedge', 'strategies', 'fund', 'activity', 'learn'];
+const TABS = ['home', 'overview', 'trade', 'hedge', 'strategies', 'legs', 'fund', 'activity', 'learn'];
 
 type Notice = { kind: 'ok' | 'err'; text: string };
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -58,6 +62,8 @@ export function App({ auth }: { auth: Auth }) {
   const [cooldown, setCooldown] = useState('60');
   const [coin, setCoin] = useState('BTC');
   const [ratio, setRatio] = useState('0.5');
+  const [lev1, setLev1] = useState('');
+  const [margin1, setMargin1] = useState<'same' | 'cross' | 'isolated'>('same');
 
   // owner calls (setup, prepare, commands) go to the TEE agent once the owner is in TEE mode
   pointAgentAt(teeMode);
@@ -146,8 +152,17 @@ export function App({ auth }: { auth: Auth }) {
     });
 
   /** Funds that arrived on a leg's spot balance cannot trade until the owner moves them to the perp (trading) balance. */
+  /** The contract only signs these; the service posts them to Hyperliquid and says whether Hyperliquid accepted. */
+  const hlResult = (out: Record<string, unknown>) => {
+    if (out.ok === false) throw new Error(`Hyperliquid refused: ${typeof out.hl === 'object' ? JSON.stringify((out.hl as { response?: unknown }).response ?? out.hl) : String(out.hl)}`.slice(0, 220));
+    return out;
+  };
   const moveToTrading = (leg: number, amount: string) =>
-    run('move', async () => done(await ownerIntent({ type: 'usdClassTransfer', leg, amount, toPerp: true, hlNonce: Date.now() }), `Moved ${amount} USDC on leg ${leg} to the trading balance`));
+    run('move', async () => done(hlResult(await ownerIntent({ type: 'usdClassTransfer', leg, amount, toPerp: true, hlNonce: Date.now() })), `Moved ${amount} USDC on leg ${leg} to the trading balance`));
+
+  /** Leg to the owner's own wallet; Hyperliquid keeps 1 USDC of it. */
+  const withdrawLeg = (leg: number, amount: string) =>
+    run('withdraw', async () => done(hlResult(await ownerIntent({ type: 'withdraw', leg, amount, hlTime: Date.now() })), `Withdrew ${amount} USDC from leg ${leg} to your wallet (you receive ${(Number(amount) - 1).toFixed(2)})`));
 
   /** Registering a leg is permissionless: the relayer pays, no signature. */
   const addLeg = (leg: number) =>
@@ -226,11 +241,22 @@ export function App({ auth }: { auth: Auth }) {
     });
 
   const ratioOk = /^\d+(\.\d+)?$/.test(ratio) && Number(ratio) > 0 && Number(ratio) <= 1;
-  const hedge = (open: boolean) =>
+  const lev1Ok = lev1 === '' || (/^\d+$/.test(lev1) && Number(lev1) >= 1 && Number(lev1) <= (view?.orderPolicy.maxLeverage ?? 5));
+  const hedgeCoinParam = route.tab === 'hedge' ? route.params.get('coin') : null;
+  useEffect(() => {
+    if (hedgeCoinParam && coins.includes(hedgeCoinParam)) setCoin(hedgeCoinParam);
+  }, [hedgeCoinParam]); // eslint-disable-line react-hooks/exhaustive-deps
+  /** Leg 1's own leverage and margin mode ride with the command as a hedge spec the owner signs; empty fields mean "same as leg 0". */
+  const hedgeSpec = (): HedgeSpec | undefined => {
+    const spec: HedgeSpec = { ...(lev1 ? { leg1Leverage: Number(lev1) } : {}), ...(margin1 !== 'same' ? { leg1IsCross: margin1 === 'cross' } : {}) };
+    return Object.keys(spec).length ? spec : undefined;
+  };
+  const hedge = (open: boolean, c = coin) =>
     run(open ? 'open' : 'close', async () => {
-      const cmd = newCommand(owner!, open ? 'openHedge' : 'closeHedge', coin, open ? ratio : '0');
+      const spec = open ? hedgeSpec() : undefined;
+      const cmd = newCommand(owner!, open ? 'openHedge' : 'closeHedge', c, open ? ratio : '0', 30, Date.now(), spec ? specHashOfJson(spec) : undefined);
       const sig = await auth.sign(commandTypedData(chainTag, contractId, cmd));
-      return done(await post(open ? '/hedge/open' : '/hedge/close', { command: cmd, sig }), open ? `Hedge on ${coin} opened at ratio ${ratio}` : `Hedge on ${coin} closed`);
+      return done(await post(open ? '/hedge/open' : '/hedge/close', { command: cmd, sig, ...(spec ? { spec } : {}) }), open ? `Hedge on ${c} opened at ratio ${ratio}${spec ? ` (leg 1 ${spec.leg1Leverage ? `${spec.leg1Leverage}x ` : ''}${spec.leg1IsCross === undefined ? '' : spec.leg1IsCross ? 'cross' : 'isolated'})` : ''}` : `Hedge on ${c} closed`);
     });
 
   // /events carries every owner's events: keep this owner's and the global ones
@@ -267,9 +293,11 @@ export function App({ auth }: { auth: Auth }) {
 
   const tabDefs: TabDef[] = [
     { id: 'home', label: 'Home', dot: pending.length > 0 ? 'An agent key is waiting for your approval' : undefined },
-    { id: 'legs', label: 'Legs' },
+    { id: 'overview', label: 'Overview' },
+    { id: 'trade', label: 'Trade' },
     { id: 'hedge', label: 'Hedge', dot: decision ? 'A decision is waiting for you' : undefined },
     { id: 'strategies', label: 'Strategies' },
+    { id: 'legs', label: 'Legs' },
     { id: 'fund', label: 'Fund' },
     { id: 'activity', label: 'Activity' },
     { id: 'learn', label: 'Learn' },
@@ -350,6 +378,32 @@ export function App({ auth }: { auth: Auth }) {
             <p className="attention" role="status">
               {attention.text} <a href={attention.href}>{attention.link}</a>
             </p>
+          )}
+
+          {route.tab === 'overview' && (
+            <Panel id="overview">
+              <OverviewTab view={view} owner={owner} canSign={canSign} locked={locked} why={why} sign={signCommand} run={run} done={done} onCloseHedge={(c) => hedge(false, c)} onGo={go} />
+            </Panel>
+          )}
+
+          {route.tab === 'trade' && (
+            <Panel id="trade">
+              <TradeTab
+                view={view}
+                owner={owner}
+                canSign={canSign}
+                locked={locked}
+                why={why}
+                sign={signCommand}
+                run={run}
+                done={done}
+                onGo={go}
+                initial={{
+                  ...(route.params.get('leg') !== null ? { leg: Number(route.params.get('leg')) } : {}),
+                  ...(route.params.get('coin') ? { coin: route.params.get('coin')! } : {}),
+                }}
+              />
+            </Panel>
           )}
 
           {route.tab === 'legs' && (
@@ -475,15 +529,28 @@ export function App({ auth }: { auth: Auth }) {
                     Ratio of leg 0 size, 0 to 1
                     <input value={ratio} onChange={(e) => setRatio(e.target.value)} inputMode="decimal" aria-invalid={!ratioOk} />
                   </label>
+                  <label>
+                    Leg 1 leverage (empty: same as leg 0)
+                    <input value={lev1} onChange={(e) => setLev1(e.target.value)} inputMode="numeric" placeholder="same as leg 0" aria-invalid={!lev1Ok} />
+                  </label>
+                  <label>
+                    Leg 1 margin
+                    <select value={margin1} onChange={(e) => setMargin1(e.target.value as 'same' | 'cross' | 'isolated')}>
+                      <option value="same">Same as leg 0</option>
+                      <option value="cross">Cross</option>
+                      <option value="isolated">Isolated</option>
+                    </select>
+                  </label>
                 </div>
+                <p className="muted small">Leg 0 must already hold the position to hedge: open it from the <a href="#/trade">Trade</a> tab. Each leg can use its own leverage; a hedge across different leverage keeps the same size, so only the margin and the liquidation prices differ.</p>
                 <div className="actions">
-                  <button className="primary" disabled={locked || !ratioOk} title={why} onClick={() => hedge(true)}>{busy === 'open' ? 'Waiting for signature…' : 'Open hedge'}</button>
+                  <button className="primary" disabled={locked || !ratioOk || !lev1Ok} title={why} onClick={() => hedge(true)}>{busy === 'open' ? 'Waiting for signature…' : 'Open hedge'}</button>
                   <button disabled={locked} title={why} onClick={() => hedge(false)}>{busy === 'close' ? 'Waiting for signature…' : 'Close hedge'}</button>
                 </div>
               </section>
             </div>
             <div className="col">
-              <BreakevenCard view={view} />
+              <HedgeSummary owner={owner} tick={view?.snapshot.at} onGo={go} />
               <section className="card" aria-labelledby="freeze-h">
                 <h2 id="freeze-h">{policy?.frozen ? 'Account is frozen' : 'Emergency stop'}</h2>
                 <div className="freeze">
@@ -501,13 +568,21 @@ export function App({ auth }: { auth: Auth }) {
 
           {route.tab === 'strategies' && (
             <Panel id="strategies">
+              <ProtectPanel
+                view={view}
+                owner={owner}
+                canSign={canSign}
+                sign={signCommand}
+                preselect={{ leg: route.params.get('protect') === null ? undefined : Number(route.params.get('protect')), coin: route.params.get('coin') ?? undefined }}
+                onDone={() => void refresh()}
+              />
               <StrategiesPanel legs={legs} owner={owner} canSign={canSign} events={mine} sign={signCommand} tick={view?.snapshot.at} leg={route.params.get('leg') === null ? undefined : Number(route.params.get('leg'))} />
             </Panel>
           )}
 
           {route.tab === 'fund' && (
             <Panel id="fund">
-              <FundTab view={view} owner={owner} leg={route.params.get('leg') === null ? undefined : Number(route.params.get('leg'))} canSign={canSign} dry={dry} locked={locked} busy={busy} why={why} onGo={go} onMove={moveToTrading} onChanged={() => void refresh()} />
+              <FundTab view={view} owner={owner} leg={route.params.get('leg') === null ? undefined : Number(route.params.get('leg'))} canSign={canSign} dry={dry} locked={locked} busy={busy} why={why} onGo={go} onMove={moveToTrading} onWithdraw={withdrawLeg} onChanged={() => void refresh()} />
             </Panel>
           )}
 
