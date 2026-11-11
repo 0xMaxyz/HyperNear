@@ -167,9 +167,10 @@ describe('--dry-run --serve: moving a resting limit', () => {
     const to = String(Math.round(mid * 0.88));
     const moved = await post(`${base}/order/modify`, await sign(key, 'modifyOrder', { leg: 2, coin: 'BTC', oid, limitPx: to }));
     expect(moved.status).toBe(200);
-    expect(await moved.json()).toMatchObject({ modified: oid, from: px });
-    const listed = (await (await fetch(`${base}/orders/${OWNER}`)).json()).orders.find((o: any) => o.oid === oid);
-    expect(listed).toMatchObject({ limitPx: to, size: '0.0002' });
+    expect(await moved.json()).toMatchObject({ replaced: oid, from: px });
+    const orders = (await (await fetch(`${base}/orders/${OWNER}`)).json()).orders;
+    expect(orders.find((o: any) => o.oid === oid)).toBeUndefined(); // like the exchange: the moved order has a new oid
+    expect(orders.find((o: any) => o.leg === 2 && o.limitPx === to)).toMatchObject({ size: '0.0002' });
     expect((await post(`${base}/order/modify`, await sign(key, 'modifyOrder', { leg: 2, coin: 'BTC', oid: 999999, limitPx: to }))).status).toBe(422);
   });
 });

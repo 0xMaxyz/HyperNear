@@ -70,10 +70,10 @@ cd web && npx vite            # open http://localhost:5173, "Explore recorded da
 
 ## Not verified yet (do these before relying on them)
 
-1. **Testnet: market order with TP/SL.** Check that the `normalTpsl` group places, the two triggers show in Open orders, and they close the position. It's covered only by unit and dry-run tests.
-2. **Testnet: drag-move a resting limit.** Check that `modifyOrder` keeps the oid and cloid and the history label survives. It's also only unit and dry-run tested.
+1. **Testnet: market order with TP/SL.** Attempted 2026-11-11: testnet was in L1 congestion ("Only post-only orders allowed"), so the group was refused; retry with `agent/scripts/terminal-live.ts`. Check that the `normalTpsl` group places, the two triggers show in Open orders, and they close the position. It's covered only by unit and dry-run tests.
+2. **Testnet: drag-move a resting limit.** **Done 2026-11-11 (lab wallet):** `modifyOrder` keeps size, side, `tif` and cloid but the exchange assigns a NEW oid; `frontendOpenOrders` does return `tif`.
 3. **Logged-in 1-click flow in a browser.** Login wasn't possible in the session. Check turning it on (one wallet signature), placing orders with no popup, Turn off, and that a freeze ends it.
-4. **Live order modify needs `tif`.** The agent reads `tif` from `frontendOpenOrders` and falls back to `Gtc` when it's absent. Confirm the field is present, or a post-only order could come back as GTC after a move.
+4. ~~Live order modify needs `tif`.~~ Confirmed present (`"tif":"Alo"`), so a post-only order stays post-only after a move.
 
 ## Known gaps and next steps
 

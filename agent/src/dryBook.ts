@@ -153,13 +153,14 @@ export function createDryBook(snap: OwnerSnapshot) {
       }
       return { simulated: true, spec, statuses: [rest(spec.leg, spec), ...attached()] };
     },
-    /** a moved limit keeps its oid and size; only the price changes */
+    /** a moved limit keeps its size and cloid and only the price changes; like the exchange, it gets a new oid */
     modify(leg: number, oid: number, limitPx: string) {
       const o = orders.find((x) => x.oid === oid && x.leg === leg);
       if (!o) throw new Error(`order ${oid} is not resting on leg ${leg}`);
       const from = o.spec.limitPx;
       o.spec = { ...o.spec, limitPx };
-      return { simulated: true, modified: oid, from };
+      o.oid = nextOid++;
+      return { simulated: true, modified: o.oid, replaced: oid, from };
     },
     cancel(spec: CancelSpec) {
       const cancelled: number[] = [];

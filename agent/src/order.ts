@@ -50,7 +50,7 @@ export interface CancelSpec {
   all?: boolean;
 }
 
-/** Moves one resting limit order to a new price (Hyperliquid `modify`: same oid, same size, same side, same cloid). */
+/** Moves one resting limit order to a new price (Hyperliquid `modify`: same size, side, time in force and cloid; the exchange assigns a new oid, seen on testnet). */
 export interface ModifySpec {
   leg: number;
   coin: string;

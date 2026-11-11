@@ -126,7 +126,7 @@ export class OrderExecutor {
     return { spec, plan, ...out };
   }
 
-  /** One Hyperliquid `modify`: the order keeps its oid, size, side, reduce-only flag, time in force and cloid; only the price moves. */
+  /** One Hyperliquid `modify`: the order keeps its size, side, reduce-only flag, time in force and cloid and only the price moves, but the exchange gives it a NEW oid (seen on testnet 2026-11-11): callers must re-read the open orders. */
   async modify(owner: Hex, check: Extract<ModifyCheck, { ok: true }>) {
     const { spec, asset, order: o } = check;
     const hl = this.legs.tradingClient(owner, spec.leg);
