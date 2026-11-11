@@ -1,6 +1,6 @@
 import { HttpTransport } from '@nktkas/hyperliquid';
 import type { IRequestTransport } from '@nktkas/hyperliquid';
-import { createL1ActionHash } from '@nktkas/hyperliquid/signing';
+import { createL1ActionHash, getWalletAddress, signL1Action } from '@nktkas/hyperliquid/signing';
 import {
   ApiRequestError,
   approveAgent as sdkApproveAgent,
@@ -131,6 +131,9 @@ import type {
   HlHistoricalOrdersParams,
   HlHistoricalOrdersResult,
   HlL1RequestOptions,
+  HlFrontendOpenOrder,
+  HlTrailingStopParams,
+  HlTrailingStopResult,
   HlL2BookParams,
   HlL2BookResult,
   HlRecentTradesParams,
@@ -308,6 +311,61 @@ export class HlClient {
       }
       throw error;
     }
+  }
+
+  #lastRawNonce = 0;
+
+  /**
+   * Ported from PerpX (packages/core HlClient.#executeRawL1, commit 4737a56b there). shortcut: the pinned SDK (0.33.x) has no
+   * `trailingStop` helper and does not export its `executeL1Action`, so this mirrors that shell (nonce, sign, post, throw on
+   * `status: "err"`). Replace it with the SDK method once one ships. Field order in `action` is part of the signed hash.
+   */
+  async #executeRawL1(action: Record<string, unknown>, opts?: HlL1RequestOptions): Promise<unknown> {
+    const { wallet, nonceManager } = this.#tierConfig('agent');
+    const address = await getWalletAddress(wallet as Parameters<typeof getWalletAddress>[0]);
+    const nonce = nonceManager ? await nonceManager(address) : (this.#lastRawNonce = Math.max(Date.now(), this.#lastRawNonce + 1));
+    const signature = await signL1Action({
+      wallet: wallet as Parameters<typeof signL1Action>[0]['wallet'],
+      action,
+      nonce,
+      isTestnet: this.network === 'testnet',
+      vaultAddress: opts?.vaultAddress,
+      expiresAfter: opts?.expiresAfter,
+    });
+    const response = await this.#sdkTransport().request(
+      'exchange',
+      {
+        action,
+        signature,
+        nonce,
+        ...(opts?.vaultAddress ? { vaultAddress: opts.vaultAddress } : {}),
+        ...(opts?.expiresAfter ? { expiresAfter: opts.expiresAfter } : {}),
+      },
+      opts?.signal,
+    );
+    const failure = response as { status?: unknown; response?: unknown };
+    if (failure.status === 'err') {
+      throw new ApiRequestError(response, typeof failure.response === 'string' ? failure.response : undefined);
+    }
+    return response;
+  }
+
+  /**
+   * Open a trailing stop (perps only): a `trailingStop` L1 action, not a variant of `order`. Hyperliquid tracks the mark price
+   * itself, so nothing here re-prices anything. Signs via the agent tier, same as {@link order}.
+   * Verified on testnet by PerpX; mainnet support is not verified here.
+   */
+  async trailingStopOpen(params: HlTrailingStopParams, opts?: HlL1RequestOptions): Promise<HlTrailingStopResult> {
+    const action = {
+      type: 'trailingStop',
+      asset: params.asset,
+      isBuy: params.isBuy,
+      sz: params.size,
+      reduceOnly: params.reduceOnly ?? false,
+      retracement: params.retracement,
+      activationPx: params.activationPx ?? null,
+    };
+    return (await this.#relayed(() => this.#executeRawL1(action, opts))) as HlTrailingStopResult;
   }
 
   async order(params: HlOrderParams, opts?: HlL1RequestOptions): Promise<HlOrderResult> {
@@ -814,6 +872,14 @@ export class HlClient {
       opts?.signal
     );
     return result as HlOpenOrdersResult;
+  }
+
+  /**
+   * Open orders with their trigger details (trigger price and condition, order type, TP/SL and position-TP/SL flags), which
+   * `openOrders` leaves out. Raw `frontendOpenOrders` info request: the pinned SDK has no wrapper. Read-only; requires no signer.
+   */
+  async frontendOpenOrders(params: { user: string }, opts?: HlRequestOptions): Promise<HlFrontendOpenOrder[]> {
+    return (await this.#sdkTransport().request('info', { type: 'frontendOpenOrders', user: params.user }, opts?.signal)) as HlFrontendOpenOrder[];
   }
 
   /** Read-only info endpoint; requires no signer. */

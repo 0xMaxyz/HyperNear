@@ -324,6 +324,47 @@ export interface HlTriggerOrderParams {
   c?: HlHex;
 }
 
+/** One row of `frontendOpenOrders`: an open order with its trigger details. */
+export interface HlFrontendOpenOrder {
+  coin: string;
+  /** "B" buy, "A" sell */
+  side: 'B' | 'A';
+  limitPx: string;
+  sz: string;
+  oid: number;
+  timestamp: number;
+  origSz: string;
+  /** e.g. "Limit", "Stop Market", "Take Profit Market", "Stop Limit", "Trailing Stop" */
+  orderType: string;
+  isTrigger: boolean;
+  triggerPx: string;
+  triggerCondition: string;
+  isPositionTpsl: boolean;
+  reduceOnly: boolean;
+  cloid?: string;
+}
+
+export type HlTrailingRetracement = { pct: string } | { px: string };
+
+export interface HlTrailingStopParams {
+  /** Resolved asset index (see {@link HlMarketOrderParams.asset}). */
+  asset: number;
+  /** `false` closes longs (or opens a short): the trigger follows the highest mark. `true` is the mirror. */
+  isBuy: boolean;
+  /** Size in base currency units. */
+  size: string;
+  reduceOnly?: boolean;
+  retracement: HlTrailingRetracement;
+  /** Mark price at which the stop starts trailing; absent or `null` activates it immediately. */
+  activationPx?: string | null;
+}
+
+/** Per Hyperliquid's `trailingStop` response: the resting order's id, found in the open orders. */
+export interface HlTrailingStopResult {
+  status: 'ok';
+  response: { type: 'trailingStop'; data: { oid: number } };
+}
+
 export interface HlTwapOrderParams {
   /** Resolved asset index (see {@link HlMarketOrderParams.asset}). */
   asset: number;
