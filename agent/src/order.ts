@@ -29,7 +29,8 @@ export interface OrderSpec {
   limitPx?: string;
   triggerPx?: string;
   tif?: (typeof TIFS)[number];
-  /** bracket: position take-profit / stop-loss trigger prices */
+  /** bracket: position take-profit / stop-loss trigger prices. market / limit: TP/SL attached to the opening order
+   * (Hyperliquid normalTpsl: reduce-only market triggers for the same size, live once the entry fills) */
   tpPx?: string;
   slPx?: string;
   minutes?: number;
@@ -76,8 +77,8 @@ export type CancelCheck = { ok: true; spec: CancelSpec; asset: number } | { ok: 
 
 const COMMON = ['leg', 'coin', 'side', 'type'];
 const FIELDS: Record<OrderType, string[]> = {
-  market: ['size', 'reduceOnly', 'leverage', 'isCross'],
-  limit: ['size', 'limitPx', 'tif', 'reduceOnly', 'leverage', 'isCross'],
+  market: ['size', 'reduceOnly', 'leverage', 'isCross', 'tpPx', 'slPx'],
+  limit: ['size', 'limitPx', 'tif', 'reduceOnly', 'leverage', 'isCross', 'tpPx', 'slPx'],
   stopMarket: ['size', 'triggerPx', 'reduceOnly', 'leverage', 'isCross'],
   takeMarket: ['size', 'triggerPx', 'reduceOnly', 'leverage', 'isCross'],
   stopLimit: ['size', 'triggerPx', 'limitPx', 'reduceOnly', 'leverage', 'isCross'],
@@ -178,6 +179,17 @@ export function validateOrderSpec(input: unknown, ctx: OrderContext): OrderCheck
     if (tp !== undefined && (isBuy ? tp >= mid : tp <= mid)) errors.push(`take-profit must be ${isBuy ? 'below' : 'above'} the market (${mid}) to close a ${szi > 0 ? 'long' : 'short'}`);
     if (sl !== undefined && (isBuy ? sl <= mid : sl >= mid)) errors.push(`stop-loss must be ${isBuy ? 'above' : 'below'} the market (${mid}) to close a ${szi > 0 ? 'long' : 'short'}`);
     if (tp !== undefined && sl !== undefined && (isBuy ? tp >= sl : tp <= sl)) errors.push('take-profit and stop-loss are on the wrong sides of each other');
+  }
+
+  // TP/SL attached to an opening market or limit order: profit beyond the entry, loss before it
+  if ((type === 'market' || type === 'limit') && (spec.tpPx !== undefined || spec.slPx !== undefined)) {
+    if (reduce) errors.push('TP/SL attach to an order that opens or grows a position; protect an existing one with a bracket');
+    const tp = spec.tpPx === undefined ? undefined : price('tpPx');
+    const sl = spec.slPx === undefined ? undefined : price('slPx');
+    const entry = type === 'limit' && limitPx !== undefined ? limitPx : mid;
+    const dir = isBuy ? 'long' : 'short';
+    if (tp !== undefined && (isBuy ? tp <= entry : tp >= entry)) errors.push(`take-profit of a ${dir} must be ${isBuy ? 'above' : 'below'} the entry (${entry})`);
+    if (sl !== undefined && (isBuy ? sl >= entry : sl <= entry)) errors.push(`stop-loss of a ${dir} must be ${isBuy ? 'below' : 'above'} the entry (${entry})`);
   }
 
   if (type === 'twap') {

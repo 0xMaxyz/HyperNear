@@ -18,6 +18,8 @@ export interface OrderForm {
   tif: 'Gtc' | 'Ioc' | 'Alo';
   tpPx: string;
   slPx: string;
+  /** market / limit: attach tpPx / slPx to the opening order */
+  attach: boolean;
   minutes: string;
   trailBy: 'pct' | 'px';
   trailValue: string;
@@ -25,7 +27,7 @@ export interface OrderForm {
 }
 
 export const emptyForm = (leg = 0, coin = 'BTC'): OrderForm => ({
-  leg, coin, side: 'buy', type: 'market', size: '', reduceOnly: false, leverage: '3', isCross: true, keepLeverage: false, limitPx: '', triggerPx: '', tif: 'Gtc', tpPx: '', slPx: '', minutes: '30', trailBy: 'pct', trailValue: '5', activationPx: '',
+  leg, coin, side: 'buy', type: 'market', size: '', reduceOnly: false, leverage: '3', isCross: true, keepLeverage: false, limitPx: '', triggerPx: '', tif: 'Gtc', tpPx: '', slPx: '', attach: false, minutes: '30', trailBy: 'pct', trailValue: '5', activationPx: '',
 });
 
 export const TYPE_LABEL: Record<OrderType, string> = {
@@ -75,6 +77,15 @@ export function buildSpec(f: OrderForm, szDecimals: number): { spec: OrderSpec }
       spec.limitPx = need('Limit price', f.limitPx);
       spec.tif = f.tif;
       break;
+    default:
+  }
+  // TP/SL attached to an opening market or limit order
+  if ((f.type === 'market' || f.type === 'limit') && f.attach && !closing) {
+    if (!f.tpPx && !f.slPx) return { error: 'Set a take-profit, a stop-loss, or turn TP/SL off' };
+    if (f.tpPx && !err) spec.tpPx = need('Take-profit price', f.tpPx);
+    if (f.slPx && !err) spec.slPx = need('Stop-loss price', f.slPx);
+  }
+  switch (f.type) {
     case 'stopMarket':
     case 'takeMarket':
       spec.triggerPx = need('Trigger price', f.triggerPx);
@@ -106,6 +117,8 @@ export function buildSpec(f: OrderForm, szDecimals: number): { spec: OrderSpec }
   return err ? { error: err } : { spec };
 }
 
+const tpsl = (s: OrderSpec) => (s.tpPx || s.slPx ? `, then ${[s.tpPx && `take profit at ${s.tpPx}`, s.slPx && `stop at ${s.slPx}`].filter(Boolean).join(' or ')}` : '');
+
 /** One sentence saying what signing will do, for the line above the button. */
 export function describeSpec(s: OrderSpec, mid: number): string {
   const what = `${s.side === 'buy' ? 'Buy' : 'Sell'} ${s.size ?? ''} ${s.coin}`.replace('  ', ' ');
@@ -113,8 +126,8 @@ export function describeSpec(s: OrderSpec, mid: number): string {
   const notional = s.size ? ` (about $${(Number(s.size) * Number(s.limitPx ?? s.triggerPx ?? mid)).toFixed(2)})` : '';
   const on = `on leg ${s.leg}${lev}`;
   switch (s.type) {
-    case 'market': return `${what} at market${s.reduceOnly ? ', reduce only' : ''} ${on}${notional}.`;
-    case 'limit': return `${what} at ${s.limitPx} (${s.tif})${s.reduceOnly ? ', reduce only' : ''} ${on}${notional}.`;
+    case 'market': return `${what} at market${s.reduceOnly ? ', reduce only' : ''} ${on}${notional}${tpsl(s)}.`;
+    case 'limit': return `${what} at ${s.limitPx} (${s.tif})${s.reduceOnly ? ', reduce only' : ''} ${on}${notional}${tpsl(s)}.`;
     case 'stopMarket': return `${what} at market if the price reaches ${s.triggerPx} ${on}${notional}.`;
     case 'takeMarket': return `${what} at market once the price reaches ${s.triggerPx} ${on}${notional}.`;
     case 'stopLimit': case 'takeLimit': return `${what} at ${s.limitPx} once the price reaches ${s.triggerPx} ${on}${notional}.`;

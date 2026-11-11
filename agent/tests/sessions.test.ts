@@ -135,3 +135,21 @@ describe('--dry-run --serve: 1-click sessions', () => {
     expect((await (await fetch(`${base}/sessions/${OWNER}`)).json()).sessions).toEqual([]);
   });
 });
+
+describe('--dry-run --serve: TP/SL attached to an opening order', () => {
+  it('a market buy with TP and SL fills and leaves two reduce-only triggers resting on the other side', async () => {
+    const base = await serve();
+    const mids = (await (await fetch(`${base}/owner/${OWNER}`)).json()).snapshot.market.mids;
+    const mid = Number(mids.BTC);
+    const tp = String(Math.round(mid * 1.05));
+    const sl = String(Math.round(mid * 0.95));
+    const spec = { leg: 2, coin: 'BTC', side: 'buy', type: 'market', size: '0.0002', leverage: 3, tpPx: tp, slPx: sl };
+    const r = await post(`${base}/order/place`, await sign(owner, 'placeOrder', spec));
+    expect(r.status).toBe(200);
+    expect((await r.json()).statuses).toHaveLength(3);
+    const listed = (await (await fetch(`${base}/orders/${OWNER}`)).json()).orders.filter((x: any) => x.leg === 2);
+    expect(listed.map((x: any) => [x.side, x.triggerPx])).toEqual(expect.arrayContaining([['sell', tp], ['sell', sl]]));
+    const wrong = await post(`${base}/order/place`, await sign(owner, 'placeOrder', { ...spec, tpPx: sl }));
+    expect(wrong.status).toBe(422);
+  });
+});

@@ -166,3 +166,22 @@ describe('statusesOf', () => {
     expect(() => statusesOf(res([{ error: 'Order has invalid size.' }]))).toThrow(OrderRefused);
   });
 });
+
+describe('TP/SL attached to an opening order', () => {
+  it('accepts profit beyond and loss before the entry, for a long and a short, market or limit', () => {
+    expect(errs(o({ tpPx: '105000', slPx: '95000' }))).toBe('');
+    expect(errs(o({ side: 'sell', tpPx: '95000', slPx: '105000' }))).toBe('');
+    expect(errs(o({ type: 'limit', limitPx: '99000', tpPx: '101000' }))).toBe('');
+    expect(errs(o({ slPx: '95000' }))).toBe('');
+  });
+  it('refuses the wrong side of the entry, unaccepted prices, and TP/SL on a reduce-only order', () => {
+    expect(errs(o({ tpPx: '95000' }))).toMatch(/take-profit of a long must be above the entry/);
+    expect(errs(o({ slPx: '105000' }))).toMatch(/stop-loss of a long must be below the entry/);
+    expect(errs(o({ side: 'sell', tpPx: '105000' }))).toMatch(/take-profit of a short must be below/);
+    // the limit price is the entry, not the mid
+    expect(errs(o({ type: 'limit', limitPx: '99000', slPx: '99500' }))).toMatch(/stop-loss of a long must be below the entry \(99000\)/);
+    expect(errs(o({ tpPx: '105000.5' }))).toMatch(/not a valid BTC price/);
+    expect(errs(o({ side: 'sell', reduceOnly: true, leverage: undefined, size: '0.0004', tpPx: '95000' }), long())).toMatch(/protect an existing one with a bracket/);
+    expect(errs(o({ type: 'stopMarket', triggerPx: '105000', tpPx: '110000' }))).toMatch(/tpPx is not a field of a stopMarket order/);
+  });
+});

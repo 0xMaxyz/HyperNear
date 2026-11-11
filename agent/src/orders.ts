@@ -60,6 +60,16 @@ export class OrderExecutor {
     const cross = (ref: number) => roundPx(ref * (isBuy ? 1 + this.policy.slippage : 1 - this.policy.slippage), szDecimals);
     const run = async () => {
       if (plan.leverage) await hl.updateLeverage({ asset, isCross: plan.leverage.isCross, leverage: plan.leverage.value });
+      // an opening market / limit with TP/SL: one normalTpsl group, entry first, then the reduce-only triggers for the same size
+      if ((spec.type === 'market' || spec.type === 'limit') && (spec.tpPx || spec.slPx)) {
+        const tif = spec.type === 'market' ? 'Ioc' : (spec.tif ?? 'Gtc');
+        const entry: HlOrderInput = { a: asset, b: isBuy, p: spec.type === 'market' ? cross(mid) : spec.limitPx!, s: spec.size!, r: reduceOnly, t: { limit: { tif } }, c };
+        // the children close the position: they cross on the other side
+        const away = (px: string) => roundPx(Number(px) * (isBuy ? 1 - this.policy.slippage : 1 + this.policy.slippage), szDecimals);
+        const child = (px: string, tpsl: 'tp' | 'sl'): HlOrderInput => ({ a: asset, b: !isBuy, p: away(px), s: spec.size!, r: true, t: { trigger: { isMarket: true, triggerPx: px, tpsl } }, c: makeCloid('protect', newGroup()) });
+        const orders = [entry, ...(spec.tpPx ? [child(spec.tpPx, 'tp')] : []), ...(spec.slPx ? [child(spec.slPx, 'sl')] : [])];
+        return { statuses: statusesOf(await hl.order({ orders, grouping: 'normalTpsl' })) };
+      }
       switch (spec.type) {
         case 'market':
           return { statuses: statusesOf(await hl.limitOrderOpen({ asset, isBuy, price: cross(mid), size: spec.size!, tif: 'Ioc', reduceOnly, c })) };

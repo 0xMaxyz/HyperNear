@@ -131,9 +131,15 @@ export function createDryBook(snap: OwnerSnapshot) {
       const isBuy = spec.side === 'buy';
       const size = Number(spec.size ?? 0);
       const crosses = spec.type === 'limit' && (spec.tif === 'Ioc' || (isBuy ? Number(spec.limitPx) >= m : Number(spec.limitPx) <= m)) && spec.tif !== 'Alo';
+      // TP/SL attached to an opening market / limit: reduce-only triggers on the other side, resting beside the entry
+      const attached = () => {
+        if (spec.type !== 'market' && spec.type !== 'limit') return [];
+        const close: OrderSpec = { leg: spec.leg, coin: spec.coin, side: isBuy ? 'sell' : 'buy', type: 'bracket' };
+        return [spec.tpPx && rest(spec.leg, { ...close, tpPx: spec.tpPx }), spec.slPx && rest(spec.leg, { ...close, slPx: spec.slPx })].filter(Boolean);
+      };
       if (spec.type === 'market' || crosses) {
         fill(spec.leg, spec.coin, isBuy, size, spec.reduceOnly ? undefined : leverage, plan.kind === 'reduce' ? 'reduce' : 'open');
-        return { simulated: true, spec, statuses: [{ oid: nextOid++, filled: { sz: String(size), px: roundPx(m, asset(spec.coin)?.szDecimals ?? 5) } }] };
+        return { simulated: true, spec, statuses: [{ oid: nextOid++, filled: { sz: String(size), px: roundPx(m, asset(spec.coin)?.szDecimals ?? 5) } }, ...attached()] };
       }
       if (spec.type === 'twap') {
         const twapId = nextOid++;
@@ -145,7 +151,7 @@ export function createDryBook(snap: OwnerSnapshot) {
         const statuses = [spec.tpPx && rest(spec.leg, { ...spec, slPx: undefined }), spec.slPx && rest(spec.leg, { ...spec, tpPx: undefined })].filter(Boolean);
         return { simulated: true, spec, statuses };
       }
-      return { simulated: true, spec, statuses: [rest(spec.leg, spec)] };
+      return { simulated: true, spec, statuses: [rest(spec.leg, spec), ...attached()] };
     },
     cancel(spec: CancelSpec) {
       const cancelled: number[] = [];
