@@ -67,7 +67,7 @@ const SECTIONS: Section[] = [
         </p>
         <HedgeIllustration />
         <p>
-          What it costs: trading fees on both sides, and funding (the periodic payment between longs and shorts) on any size that is not matched. The break-even price on the Hedge tab shows where the pair nets to zero after those costs.
+          What it costs: trading fees on both sides, and funding (the periodic payment between longs and shorts) on any size that is not matched. Portfolio shows what the pair would net if closed now, after those costs.
         </p>
         <p>
           Why two accounts instead of one? Each Hyperliquid account has its own margin. A sharp move can push one leg toward liquidation even while the pair is balanced, because the other leg's profit sits in a different account. That is what the

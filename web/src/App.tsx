@@ -4,7 +4,7 @@ import { commandTypedData, newCommand, ownerIntentTypedData, specHashOfJson, typ
 import { AGENT_ACCOUNT, AGENT_URL, CHAIN_TAG, CONTRACT_ID, DEMO_OWNER, TEE_AGENT_URL, getOwner, pendingDecision, pointAgentAt, post, streamEvents, type AgentEvent, type DecisionMode, type OwnerView } from './api';
 import { LegPanel } from './legpanel';
 import { Activity, DecisionPanel, FreezeSteps, nearScan, short } from './panels';
-import { HedgeSummary, OverviewTab } from './overview';
+import { OverviewTab } from './overview';
 import { TradeTab } from './trade';
 import type { HedgeSpec } from './trading';
 import { LegCards } from './legcards';
@@ -31,7 +31,9 @@ export interface Auth {
   account?: AuthAccount;
 }
 
-const TABS = ['home', 'overview', 'trade', 'hedge', 'strategies', 'legs', 'fund', 'activity', 'learn'];
+/** the five sections in the nav, then routes reached from the top bar (setup, activity, learn), then old links that redirect */
+const TABS = ['trade', 'portfolio', 'strategies', 'fund', 'protect', 'setup', 'activity', 'learn', 'home', 'overview', 'hedge', 'legs'];
+const MOVED: Record<string, string> = { home: 'setup', overview: 'portfolio', legs: 'portfolio/legs', hedge: 'protect' };
 
 type Notice = { kind: 'ok' | 'err'; text: string };
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -55,6 +57,11 @@ export function App({ auth }: { auth: Auth }) {
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [menu, setMenu] = useState(false);
   const [route, go] = useRoute(TABS);
+  // old links (#/home, #/overview, #/legs, #/hedge) land on the section that now holds them
+  useEffect(() => {
+    const to = MOVED[route.tab];
+    if (to) go(`${to}${route.params.toString() ? `?${route.params}` : ''}`);
+  }, [route.tab]); // eslint-disable-line react-hooks/exhaustive-deps
   const [selLeg, setSelLeg] = useState<number>();
 
   const teeMode = inTeeMode(tee);
@@ -296,23 +303,68 @@ export function App({ auth }: { auth: Auth }) {
   const locked = !canSign || busy !== null;
 
   const tabDefs: TabDef[] = [
-    { id: 'home', label: 'Home', dot: pending.length > 0 ? 'An agent key is waiting for your approval' : undefined },
-    { id: 'overview', label: 'Overview' },
     { id: 'trade', label: 'Trade' },
-    { id: 'hedge', label: 'Hedge', dot: decision ? 'A decision is waiting for you' : undefined },
+    { id: 'portfolio', label: 'Portfolio' },
     { id: 'strategies', label: 'Strategies' },
-    { id: 'legs', label: 'Legs' },
     { id: 'fund', label: 'Fund' },
-    { id: 'activity', label: 'Activity' },
-    { id: 'learn', label: 'Learn' },
+    { id: 'protect', label: 'Protect', dot: decision ? 'A decision is waiting for you' : policy?.frozen ? 'The account is frozen' : undefined },
   ];
-  // approvals must not hide behind a tab: say so on every other tab
+  // setup: the five steps, done or not (the Setup page and the banner read the same list)
+  const setupDone = [
+    registered.has(0) && registered.has(1),
+    topLegs.length > 0 && needPrepare.length === 0,
+    legs.length > 0 && unfunded.length === 0,
+    legs.length > 0 && legs.every((l) => l.agent?.approvedAt),
+    Boolean(policy?.agent),
+  ];
+  const setupCount = setupDone.filter(Boolean).length;
+  // approvals must not hide behind a section: say so on every other page
   const attention =
-    decision && route.tab !== 'hedge'
-      ? { text: 'A decision is waiting for you.', link: 'Review it', href: '#/hedge' }
-      : pending.length > 0 && route.tab !== 'home'
-        ? { text: 'An agent key is waiting for your approval.', link: 'Approve it', href: '#/home' }
-        : undefined;
+    decision && route.tab !== 'protect'
+      ? { text: 'A decision is waiting for you.', link: 'Review it', href: '#/protect' }
+      : pending.length > 0 && route.tab !== 'setup'
+        ? { text: 'An agent key is waiting for your approval.', link: 'Approve it', href: '#/setup' }
+        : view && !dry && canSign && setupCount < 5 && route.tab !== 'setup'
+          ? { text: `Setup: ${setupCount} of 5 steps done.`, link: 'Finish setup', href: '#/setup' }
+          : undefined;
+  // the bell: agent events since this page last showed the activity log
+  const [seen, setSeen] = useState(0);
+  useEffect(() => {
+    if (route.tab === 'activity' && mine[0]) setSeen(mine[0].id);
+  }, [route.tab, mine[0]?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const unread = mine.filter((e) => e.id > seen).length;
+  const guardHot = (view?.guard ?? []).filter((g) => g.trigger).length;
+  const watched = (view?.guard ?? []).length;
+
+  /** step 5 of setup, and the agent card on Protect: who may rebalance, with what daily cap and cooldown */
+  const policyForm = () => (
+    <>
+      <div className="fields">
+        {teeMode ? (
+          <p className="muted small">TEE mode: the contract accepts only the TEE agent named in Hosting; your daily cap and cooldown still apply.</p>
+        ) : (
+          <label>
+            Agent account
+            <input value={agentValue} onChange={(e) => setAgentId(e.target.value)} spellCheck={false} />
+          </label>
+        )}
+        <label>
+          Daily cap, USDC
+          <input value={cap} onChange={(e) => setCap(e.target.value)} inputMode="decimal" aria-invalid={!DECIMAL.test(cap)} />
+        </label>
+        <label>
+          Cooldown, seconds
+          <input value={cooldown} onChange={(e) => setCooldown(e.target.value)} inputMode="numeric" aria-invalid={!/^\d+$/.test(cooldown)} />
+        </label>
+      </div>
+      <button disabled={locked || !policyOk || legs.length === 0} title={why} onClick={enableAgent}>{busy === 'policy' ? 'Waiting for signature…' : policy?.agent ? 'Update policy' : 'Enable agent'}</button>
+      {policy && (
+        <p className="muted small">
+          Current: {policy.agent ?? 'no agent'}, cap ${(policy.daily_cap / 1e6).toLocaleString('en-US')} a day, ${(policy.spent_today / 1e6).toLocaleString('en-US')} used today, cooldown {policy.cooldown_sec} s.
+        </p>
+      )}
+    </>
+  );
 
   return (
     <>
@@ -323,11 +375,25 @@ export function App({ auth }: { auth: Auth }) {
             <path d="M17 18l6 7" />
           </svg>
           <h1>HyperNear</h1>
-          <span className="muted tagline">Smart accounts for Hyperliquid, keys held by NEAR</span>
         </div>
+        {owner && <Tabs tabs={tabDefs} current={route.tab} onGo={go} />}
         <div className="who">
-          {view?.config && <span className="muted small" title={`${view.config.chainTag}, contract ${view.config.contractId}`}>Hyperliquid {view.config.hlNetwork}</span>}
+          {view?.config && <span className={`net ${view.config.hlNetwork}`} title={`${view.config.chainTag}, contract ${view.config.contractId}`}>{view.config.hlNetwork === 'mainnet' ? 'Mainnet' : 'Testnet'}</span>}
           {dry && <span className="badge" title={`Served by the agent with ${AGENT_URL}; no keys, recorded testnet data`}>dry-run data</span>}
+          {owner && view && (
+            <a className={`pill ${guardHot ? 'hot' : ''}`} href="#/protect" title="The guard watches every open position's margin and liquidation distance">
+              <span className="dot-s" aria-hidden="true" />
+              {guardHot ? `Guard: ${guardHot} at risk` : watched ? `Guard watching ${watched}` : 'Guard idle'}
+            </a>
+          )}
+          {owner && view && <span className="pill agent" title={teeMode ? 'Your own TEE agent runs the policy and holds the trading keys' : 'Our server agent runs the policy and holds the trading keys'}>{teeMode ? 'TEE agent' : 'Server agent'}</span>}
+          {owner && (
+            <a className="icon-btn" href="#/activity" aria-label={unread ? `Activity, ${unread} new` : 'Activity'}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>
+              {unread > 0 && <span className="count">{unread > 99 ? '99+' : unread}</span>}
+            </a>
+          )}
+          <a className="icon-btn" href="#/learn" aria-label="Help and how it works">?</a>
           {owner && (
             <button className="addr" aria-haspopup="dialog" title={`Account ${owner}`} onClick={() => setMenu(true)}>
               {short(owner)}
@@ -335,6 +401,12 @@ export function App({ auth }: { auth: Auth }) {
           )}
           {!auth.authenticated && demo && (
             <button className="primary" onClick={auth.login} disabled={auth.loginOff || !auth.ready}>Log in</button>
+          )}
+          {owner && view && (
+            <button className={policy?.frozen ? 'freeze-btn on' : 'freeze-btn'} disabled={locked || legs.length === 0} title={why ?? (policy?.frozen ? 'Unfreeze: the contract signs again and new agent keys must be approved' : 'Freeze: stop everything the contract signs and revoke every trading key. Withdrawals to you still work.')} onClick={toggleFreeze}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
+              {busy === 'freeze' ? 'Signing…' : policy?.frozen ? 'Frozen · Unfreeze' : 'Freeze all'}
+            </button>
           )}
         </div>
       </header>
@@ -377,16 +449,29 @@ export function App({ auth }: { auth: Auth }) {
             {notice && <p className={`notice ${notice.kind}`} role={notice.kind === 'err' ? 'alert' : 'status'}>{notice.text}</p>}
           </div>
 
-          <Tabs tabs={tabDefs} current={route.tab} onGo={go} />
           {attention && (
             <p className="attention" role="status">
               {attention.text} <a href={attention.href}>{attention.link}</a>
             </p>
           )}
 
-          {route.tab === 'overview' && (
-            <Panel id="overview">
+          {route.tab === 'portfolio' && (
+            <Panel id="portfolio">
+              <nav className="subnav" aria-label="Portfolio">
+                <a href="#/portfolio" aria-current={route.rest[0] !== 'legs' ? 'page' : undefined}>Positions and PnL</a>
+                <a href="#/portfolio/legs" aria-current={route.rest[0] === 'legs' ? 'page' : undefined}>Legs</a>
+              </nav>
+              {route.rest[0] === 'legs' ? (
+                <>
+                  <section className="card wide" aria-labelledby="legs-h">
+                    <h2 id="legs-h">Legs</h2>
+                    <LegCards view={view} owner={owner} loading={loading} error={error} selected={selLeg} onSelect={setSelLeg} onGo={go} onAddLeg={addLeg} busy={busy} />
+                  </section>
+                  <LegPanel view={view} demo={demo} leg={selLeg} onLeg={setSelLeg} />
+                </>
+              ) : (
               <OverviewTab view={view} owner={owner} canSign={canSign} locked={locked} why={why} sign={signCommand} run={run} done={done} onCloseHedge={(c) => hedge(false, c)} onGo={go} />
+              )}
             </Panel>
           )}
 
@@ -405,6 +490,7 @@ export function App({ auth }: { auth: Auth }) {
                 done={done}
                 onCloseHedge={(c) => hedge(false, c)}
                 onGo={go}
+                mode={route.params.get('mode') === 'hedge' ? 'hedge' : undefined}
                 initial={{
                   ...(route.params.get('leg') !== null ? { leg: Number(route.params.get('leg')) } : {}),
                   ...(route.params.get('coin') ? { coin: route.params.get('coin')! } : {}),
@@ -413,20 +499,10 @@ export function App({ auth }: { auth: Auth }) {
             </Panel>
           )}
 
-          {route.tab === 'legs' && (
-            <Panel id="legs">
-              <section className="card wide" aria-labelledby="legs-h">
-                <h2 id="legs-h">Legs</h2>
-                <LegCards view={view} owner={owner} loading={loading} error={error} selected={selLeg} onSelect={setSelLeg} onGo={go} onAddLeg={addLeg} busy={busy} />
-              </section>
-              <LegPanel view={view} demo={demo} leg={selLeg} onLeg={setSelLeg} />
-            </Panel>
-          )}
-
-          {route.tab === 'home' && (
-          <Panel id="home">
+          {route.tab === 'setup' && (
+          <Panel id="setup">
             <section className="card" aria-labelledby="setup-h">
-              <h2 id="setup-h">Setup</h2>
+              <h2 id="setup-h">Setup · {setupCount} of 5 done</h2>
               {!canSign && <p className="state">Read-only: log in to sign setup steps.</p>}
               <ol className="steps">
                 <li>
@@ -469,95 +545,18 @@ export function App({ auth }: { auth: Auth }) {
                     </div>
                     <span className={policy?.agent ? 'ok' : 'todo'}>{policy?.agent ? 'done' : 'to do'}</span>
                   </div>
-                  <div className="fields">
-                    {teeMode ? (
-                      <p className="muted small">TEE mode: the contract accepts only the TEE agent named above; your daily cap and cooldown still apply.</p>
-                    ) : (
-                      <label>
-                        Agent account
-                        <input value={agentValue} onChange={(e) => setAgentId(e.target.value)} spellCheck={false} />
-                      </label>
-                    )}
-                    <label>
-                      Daily cap, USDC
-                      <input value={cap} onChange={(e) => setCap(e.target.value)} inputMode="decimal" aria-invalid={!DECIMAL.test(cap)} />
-                    </label>
-                    <label>
-                      Cooldown, seconds
-                      <input value={cooldown} onChange={(e) => setCooldown(e.target.value)} inputMode="numeric" aria-invalid={!/^\d+$/.test(cooldown)} />
-                    </label>
-                  </div>
-                  <button disabled={locked || !policyOk || legs.length === 0} title={why} onClick={enableAgent}>{busy === 'policy' ? 'Waiting for signature…' : policy?.agent ? 'Update policy' : 'Enable agent'}</button>
-                  {policy && (
-                    <p className="muted small">
-                      Current: {policy.agent ?? 'no agent'}, cap ${(policy.daily_cap / 1e6).toLocaleString('en-US')} a day, ${(policy.spent_today / 1e6).toLocaleString('en-US')} used today, cooldown {policy.cooldown_sec} s.
-                    </p>
-                  )}
+                  {policyForm()}
                 </li>
               </ol>
             </section>
 
-            <HostingCard
-              state={tee}
-              error={teeErr}
-              teeUrl={TEE_AGENT_URL}
-              legs={legs}
-              feeActivation={view?.config?.teeFeeActivation}
-              chainTag={chainTag}
-              canSign={canSign}
-              busy={busy}
-              why={why}
-              lookup={(a) => lookupTeeAgent(a, { dryRun: Boolean(view?.dryRun), chainTag, contractId })}
-              onSwitch={switchTee}
-              onPay={payTee}
-              onLeave={leaveTee}
-            />
           </Panel>
           )}
 
-          {route.tab === 'hedge' && (
-          <Panel id="hedge">
+          {route.tab === 'protect' && (
+          <Panel id="protect">
           <div className="grid">
             <div className="col">
-              <DecisionPanel d={decision} mode={view?.decision?.mode} canSign={canSign} busy={busy} onAccept={acceptDecision} onDismiss={dismissDecision} onMode={setMode} onAsk={askProposal} />
-              <section className="card" aria-labelledby="hedge-h">
-                <h2 id="hedge-h">Hedge</h2>
-                <p className="muted small">
-                  Leg 1 takes the opposite side of leg 0, sized by the ratio. The agent checks leverage up to {view?.orderPolicy.maxLeverage ?? '…'}x and notional up to ${view?.orderPolicy.maxNotionalUsd ?? '…'} before trading. You sign each command; it expires in 30 s.
-                </p>
-                <div className="fields inline">
-                  <label>
-                    Coin
-                    <select value={coin} onChange={(e) => setCoin(e.target.value)}>
-                      {coins.map((c) => <option key={c}>{c}</option>)}
-                    </select>
-                  </label>
-                  <label>
-                    Ratio of leg 0 size, 0 to 1
-                    <input value={ratio} onChange={(e) => setRatio(e.target.value)} inputMode="decimal" aria-invalid={!ratioOk} />
-                  </label>
-                  <label>
-                    Leg 1 leverage (empty: same as leg 0)
-                    <input value={lev1} onChange={(e) => setLev1(e.target.value)} inputMode="numeric" placeholder="same as leg 0" aria-invalid={!lev1Ok} />
-                  </label>
-                  <label>
-                    Leg 1 margin
-                    <select value={margin1} onChange={(e) => setMargin1(e.target.value as 'same' | 'cross' | 'isolated')}>
-                      <option value="same">Same as leg 0</option>
-                      <option value="cross">Cross</option>
-                      <option value="isolated">Isolated</option>
-                    </select>
-                  </label>
-                </div>
-                <p className="muted small">Leg 0 must already hold the position to hedge: open it from the <a href="#/trade">Trade</a> tab. Each leg can use its own leverage; a hedge across different leverage keeps the same size, so only the margin and the liquidation prices differ.</p>
-                <div className="actions">
-                  <button className="primary" disabled={locked || !ratioOk || !lev1Ok} title={why} onClick={() => hedge(true)}>{busy === 'open' ? 'Waiting for signature…' : 'Open hedge'}</button>
-                  <button disabled={locked} title={why} onClick={() => hedge(false)}>{busy === 'close' ? 'Waiting for signature…' : 'Close hedge'}</button>
-                </div>
-              </section>
-            </div>
-            <div className="col">
-              <HedgeSummary owner={owner} tick={view?.snapshot.at} onGo={go} />
               <section className="card" aria-labelledby="freeze-h">
                 <h2 id="freeze-h">{policy?.frozen ? 'Account is frozen' : 'Emergency stop'}</h2>
                 <div className="freeze">
@@ -568,6 +567,29 @@ export function App({ auth }: { auth: Auth }) {
                 </div>
                 <FreezeSteps events={mine} show={Boolean(policy?.frozen) || (dry && mine.some((e) => e.type === 'agents.revoked' || e.type === 'orders.swept'))} />
               </section>
+              <DecisionPanel d={decision} mode={view?.decision?.mode} canSign={canSign} busy={busy} onAccept={acceptDecision} onDismiss={dismissDecision} onMode={setMode} onAsk={askProposal} />
+            </div>
+            <div className="col">
+              <section className="card" aria-labelledby="agent-h">
+                <h2 id="agent-h">Rebalancing agent</h2>
+                <p className="muted small">The NEAR account that may move USDC between your legs when one nears liquidation, with a daily cap and a cooldown the contract enforces.</p>
+                {policyForm()}
+              </section>
+            <HostingCard
+                state={tee}
+                error={teeErr}
+                teeUrl={TEE_AGENT_URL}
+                legs={legs}
+                feeActivation={view?.config?.teeFeeActivation}
+                chainTag={chainTag}
+                canSign={canSign}
+                busy={busy}
+                why={why}
+                lookup={(a) => lookupTeeAgent(a, { dryRun: Boolean(view?.dryRun), chainTag, contractId })}
+                onSwitch={switchTee}
+                onPay={payTee}
+                onLeave={leaveTee}
+              />
             </div>
           </div>
           </Panel>

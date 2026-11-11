@@ -48,7 +48,7 @@ export function legActivity(l: LegSnap, top: NonNullable<OwnerView['legs']>[numb
   if (perp === 0 && l.spotUsdc === 0) return { state: 'empty', label: 'Unfunded', headline: 'Empty', reason: 'Send USDC to this leg before it can trade.', action: { label: 'Fund this leg', to: `fund?leg=${l.leg}` } };
   if (l.spotUsdc > 0.01) return { state: 'spot', label: 'Move funds', headline: `${usd(l.spotUsdc)} on the spot balance`, reason: 'Funds on spot cannot trade. Move them to the trading balance first.', action: { label: 'Open Fund', to: `fund?leg=${l.leg}` } };
   if (l.leg === 2) return { state: 'reserve', label: 'Reserve', headline: 'Guard reserve', reason: 'Holds spare margin. The guard tops up a hedge leg from here when one nears liquidation.' };
-  if (l.leg <= 1) return { state: 'hedge-idle', label: 'Idle', headline: 'Hedge leg, no position', reason: 'Open the hedge on the Hedge tab to give this leg a position.', action: { label: 'Open Hedge', to: 'hedge' } };
+  if (l.leg <= 1) return { state: 'hedge-idle', label: 'Idle', headline: 'Hedge leg, no position', reason: 'Open the hedge from the Trade ticket (Hedge mode) to give this leg a position.', action: { label: 'Open a hedge', to: 'trade?leg=0&mode=hedge' } };
   return { state: 'idle', label: 'Idle', headline: 'Free for a strategy', reason: 'No strategy and no position. Start one on the Strategies tab.', action: { label: 'Start a strategy', to: `strategies?leg=${l.leg}` } };
 }
 

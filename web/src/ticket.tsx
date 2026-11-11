@@ -30,11 +30,16 @@ export interface TicketProps {
   onPlaced: () => void;
   onCloseHedge: (coin: string) => void;
   onGo: (to: string) => void;
+  /** from a link: #/trade?mode=hedge opens the hedge mode */
+  initialMode?: 'single' | 'hedge';
 }
 
 export function Ticket(p: TicketProps) {
   const { view, f, set, mid } = p;
-  const [mode, setMode] = useState<'single' | 'hedge'>('single');
+  const [mode, setMode] = useState<'single' | 'hedge'>(p.initialMode ?? 'single');
+  useEffect(() => {
+    if (p.initialMode) setMode(p.initialMode);
+  }, [p.initialMode]);
   const legs = view.legs ?? [];
   const ready = legs.filter((l) => l.agent?.approvedAt);
   const coins = view.orderPolicy.allowedCoins;
@@ -115,8 +120,8 @@ export function Ticket(p: TicketProps) {
     return (
       <section className="t-panel t-ticket" aria-labelledby="ticket-h">
         <h2 id="ticket-h">Order ticket</h2>
-        <p className="t-empty">No leg can trade yet: a leg needs its agent key approved on Home, and some USDC on its trading balance.</p>
-        <button onClick={() => p.onGo('home')}>Go to Home</button>
+        <p className="t-empty">No leg can trade yet: a leg needs its agent key approved in Setup, and some USDC on its trading balance.</p>
+        <button onClick={() => p.onGo('setup')}>Go to Setup</button>
       </section>
     );
   }

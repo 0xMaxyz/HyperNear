@@ -36,6 +36,8 @@ export interface TradeProps {
   onGo: (to: string) => void;
   /** from a link: #/trade?leg=1&coin=BTC&side=sell&type=bracket */
   initial?: Partial<Pick<OrderForm, 'leg' | 'coin' | 'side' | 'type'>>;
+  /** from a link: #/trade?mode=hedge */
+  mode?: 'single' | 'hedge';
 }
 
 export function TradeTab(p: TradeProps) {
@@ -117,7 +119,7 @@ export function TradeTab(p: TradeProps) {
         onPrice={(px) => toTicket({ limitPx: roundPx(px, szDecimals), ...(f.type === 'market' ? { type: 'limit' as const } : {}) })}
       />
       <div className="t-side-col" ref={ticketRef}>
-        <Ticket view={view} owner={owner} f={f} set={set} mid={mid} locked={p.locked} why={p.why} sign={p.sign} session={p.session} run={p.run} done={p.done} onPlaced={bump} onCloseHedge={p.onCloseHedge} onGo={p.onGo} />
+        <Ticket view={view} owner={owner} f={f} set={set} mid={mid} locked={p.locked} why={p.why} sign={p.sign} session={p.session} run={p.run} done={p.done} onPlaced={bump} onCloseHedge={p.onCloseHedge} onGo={p.onGo} initialMode={p.mode} />
         <LegAccount leg={f.leg} snap={leg} guardFloor={GUARD_FLOOR} onGo={p.onGo} />
       </div>
       <Blotter

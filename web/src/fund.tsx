@@ -415,7 +415,7 @@ export function FundTab({ view, owner, leg: legParam, canSign, dry, locked, busy
               <p><code className="addr-full">{active.address}</code> <button className="small-btn" onClick={() => copy(active.address)}>{copied === active.address ? 'Copied' : 'Copy'}</button></p>
             </>
           )}
-          <p className="muted small">After funding, <a href={`#/legs`} onClick={(e) => (e.preventDefault(), onGo('legs'))}>the Legs tab</a> shows the leg's new state.</p>
+          <p className="muted small">After funding, <a href="#/portfolio/legs" onClick={(e) => (e.preventDefault(), onGo('portfolio/legs'))}>Portfolio › Legs</a> shows the leg's new state.</p>
         </section>
       )}
     </>

@@ -171,8 +171,8 @@ export function OverviewTab(p: OverviewProps) {
       {pos && pos.length === 0 && (
         <section className="card" aria-labelledby="ov-empty-h">
           <h2 id="ov-empty-h">No open positions</h2>
-          <p className="state">Open one on a single leg from the Trade tab, or let a hedge cover it from the Hedge tab.</p>
-          <div className="actions"><button className="primary" onClick={() => p.onGo('trade')}>Open a trade</button><button onClick={() => p.onGo('hedge')}>Hedge</button></div>
+          <p className="state">Open one on a single leg from Trade, then hedge it on another leg from the ticket's Hedge mode.</p>
+          <div className="actions"><button className="primary" onClick={() => p.onGo('trade')}>Open a trade</button><button onClick={() => p.onGo('trade?mode=hedge')}>Hedge</button></div>
         </section>
       )}
 
@@ -198,7 +198,7 @@ export function OverviewTab(p: OverviewProps) {
             {c.kind === 'hedge' && <button className="primary" disabled={p.locked} title={p.why} onClick={() => p.onCloseHedge(c.coin)}>Close the hedge</button>}
             <button onClick={() => p.onGo(`strategies?protect=${c.legs[0]!.leg}&coin=${c.coin}`)}>Protect…</button>
             <button onClick={() => p.onGo(`trade?leg=${c.legs[0]!.leg}&coin=${c.coin}`)}>Trade this leg</button>
-            {c.kind === 'one-sided' && <button onClick={() => p.onGo(`hedge?coin=${c.coin}`)}>Hedge it</button>}
+            {c.kind === 'one-sided' && <button onClick={() => p.onGo(`trade?leg=0&coin=${c.coin}&mode=hedge`)}>Hedge it</button>}
           </div>
         </section>
       ))}
@@ -280,7 +280,7 @@ export function HedgeSummary({ owner, tick, onGo }: { owner: Hex; tick?: number;
           </dl>
         ))
       )}
-      <div className="actions"><button onClick={() => onGo('overview')}>Full breakdown in Overview</button></div>
+      <div className="actions"><button onClick={() => onGo('portfolio')}>Full breakdown in Portfolio</button></div>
     </section>
   );
 }
