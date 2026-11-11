@@ -1,7 +1,7 @@
 // The Trade terminal's panels: market bar, price chart with each leg's lines, order book and trades, the blotter
 // (positions grouped by hedge, open orders, TWAP, history, activity) and the selected leg's account and margin health.
 // The order ticket itself stays in trade.tsx. Market data comes from Hyperliquid (market.ts); account data from the agent.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { CandlestickSeries, ColorType, HistogramSeries, LineStyle, createChart, type IChartApi, type IPriceLine, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts';
 import type { AgentEvent, LegSnap, OwnerView } from './api';
 import type { Candle, Interval } from './hl';
@@ -20,7 +20,14 @@ const tone = (v: number) => (v > 0 ? 'up' : v < 0 ? 'down' : '');
 
 /* ---------- market bar ---------- */
 
-export function MarketBar({ coin, coins, onCoin, market, fallbackMark, network }: { coin: string; coins: string[]; onCoin: (c: string) => void; market: Market; fallbackMark: number; network?: string }) {
+export type Layout = 'standard' | 'chart' | 'book-left';
+const LAYOUTS: { id: Layout; label: string; title: string }[] = [
+  { id: 'standard', label: 'Standard', title: 'Chart, book and ticket' },
+  { id: 'chart', label: 'Chart focus', title: 'Wider chart, no order book' },
+  { id: 'book-left', label: 'Book left', title: 'Order book on the left of the chart' },
+];
+
+export function MarketBar({ coin, coins, onCoin, market, fallbackMark, network, layout, onLayout, onHelp }: { coin: string; coins: string[]; onCoin: (c: string) => void; market: Market; fallbackMark: number; network?: string; layout?: Layout; onLayout?: (l: Layout) => void; onHelp?: () => void }) {
   const [, tick] = useState(0);
   useEffect(() => {
     const t = setInterval(() => tick((x) => x + 1), 1000);
@@ -46,6 +53,12 @@ export function MarketBar({ coin, coins, onCoin, market, fallbackMark, network }
       <Stat label="Open interest" value={c ? compact(c.openInterest * c.markPx) : '—'} />
       <Stat label="Funding / countdown" value={c ? `${pct(c.funding, 4)} · ${cd}` : `— · ${cd}`} cls={c ? tone(c.funding) : ''} />
       <span className="t-spacer" />
+      {onLayout && (
+        <div role="group" aria-label="Layout" className="t-seg t-layouts">
+          {LAYOUTS.map((l) => <button key={l.id} aria-pressed={layout === l.id} title={l.title} onClick={() => onLayout(l.id)}>{l.label}</button>)}
+        </div>
+      )}
+      {onHelp && <button className="t-keys" onClick={onHelp} aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)">⌨</button>}
       <FeedChip state={market.state} network={network} />
     </section>
   );
@@ -78,12 +91,16 @@ export interface ChartLine {
   /** a CSS custom property name */
   color: string;
   style: LineStyle;
+  /** a resting limit order: its line can be dragged to a new price */
+  drag?: { oid: number; leg: number };
 }
 
 export const CHART_INTERVALS: Interval[] = ['1m', '5m', '15m', '1h', '4h', '1d'];
 
-export function PriceChart({ candles, lines, interval, onInterval, note, error, fixed }: { candles: Candle[]; lines: ChartLine[]; interval: Interval; onInterval: (i: Interval) => void; note: string; error?: string; fixed: boolean }) {
+export function PriceChart({ candles, lines, interval, onInterval, note, error, fixed, onDrag, overlay }: { candles: Candle[]; lines: ChartLine[]; interval: Interval; onInterval: (i: Interval) => void; note: string; error?: string; fixed: boolean; onDrag?: (line: ChartLine, price: number) => void; overlay?: ReactNode }) {
   const box = useRef<HTMLDivElement>(null);
+  const dragTo = useRef(onDrag);
+  dragTo.current = onDrag;
   const chart = useRef<IChartApi>();
   const bars = useRef<ISeriesApi<'Candlestick'>>();
   const vols = useRef<ISeriesApi<'Histogram'>>();
@@ -169,6 +186,57 @@ export function PriceChart({ candles, lines, interval, onInterval, note, error, 
     drawn.current = lines.map((l) => s.createPriceLine({ price: l.price, color: css(l.color), lineStyle: l.style, lineWidth: 1, axisLabelVisible: true, title: l.title }));
   }, [linesKey, theme]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // drag a resting limit order's line: grab within 6 px of it, the chart stops panning, a solid line follows the pointer,
+  // and the drop proposes the new price (the page asks before anything is signed)
+  useEffect(() => {
+    const el = box.current;
+    const s = bars.current;
+    const c = chart.current;
+    if (!el || !s || !c) return;
+    const drags = lines.filter((l) => l.drag);
+    if (drags.length === 0) return;
+    let active: { line: ChartLine; pl: IPriceLine } | null = null;
+    const yOf = (e: PointerEvent) => e.clientY - el.getBoundingClientRect().top;
+    const near = (y: number) => drags.find((l) => {
+      const cy = s.priceToCoordinate(l.price);
+      return cy !== null && Math.abs(cy - y) <= 6;
+    });
+    const down = (e: PointerEvent) => {
+      const l = near(yOf(e));
+      if (!l || !dragTo.current) return;
+      e.preventDefault();
+      e.stopPropagation();
+      c.applyOptions({ handleScroll: false, handleScale: false });
+      active = { line: l, pl: s.createPriceLine({ price: l.price, color: css('--info'), lineStyle: LineStyle.Solid, lineWidth: 2, axisLabelVisible: true, title: `Move: ${l.title}` }) };
+      el.setPointerCapture(e.pointerId);
+    };
+    const move = (e: PointerEvent) => {
+      const y = yOf(e);
+      if (active) {
+        const p = s.coordinateToPrice(y);
+        if (p !== null) active.pl.applyOptions({ price: p });
+      } else el.style.cursor = near(y) ? 'ns-resize' : '';
+    };
+    const up = (e: PointerEvent) => {
+      if (!active) return;
+      const p = s.coordinateToPrice(yOf(e));
+      s.removePriceLine(active.pl);
+      c.applyOptions({ handleScroll: true, handleScale: true });
+      const l = active.line;
+      active = null;
+      if (p !== null && Math.abs(p - l.price) / l.price > 1e-5) dragTo.current?.(l, p);
+    };
+    el.addEventListener('pointerdown', down, { capture: true });
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+    return () => {
+      el.removeEventListener('pointerdown', down, { capture: true });
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+      el.style.cursor = '';
+    };
+  }, [linesKey, theme]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const last = candles[candles.length - 1];
   return (
     <section className="t-panel t-chart" aria-label="Price chart">
@@ -181,9 +249,12 @@ export function PriceChart({ candles, lines, interval, onInterval, note, error, 
         <span className="t-spacer" />
         {last && <span className="t-ohlc t-num">O {pxFmt(last.o)} H {pxFmt(last.h)} L {pxFmt(last.l)} C {pxFmt(last.c)}</span>}
       </div>
-      <div className="t-chart-box" ref={box} role="img" aria-label={last ? `${note}: ${candles.length} candles, last close ${pxFmt(last.c)}` : 'No candles yet'} />
+      <div className="t-chart-wrap">
+        <div className="t-chart-box" ref={box} role="img" aria-label={last ? `${note}: ${candles.length} candles, last close ${pxFmt(last.c)}` : 'No candles yet'} />
+        {overlay}
+      </div>
       {error && <p className="t-note err" role="alert">{error}</p>}
-      <p className="t-note">{note}{lines.length > 0 ? ' · Lines: solid entry, dashed liquidation, dotted resting orders.' : ''}</p>
+      <p className="t-note">{note}{lines.length > 0 ? ' · Lines: solid entry, dashed liquidation, dotted resting orders' : ''}{lines.some((l) => l.drag) ? ' (drag a limit order to move it)' : ''}.</p>
     </section>
   );
 }
@@ -602,7 +673,8 @@ export function chartLines(view: OwnerView | undefined, coin: string, orders?: O
   for (const o of orders ?? []) {
     if (o.coin !== coin) continue;
     const price = o.isTrigger && Number(o.triggerPx) > 0 ? Number(o.triggerPx) : Number(o.limitPx);
-    if (price > 0) out.push({ price, title: `Leg ${o.leg} ${o.orderType} ${o.side}`, color: '--info', style: LineStyle.Dotted });
+    const movable = o.orderType === 'Limit' && !o.isTrigger;
+    if (price > 0) out.push({ price, title: `Leg ${o.leg} ${o.orderType} ${o.side}`, color: '--info', style: LineStyle.Dotted, ...(movable ? { drag: { oid: o.oid, leg: o.leg } } : {}) });
   }
   return out;
 }

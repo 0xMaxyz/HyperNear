@@ -153,3 +153,23 @@ describe('--dry-run --serve: TP/SL attached to an opening order', () => {
     expect(wrong.status).toBe(422);
   });
 });
+
+describe('--dry-run --serve: moving a resting limit', () => {
+  it('a session key moves a limit order to a new price; the oid and size stay, a bad price is refused', async () => {
+    const base = await serve();
+    const key = privateKeyToAccount(generatePrivateKey());
+    expect((await post(`${base}/session/start`, await sign(owner, 'startSession', newSessionSpec(keyOf(key))))).status).toBe(200);
+    const mid = Number((await (await fetch(`${base}/owner/${OWNER}`)).json()).snapshot.market.mids.BTC);
+    const px = String(Math.round(mid * 0.9));
+    const placed = await post(`${base}/order/place`, await sign(key, 'placeOrder', { leg: 2, coin: 'BTC', side: 'buy', type: 'limit', limitPx: px, size: '0.0002', tif: 'Gtc', leverage: 3 }));
+    expect(placed.status).toBe(200);
+    const oid = (await placed.json()).statuses[0].oid;
+    const to = String(Math.round(mid * 0.88));
+    const moved = await post(`${base}/order/modify`, await sign(key, 'modifyOrder', { leg: 2, coin: 'BTC', oid, limitPx: to }));
+    expect(moved.status).toBe(200);
+    expect(await moved.json()).toMatchObject({ modified: oid, from: px });
+    const listed = (await (await fetch(`${base}/orders/${OWNER}`)).json()).orders.find((o: any) => o.oid === oid);
+    expect(listed).toMatchObject({ limitPx: to, size: '0.0002' });
+    expect((await post(`${base}/order/modify`, await sign(key, 'modifyOrder', { leg: 2, coin: 'BTC', oid: 999999, limitPx: to }))).status).toBe(422);
+  });
+});

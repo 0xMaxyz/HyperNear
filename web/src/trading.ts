@@ -48,6 +48,14 @@ export async function sendSpec(sign: Sign, owner: Hex, action: CommandAction, pa
 }
 export const placeOrder = (sign: Sign, owner: Hex, spec: OrderSpec) => sendSpec(sign, owner, 'placeOrder', '/order/place', spec);
 export const cancelOrder = (sign: Sign, owner: Hex, spec: CancelSpec) => sendSpec(sign, owner, 'cancelOrder', '/order/cancel', spec);
+/** Moves one resting limit order to a new price (same oid, size and side). */
+export interface ModifySpec {
+  leg: number;
+  coin: string;
+  oid: number;
+  limitPx: string;
+}
+export const modifyOrder = (sign: Sign, owner: Hex, spec: ModifySpec) => sendSpec(sign, owner, 'modifyOrder', '/order/modify', spec);
 
 export interface LegPosition {
   leg: number;

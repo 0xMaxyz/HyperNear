@@ -50,6 +50,28 @@ export interface CancelSpec {
   all?: boolean;
 }
 
+/** Moves one resting limit order to a new price (Hyperliquid `modify`: same oid, same size, same side, same cloid). */
+export interface ModifySpec {
+  leg: number;
+  coin: string;
+  oid: number;
+  limitPx: string;
+}
+/** A resting order as the exchange lists it (frontendOpenOrders, or the dry-run book). */
+export interface RestingOrder {
+  oid: number;
+  coin: string;
+  side: 'buy' | 'sell';
+  size: string;
+  limitPx: string;
+  orderType: string;
+  isTrigger: boolean;
+  reduceOnly: boolean;
+  tif?: (typeof TIFS)[number] | null;
+  cloid?: string | null;
+}
+export type ModifyCheck = { ok: true; spec: ModifySpec; asset: number; order: RestingOrder } | { ok: false; errors: string[] };
+
 export interface OrderContext {
   snapshot: OwnerSnapshot;
   policy: OrderPolicy;
@@ -251,4 +273,28 @@ export function validateCancelSpec(input: unknown, ctx: OrderContext): CancelChe
   else if (given[0] === 'all' ? input.all !== true : !Number.isSafeInteger(input[given[0]!]) || (input[given[0]!] as number) < 0) errors.push(`${given[0]} must be ${given[0] === 'all' ? 'true' : 'a non-negative integer'}`);
   if (!found || errors.length) return { ok: false, errors };
   return { ok: true, spec: input as unknown as CancelSpec, asset: found.a.asset };
+}
+
+/** Accepts a modify as sent or lists why not: the order must be a plain resting limit order of that leg and coin, the price one
+ * Hyperliquid accepts, and (unless it only reduces) the new notional inside the policy cap, exactly as a new order would be. */
+export function validateModifySpec(input: unknown, ctx: OrderContext, resting: RestingOrder[]): ModifyCheck {
+  if (!isObj(input)) return { ok: false, errors: ['modify spec must be a JSON object'] };
+  const errors: string[] = [];
+  for (const k of Object.keys(input)) if (!['leg', 'coin', 'oid', 'limitPx'].includes(k)) errors.push(`${k} is not a field of a modify`);
+  const found = legAndMarket(ctx, input.leg, input.coin, errors);
+  if (!Number.isSafeInteger(input.oid) || (input.oid as number) < 0) errors.push('oid must be an order id');
+  if (!found || errors.length) return { ok: false, errors };
+  const spec = input as unknown as ModifySpec;
+  const order = resting.find((o) => o.oid === spec.oid);
+  if (!order) return { ok: false, errors: [`order ${spec.oid} is not resting on leg ${spec.leg}`] };
+  if (order.coin !== spec.coin) errors.push(`order ${spec.oid} is on ${order.coin}, not ${spec.coin}`);
+  if (order.isTrigger || order.orderType !== 'Limit') errors.push(`only resting limit orders can be moved; ${spec.oid} is a ${order.orderType}`);
+  const { a } = found;
+  if (!isDec(spec.limitPx)) errors.push('limitPx must be a positive decimal string');
+  else if (Number(roundPx(Number(spec.limitPx), a.szDecimals)) !== Number(spec.limitPx)) errors.push(`limitPx ${spec.limitPx} is not a valid ${spec.coin} price: ${roundPx(Number(spec.limitPx), a.szDecimals)}`);
+  else if (!order.reduceOnly) {
+    const notional = cents(Number(order.size) * Number(spec.limitPx));
+    if (notional > ctx.policy.maxNotionalUsd) errors.push(`order notional $${notional} at the new price is above the policy maximum $${ctx.policy.maxNotionalUsd}`);
+  }
+  return errors.length ? { ok: false, errors } : { ok: true, spec, asset: a.asset, order };
 }

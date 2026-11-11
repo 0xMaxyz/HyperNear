@@ -1,12 +1,12 @@
 // 1-click trading sessions (off-chain, agent service only). The owner signs ONE `startSession` command whose specHash binds a
 // SessionSpec naming a fresh key the browser made; until the spec expires, the owner ends it, or a freeze, the agent also
-// accepts `placeOrder` / `cancelOrder` commands signed by that key. A session key can never start a session, change any
+// accepts `placeOrder` / `cancelOrder` / `modifyOrder` commands signed by that key. A session key can never start a session, change any
 // setting, accept a decision, start a strategy, open a hedge or touch the contract: only the actions listed here, inside the
 // agent's order policy, narrowed further by the spec's own caps.
 import type { Hex } from 'viem';
 
 /** The only actions a session key may sign (plus `endSession` of its own key). */
-export const SESSION_ACTIONS = ['placeOrder', 'cancelOrder'] as const;
+export const SESSION_ACTIONS = ['placeOrder', 'cancelOrder', 'modifyOrder'] as const;
 export type SessionAction = (typeof SESSION_ACTIONS)[number];
 
 /** Session lifetime bounds, seconds. */

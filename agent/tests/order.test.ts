@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { makeCloid, newGroup, parseCloid } from '../src/cloid.ts';
 import { parseHedgeSpec, planOpenHedge } from '../src/hedge.ts';
 import { OrderRefused, statusesOf } from '../src/orders.ts';
-import { validateCancelSpec, validateOrderSpec, type OrderContext, type OrderSpec } from '../src/order.ts';
+import { validateCancelSpec, validateModifySpec, validateOrderSpec, type OrderContext, type OrderSpec, type RestingOrder } from '../src/order.ts';
 import { ch, POLICY, snap } from './agent-helpers.ts';
 
 // mid 100000, BTC szDecimals 5, policy: 5x, $100 per order
@@ -183,5 +183,27 @@ describe('TP/SL attached to an opening order', () => {
     expect(errs(o({ tpPx: '105000.5' }))).toMatch(/not a valid BTC price/);
     expect(errs(o({ side: 'sell', reduceOnly: true, leverage: undefined, size: '0.0004', tpPx: '95000' }), long())).toMatch(/protect an existing one with a bracket/);
     expect(errs(o({ type: 'stopMarket', triggerPx: '105000', tpPx: '110000' }))).toMatch(/tpPx is not a field of a stopMarket order/);
+  });
+});
+
+describe('validateModifySpec', () => {
+  const rest = (o: Partial<RestingOrder> = {}): RestingOrder => ({ oid: 7, coin: 'BTC', side: 'buy', size: '0.0005', limitPx: '99000', orderType: 'Limit', isTrigger: false, reduceOnly: false, ...o });
+  const m = (spec: Record<string, unknown>, resting = [rest()], ctx = flat()) => {
+    const r = validateModifySpec({ leg: 0, coin: 'BTC', oid: 7, limitPx: '98000', ...spec }, ctx, resting);
+    return r.ok ? '' : r.errors.join(' | ');
+  };
+  it('moves a resting limit to a valid price and keeps its order as listed', () => {
+    const r = validateModifySpec({ leg: 0, coin: 'BTC', oid: 7, limitPx: '98000' }, flat(), [rest()]);
+    expect(r).toMatchObject({ ok: true, asset: 3, order: { oid: 7, size: '0.0005' } });
+  });
+  it('refuses unknown or wrong orders, triggers, bad prices, extra fields, and a notional over the cap', () => {
+    expect(m({ oid: 8 })).toMatch(/order 8 is not resting on leg 0/);
+    expect(m({}, [rest({ coin: 'ETH' })])).toMatch(/is on ETH, not BTC/);
+    expect(m({}, [rest({ orderType: 'Stop Market', isTrigger: true })])).toMatch(/only resting limit orders/);
+    expect(m({ limitPx: '98000.5' })).toMatch(/not a valid BTC price/);
+    expect(m({ size: '1' })).toMatch(/size is not a field of a modify/);
+    expect(m({ limitPx: '250000' })).toMatch(/above the policy maximum \$100/);
+    // a reduce-only order may sit above the cap: it can only shrink risk
+    expect(m({ limitPx: '250000' }, [rest({ reduceOnly: true, side: 'sell' })])).toBe('');
   });
 });

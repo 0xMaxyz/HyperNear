@@ -153,6 +153,14 @@ export function createDryBook(snap: OwnerSnapshot) {
       }
       return { simulated: true, spec, statuses: [rest(spec.leg, spec), ...attached()] };
     },
+    /** a moved limit keeps its oid and size; only the price changes */
+    modify(leg: number, oid: number, limitPx: string) {
+      const o = orders.find((x) => x.oid === oid && x.leg === leg);
+      if (!o) throw new Error(`order ${oid} is not resting on leg ${leg}`);
+      const from = o.spec.limitPx;
+      o.spec = { ...o.spec, limitPx };
+      return { simulated: true, modified: oid, from };
+    },
     cancel(spec: CancelSpec) {
       const cancelled: number[] = [];
       if (spec.twapId !== undefined) {

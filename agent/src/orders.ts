@@ -6,7 +6,7 @@ import type { OrderPolicy } from './config.ts';
 import type { EventBus } from './events.ts';
 import type { Legs } from './legs.ts';
 import { roundPx } from './market.ts';
-import type { CancelSpec, OrderPlan, OrderSpec } from './order.ts';
+import type { CancelSpec, ModifyCheck, OrderPlan, OrderSpec } from './order.ts';
 
 export class OrderRefused extends Error {}
 
@@ -124,6 +124,16 @@ export class OrderExecutor {
     const out = await verdict(run);
     this.bus?.emit('order', { owner, op: 'place', leg: spec.leg, spec, ...out });
     return { spec, plan, ...out };
+  }
+
+  /** One Hyperliquid `modify`: the order keeps its oid, size, side, reduce-only flag, time in force and cloid; only the price moves. */
+  async modify(owner: Hex, check: Extract<ModifyCheck, { ok: true }>) {
+    const { spec, asset, order: o } = check;
+    const hl = this.legs.tradingClient(owner, spec.leg);
+    const order: HlOrderInput = { a: asset, b: o.side === 'buy', p: spec.limitPx, s: o.size, r: o.reduceOnly, t: { limit: { tif: o.tif ?? 'Gtc' } }, ...(o.cloid ? { c: o.cloid as Hex } : {}) };
+    await verdict(() => hl.modifyOrder({ oid: spec.oid, order }));
+    this.bus?.emit('order', { owner, op: 'modify', leg: spec.leg, spec, from: o.limitPx });
+    return { spec, modified: spec.oid, from: o.limitPx };
   }
 
   async cancel(owner: Hex, spec: CancelSpec, asset: number) {

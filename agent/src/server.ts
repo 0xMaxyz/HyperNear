@@ -11,6 +11,7 @@
 //   POST /decision/mode           {command, sig}: action setDecisionMode, mode ('off'|'propose'|'auto') in command.coin
 //   POST /session/start   {command, sig, spec}: action startSession (owner only), command.specHash = specHash(SessionSpec); 1-click trading key
 //   POST /session/end     {command, sig}: action endSession, command.coin = the session key; signed by the owner or that key
+//   POST /order/modify    {command, sig, spec}: action modifyOrder, spec {leg, coin, oid, limitPx}: move one resting limit order (owner or session key)
 //   GET  /sessions/:owner live sessions (public data only). /order/place|cancel also take commands signed by a live session key,
 //                         checked against the order policy narrowed by the session's caps. A relayed freeze or TEE switch ends them all.
 //   POST /strategy/start  {command, sig, spec}: action startStrategy, command.specHash = specHash(validated spec)
@@ -37,7 +38,7 @@ import { DEFAULT_GUARD_CONFIG, evaluateGuard, type GuardConfig } from './guard.t
 import { GuardLoop } from './guardLoop.ts';
 import { HedgeRefused, Hedger, parseHedgeSpec, type HedgeSpec } from './hedge.ts';
 import { OrderExecutor, OrderRefused } from './orders.ts';
-import { validateCancelSpec, validateOrderSpec, type CancelSpec, type OrderPlan, type OrderSpec } from './order.ts';
+import { validateCancelSpec, validateModifySpec, validateOrderSpec, type CancelSpec, type ModifySpec, type OrderPlan, type OrderSpec, type RestingOrder } from './order.ts';
 import { parseCloid } from './cloid.ts';
 import { activationStatus } from './activation.ts';
 import { guardInputs, Legs, pendingApprovals, type OwnerSnapshot } from './legs.ts';
@@ -108,6 +109,7 @@ export interface DryRunHooks {
   /** validated order / cancel specs, simulated against the fixture book */
   order?: (owner: Hex, spec: OrderSpec, plan: OrderPlan) => Promise<Record<string, unknown>>;
   cancel?: (owner: Hex, spec: CancelSpec) => Promise<Record<string, unknown>>;
+  modify?: (owner: Hex, spec: ModifySpec) => Promise<Record<string, unknown>>;
   openOrders?: (owner: Hex) => { orders: Record<string, unknown>[]; twaps: Record<string, unknown>[] };
   relay: (body: unknown) => Promise<Record<string, unknown>>;
   /** simulated deposit: adds test USDC to a leg's spot balance */
@@ -352,6 +354,31 @@ export function handler(d: Deps) {
       if (req.method === 'GET' && sessionsPath) {
         const owner = ownerOf(sessionsPath[1]);
         return reply(200, { owner, sessions: sessions.list(owner).map(publicSession) });
+      }
+      if (req.method === 'POST' && url.pathname === '/order/modify') {
+        const body = (await readJson(req)) as { spec?: { leg?: unknown } };
+        const { cmd, session } = await verifySessionCommand(verifier(d), body, 'modifyOrder', sessions);
+        if (specHashOfJson(body.spec) !== cmd.specHash) throw new HttpError(401, 'command.specHash must be the specHash of the spec (the owner signed another spec)');
+        await assertOptedIn(d, cmd.owner);
+        const snapshot = await d.legs.snapshot(cmd.owner);
+        const legNo = body.spec?.leg;
+        const ctx = { snapshot, policy: sessionPolicy(d.config.policy, session), busyLegs: (d.strategies?.list(cmd.owner) ?? []).filter((s) => s.state !== 'stopped').map((s) => s.leg) };
+        // what is resting on that leg now, from the exchange (or the dry-run book)
+        let resting: RestingOrder[] = [];
+        if (d.dryRun) resting = ((d.dryRun.openOrders?.(cmd.owner).orders ?? []) as unknown as (RestingOrder & { leg: number })[]).filter((o) => o.leg === legNo);
+        else {
+          const addr = snapshot.legs.find((l) => l.leg === legNo)?.address;
+          if (addr) resting = (await d.legs.hl.frontendOpenOrders({ user: addr })).map((o) => ({ oid: o.oid, coin: o.coin, side: o.side === 'B' ? 'buy' : 'sell', size: o.sz, limitPx: o.limitPx, orderType: o.orderType, isTrigger: o.isTrigger, reduceOnly: o.reduceOnly, tif: (o as { tif?: RestingOrder['tif'] }).tif ?? null, cloid: o.cloid ?? null }));
+        }
+        const v = validateModifySpec(body.spec, ctx, resting);
+        if (!v.ok) throw new HttpError(422, v.errors.join('; '));
+        d.bus.emit('command', { ...cmd, ...(session && { session: session.key }) });
+        if (d.dryRun) {
+          if (!d.dryRun.modify) throw new HttpError(501, 'dry run has no order book');
+          return reply(200, await d.dryRun.modify(cmd.owner, v.spec));
+        }
+        if (!d.orders) throw new HttpError(503, 'orders off');
+        return reply(200, await d.orders.modify(cmd.owner, v));
       }
       const positionsPath = /^\/(positions|history)\/(0x[0-9a-fA-F]{40})$/.exec(url.pathname);
       if (req.method === 'GET' && positionsPath) {

@@ -303,6 +303,10 @@ export function buildDryRunDeps(fixtureName = 'hedged', opts: { replayStartMs?: 
         bus.emit('order', { owner, op: 'cancel', leg: spec.leg, spec, simulated: true });
         return book.cancel(spec);
       },
+      async modify(owner, spec) {
+        bus.emit('order', { owner, op: 'modify', leg: spec.leg, spec, simulated: true });
+        return { spec, ...book.modify(spec.leg, spec.oid, spec.limitPx) };
+      },
       openOrders: (owner) => book.open(owner),
       async relay(body) {
         const b = parseRelayBody(body); // same validation as the live relayer
