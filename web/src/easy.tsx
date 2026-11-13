@@ -11,6 +11,15 @@ import { pairMessage, sendSpec, type CancelSpec, type HedgePairResult, type Hedg
 const MAX_TEXT = 300;
 // shortcut: a keyword router, upgrade to one /assist/draft endpoint when misroutes appear
 const STRATEGY_WORDS = /\b(grid|dca|ladder|levels?|slices?|every)\b/i;
+// starting points: each fills the box with a sentence the drafter handles (agent/src/trade/intent.ts EXAMPLE_PROMPTS); the user reads and edits it, then drafts
+const TILES = [
+  { title: 'Buy', hint: 'Long BTC at market, $30', text: 'Open a long BTC market order for $30 with 5x leverage' },
+  { title: 'Sell', hint: 'Short ETH at the best ask', text: 'Short ETH at the best ask, $25, 3x isolated' },
+  { title: 'Hedge', hint: 'Cancel out BTC price moves', text: 'Open a long hedge on BTC for $40, 50% hedge, 5x' },
+  { title: 'Protect', hint: 'Stop loss and take profit', text: 'Set a 3% stop loss and 6% take profit on my BTC position' },
+  { title: 'Close', hint: 'Close my BTC position', text: 'Close my BTC position on leg 0' },
+  { title: 'Run a bot', hint: 'Grid or DCA on a coin', text: 'Run a grid on BTC with $40' },
+] as const;
 
 type Ok =
   | { ok: true; kind: 'order'; action: 'placeOrder'; path: string; spec: OrderSpec; specHash: Hex; assumed: string[] }
@@ -41,7 +50,6 @@ function summary(d: Ok, mids: Record<string, string> | undefined): string {
 
 export function EasyTab(p: EasyProps) {
   const [text, setText] = useState('');
-  const [examples, setExamples] = useState<string[]>([]);
   const [available, setAvailable] = useState(true);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<Ok | Refused>();
@@ -50,7 +58,7 @@ export function EasyTab(p: EasyProps) {
 
   useEffect(() => {
     getJson<{ examples: string[]; available: boolean }>('/trade/examples').then(
-      (r) => (setExamples(r.examples), setAvailable(r.available)),
+      (r) => setAvailable(r.available),
       () => undefined,
     );
   }, []);
@@ -88,13 +96,13 @@ export function EasyTab(p: EasyProps) {
 
   return (
     <section className="easy" aria-labelledby="easy-h">
-      <h2 id="easy-h">Easy</h2>
-      <p className="muted">Say what you want: a trade, a hedge, or a strategy that keeps running. You read the draft and sign it; nothing is sent before that. This page cannot withdraw or move money.</p>
+      <h2 id="easy-h">What do you want to do?</h2>
+      <p className="muted">Pick a starting point or say it in your own words: a trade, a hedge, or a strategy that keeps running. You read the draft and sign it; nothing is sent before that. This page cannot withdraw or move money.</p>
 
       {!available && <p className="t-msg err" role="alert">Easy trading is off on this agent (no assistant key is set). The Trade tab still works.</p>}
 
       <label className="t-input stack">
-        <span>What do you want to do?</span>
+        <span>Your request</span>
         <textarea
           ref={area}
           rows={3}
@@ -112,14 +120,14 @@ export function EasyTab(p: EasyProps) {
         <button className="t-submit buy" disabled={!text.trim() || busy || !available} onClick={() => void draft()}>{busy ? 'Reading…' : 'Draft it'}</button>
       </div>
 
-      {examples.length > 0 && (
-        <div className="easy-chips" role="group" aria-label="Example requests">
-          <span className="muted small">Try:</span>
-          {examples.map((x) => (
-            <button key={x} className="t-chip-btn" onClick={() => (setText(x), area.current?.focus())}>{x}</button>
-          ))}
-        </div>
-      )}
+      <div className="easy-tiles" role="group" aria-label="Starting points">
+        {TILES.map((t) => (
+          <button key={t.title} type="button" className="easy-tile" onClick={() => (setText(t.text), area.current?.focus())}>
+            <b>{t.title}</b>
+            <span className="muted small">{t.hint}</span>
+          </button>
+        ))}
+      </div>
 
       {result && !result.ok && (
         <div className="easy-card refused" role="alert">

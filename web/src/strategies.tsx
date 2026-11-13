@@ -119,6 +119,8 @@ export function StrategiesPanel(p: {
   leg?: number;
   /** on the Easy screen: its one text box feeds this panel, so the panel's own "describe it in words" box is not shown */
   embedded?: boolean;
+  /** Easy screen: `running` is the compact list of what runs now (nothing is drawn when nothing runs); `build` is the template and draft column */
+  view?: 'running' | 'build';
   /** text the Easy screen routed here; `n` makes sending the same words twice work */
   prefill?: { text: string; n: number };
 }) {
@@ -287,17 +289,27 @@ export function StrategiesPanel(p: {
 
   const log = p.events.filter((e) => e.type.startsWith('strategy.'));
   const why = p.canSign ? undefined : 'Log in to sign';
+  const showNew = p.view !== 'running';
+  const showRun = p.view !== 'build';
+  const active = list.state === 'ok' ? list.rows.filter((r) => r.state === 'running' || r.state === 'paused').length : 0;
+  if (p.view === 'running' && list.state === 'ok' && list.rows.length === 0) return null;
 
   return (
     <section className="card wide" aria-labelledby="strat-h">
-      <h2 id="strat-h">Strategies</h2>
-      <p className="muted small">
-        Each strategy runs on its own leg, so its losses stay on that leg. Describe one in plain words; a model drafts it, the agent checks every number against your order policy and contract policy, and nothing starts until you sign the exact spec shown here.
-      </p>
+      {showNew ? (
+        <>
+          <h2 id="strat-h">Start a strategy</h2>
+          <p className="muted small">
+            Each strategy runs on its own leg, so its losses stay on that leg. Pick a template or describe one in the box above; the agent checks every number against your order policy and contract policy, and nothing starts until you sign the exact spec shown here.
+          </p>
+        </>
+      ) : (
+        <h2 id="strat-h">Running now{list.state === 'ok' ? ` (${active})` : ''}</h2>
+      )}
 
       {how && lib.state === 'ok' && <HowItWorks id={how} coin={lib.data.coin} mid={lib.data.mid} onClose={() => setHow(undefined)} />}
-      <div className="strat-grid">
-        <div>
+      <div className={`strat-grid${p.view ? ' single' : ''}`}>
+        {showNew && <div>
           <h3>New strategy</h3>
           <h4>Start from a template</h4>
           {lib.state === 'loading' && <p className="state">Reading templates…</p>}
@@ -464,14 +476,14 @@ export function StrategiesPanel(p: {
               </div>
             </div>
           )}
-        </div>
+        </div>}
 
-        <div>
+        {showRun && <div>
           <h3 id="strat-list-h">Your strategies</h3>
           {list.state === 'loading' && <p className="state">Reading strategies…</p>}
           {list.state === 'off' && <p className="state">{list.message}</p>}
           {list.state === 'error' && <p className="state err" role="alert">{list.message}</p>}
-          {list.state === 'ok' && list.rows.length === 0 && <p className="state">None running. Draft one on the left; it appears here once you start it.</p>}
+          {list.state === 'ok' && list.rows.length === 0 && <p className="state">None running. Draft one above; it appears here once you start it.</p>}
           {list.state === 'ok' && list.rows.length > 0 && (
             <div className="scroll">
               <table className="mini">
@@ -499,7 +511,8 @@ export function StrategiesPanel(p: {
             </div>
           )}
 
-          <h3 id="strat-log-h">Strategy log</h3>
+          <details className="t-adv">
+          <summary id="strat-log-h">Strategy log</summary>
           {log.length === 0 ? (
             <p className="state">No strategy events yet. Orders, fills, refusals, pauses and stops appear here as the agent emits them.</p>
           ) : (
@@ -515,7 +528,8 @@ export function StrategiesPanel(p: {
               })}
             </ol>
           )}
-        </div>
+          </details>
+        </div>}
       </div>
     </section>
   );

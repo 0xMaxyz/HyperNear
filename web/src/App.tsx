@@ -525,8 +525,9 @@ export function App({ auth }: { auth: Auth }) {
 
           {route.tab === 'easy' && (
             <Panel id="easy">
+              <StrategiesPanel view="running" legs={legs} owner={owner} canSign={canSign} events={mine} sign={signCommand} tick={view?.snapshot.at} />
               <EasyTab view={view} owner={owner} locked={locked} why={why} sign={signCommand} session={session} run={run} done={done} onGo={go} onStrategy={(text) => setStrategyAsk((a) => ({ text, n: a.n + 1 }))} />
-              <StrategiesPanel embedded prefill={strategyAsk} legs={legs} owner={owner} canSign={canSign} events={mine} sign={signCommand} tick={view?.snapshot.at} leg={route.params.get('leg') === null ? undefined : Number(route.params.get('leg'))} />
+              <StrategiesPanel embedded view="build" prefill={strategyAsk} legs={legs} owner={owner} canSign={canSign} events={mine} sign={signCommand} tick={view?.snapshot.at} leg={route.params.get('leg') === null ? undefined : Number(route.params.get('leg'))} />
             </Panel>
           )}
 
