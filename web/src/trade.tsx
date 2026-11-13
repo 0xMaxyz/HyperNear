@@ -64,6 +64,9 @@ export function TradeTab(p: TradeProps) {
   const [help, setHelp] = useState(false);
   // the TP/SL and limit-close dialogs opened from a position row
   const [protect, setProtect] = useState<ProtectTarget>();
+  // the dock asking the ticket for a pane (the H key, the phone bar); the counter makes asking twice work
+  const [ask, setAsk] = useState<{ mode?: 'single' | 'hedge'; n: number }>({ n: 0 });
+  const askMode = (mode: 'single' | 'hedge') => (setAsk((a) => ({ mode, n: a.n + 1 })), setSheet(true));
   const [limitClose, setLimitClose] = useState<LegPosition>();
   const [layout, setLayoutState] = useState<Layout>(() => {
     try {
@@ -134,8 +137,8 @@ export function TradeTab(p: TradeProps) {
     });
 
   // keyboard: B / S side, M / L order type, F size, Ctrl or Cmd + Enter sends, Esc closes, ? lists them
-  const keys = useRef({ f, mid, szDecimals: decimals(f.coin) });
-  keys.current = { f, mid, szDecimals: decimals(f.coin) };
+  const keys = useRef({ f, mid, szDecimals: decimals(f.coin), askMode: (_m: 'single' | 'hedge') => {} });
+  keys.current = { f, mid, szDecimals: decimals(f.coin), askMode };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
@@ -158,8 +161,9 @@ export function TradeTab(p: TradeProps) {
       if (typing || e.altKey || e.metaKey || e.ctrlKey) return;
       const k = keys.current;
       switch (e.key) {
-        case 'b': case 'B': set({ side: 'buy' }); break;
-        case 's': case 'S': set({ side: 'sell' }); break;
+        case 'h': case 'H': k.askMode('hedge'); break;
+        case 'b': case 'B': set({ side: 'buy' }); k.askMode('single'); break;
+        case 's': case 'S': set({ side: 'sell' }); k.askMode('single'); break;
         case 'm': case 'M': set({ type: 'market' }); break;
         case 'l': case 'L': set({ type: 'limit', limitPx: k.f.limitPx || (k.mid ? roundPx(k.mid, k.szDecimals) : '') }); break;
         case 'f': case 'F': document.querySelector<HTMLInputElement>('.t-ticket .t-input.strong input')?.focus(); break;
@@ -262,7 +266,7 @@ export function TradeTab(p: TradeProps) {
             <b>{f.coin} order</b>
             <button aria-label="Close the order sheet" onClick={() => setSheet(false)}>×</button>
           </div>
-          <Ticket view={view} owner={owner} f={f} set={set} mid={mid} book={market.book?.bids[0] && market.book.asks[0] ? { bid: market.book.bids[0].px, ask: market.book.asks[0].px } : undefined} locked={p.locked} why={p.why} sign={p.sign} session={p.session} run={p.run} done={p.done} onPlaced={() => (bump(), setSheet(false))} onCloseHedge={p.onCloseHedge} onGo={p.onGo} initialMode={p.mode} />
+          <Ticket view={view} owner={owner} f={f} set={set} mid={mid} book={market.book?.bids[0] && market.book.asks[0] ? { bid: market.book.bids[0].px, ask: market.book.asks[0].px } : undefined} locked={p.locked} why={p.why} sign={p.sign} session={p.session} run={p.run} done={p.done} onPlaced={() => (bump(), setSheet(false))} onCloseHedge={p.onCloseHedge} onGo={p.onGo} initialMode={ask.mode ?? p.mode} modeKey={ask.n} />
         </div>
         <LegAccount leg={f.leg} snap={leg} guardFloor={GUARD_FLOOR} onGo={p.onGo} />
       </div>
@@ -309,8 +313,9 @@ export function TradeTab(p: TradeProps) {
       )}
       {sheet && <div className="t-backdrop" onClick={() => setSheet(false)} aria-hidden="true" />}
       <div className="t-phone-bar">
-        <button className="t-submit buy" onClick={() => toTicket({ side: 'buy' })}>Buy / Long</button>
-        <button className="t-submit sell" onClick={() => toTicket({ side: 'sell' })}>Sell / Short</button>
+        <button className="t-submit buy" onClick={() => (askMode('single'), toTicket({ side: 'buy' }))}>Buy</button>
+        <button className="t-submit sell" onClick={() => (askMode('single'), toTicket({ side: 'sell' }))}>Sell</button>
+        <button className="t-submit hedge" onClick={() => askMode('hedge')}>Hedge</button>
       </div>
     </div>
   );
