@@ -15,6 +15,7 @@ import { HostingCard } from './teepanel';
 import { AccountMenu, type AuthAccount } from './account';
 import { FundTab } from './fund';
 import { Learn } from './learn';
+import { EasyTab } from './easy';
 import { Panel, Tabs, useRoute, type TabDef } from './tabs';
 import { useSession } from './session';
 
@@ -32,7 +33,7 @@ export interface Auth {
 }
 
 /** the five sections in the nav, then routes reached from the top bar (setup, activity, learn), then old links that redirect */
-const TABS = ['trade', 'portfolio', 'strategies', 'fund', 'protect', 'setup', 'activity', 'learn', 'home', 'overview', 'hedge', 'legs'];
+const TABS = ['trade', 'easy', 'portfolio', 'strategies', 'fund', 'protect', 'setup', 'activity', 'learn', 'home', 'overview', 'hedge', 'legs'];
 const MOVED: Record<string, string> = { home: 'setup', overview: 'portfolio', legs: 'portfolio/legs', hedge: 'protect' };
 
 type Notice = { kind: 'ok' | 'err'; text: string };
@@ -303,6 +304,7 @@ export function App({ auth }: { auth: Auth }) {
   const locked = !canSign || busy !== null;
 
   const tabDefs: TabDef[] = [
+    { id: 'easy', label: 'Easy' },
     { id: 'trade', label: 'Trade' },
     { id: 'portfolio', label: 'Portfolio' },
     { id: 'strategies', label: 'Strategies' },
@@ -472,6 +474,12 @@ export function App({ auth }: { auth: Auth }) {
               ) : (
               <OverviewTab view={view} owner={owner} canSign={canSign} locked={locked} why={why} sign={signCommand} run={run} done={done} onCloseHedge={(c) => hedge(false, c)} onGo={go} />
               )}
+            </Panel>
+          )}
+
+          {route.tab === 'easy' && (
+            <Panel id="easy">
+              <EasyTab view={view} owner={owner} locked={locked} why={why} sign={signCommand} session={session} run={run} done={done} onGo={go} />
             </Panel>
           )}
 

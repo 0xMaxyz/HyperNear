@@ -69,6 +69,18 @@ export interface HedgePairResult {
   simulated?: boolean;
 }
 
+/** The sentence for a finished pair, or an Error saying what went wrong (nothing opened, one leg closed again, or an unbalanced hedge). */
+export function pairMessage(out: HedgePairResult): string {
+  const px = (x: number | null) => (x === null ? '—' : `$${x.toFixed(2)}`);
+  const [a, b] = out.legs;
+  const lines = `leg 0 ${a.isBuy ? 'bought' : 'sold'} ${a.filled} at ${px(a.avgPx)}, leg 1 ${b.isBuy ? 'bought' : 'sold'} ${b.filled} at ${px(b.avgPx)}`;
+  if (out.status === 'failed') throw new Error(`Nothing was opened. ${out.notes.join(' ')}`);
+  if (out.status === 'unwound' || out.status === 'unbalanced') {
+    throw new Error(`${out.status === 'unwound' ? 'Only one leg filled, so it was closed again.' : 'The hedge is not balanced: look at Positions now.'} ${lines}. ${out.notes.join(' ')}`);
+  }
+  return `Hedge opened: ${lines}${out.spreadBps !== null ? `, entry spread ${out.spreadBps} bps` : ''}${out.status === 'trimmed' && out.notes.length ? '. ' + out.notes.join(' ') : ''}`;
+}
+
 export type Sign = (c: Command) => Promise<Hex>;
 
 /** Signs a command bound to `spec` and posts both; the agent hashes what it receives and refuses anything else. */

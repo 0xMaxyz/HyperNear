@@ -9,7 +9,7 @@ import { newCommand } from './hypernear';
 import { n, usd } from './panels';
 import { buildSpec, CLOSING_TYPES, describeSpec, TYPE_LABEL, type OrderForm } from './orderForm';
 import { SessionControl, type SessionApi } from './session';
-import { floorSize, placeHedge, placeOrder, roundPx, sendSpec, type HedgePairSpec, type HedgeSpec, type OrderType, type Sign } from './trading';
+import { floorSize, pairMessage, placeHedge, placeOrder, roundPx, sendSpec, type HedgePairSpec, type HedgeSpec, type OrderType, type Sign } from './trading';
 
 const PRO_TYPES: OrderType[] = ['stopMarket', 'stopLimit', 'takeMarket', 'takeLimit', 'twap', 'trailing', 'bracket'];
 const PRO_LABEL: Partial<Record<OrderType, string>> = { bracket: 'TP/SL for the position' };
@@ -368,16 +368,11 @@ function NewHedge(p: TicketProps) {
     isCrossA: crossA,
     ...(crossB !== 'same' ? { isCrossB: crossB === 'cross' } : {}),
   };
-  const px = (x: number | null) => (x === null ? '—' : usd(x));
   const open = () =>
     p.run('pair', async () => {
       const out = await placeHedge(p.sign, p.owner, spec);
       p.onPlaced();
-      const [a, b] = out.legs;
-      const lines = `leg 0 ${a.isBuy ? 'bought' : 'sold'} ${a.filled} at ${px(a.avgPx)}, leg 1 ${b.isBuy ? 'bought' : 'sold'} ${b.filled} at ${px(b.avgPx)}`;
-      if (out.status === 'failed') throw new Error(`Nothing was opened. ${out.notes.join(' ')}`);
-      if (out.status === 'unwound' || out.status === 'unbalanced') throw new Error(`${out.status === 'unwound' ? 'Only one leg filled, so it was closed again.' : 'The hedge is not balanced: look at Positions now.'} ${lines}. ${out.notes.join(' ')}`);
-      return p.done(out, `Hedge opened: ${lines}${out.spreadBps !== null ? `, entry spread ${out.spreadBps} bps` : ''}${out.status === 'trimmed' ? '. ' + out.notes.join(' ') : ''}`);
+      return p.done(out, pairMessage(out));
     });
 
   return (

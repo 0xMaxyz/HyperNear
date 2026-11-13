@@ -1,6 +1,6 @@
 // The ticket's fields -> one OrderSpec, or the first thing wrong with them in plain words. The agent validates again (agent/src/order.ts)
 // and its reasons are shown too; this only keeps obviously empty or malformed input from being signed.
-import { floorSize, roundPx, type OrderSpec, type OrderType } from './trading';
+import { floorSize, roundPx, type HedgePairSpec, type OrderSpec, type OrderType } from './trading';
 
 export interface OrderForm {
   leg: number;
@@ -120,6 +120,15 @@ export function buildSpec(f: OrderForm, szDecimals: number): { spec: OrderSpec }
 const tpsl = (s: OrderSpec) => (s.tpPx || s.slPx ? `, then ${[s.tpPx && `take profit at ${s.tpPx}`, s.slPx && `stop at ${s.slPx}`].filter(Boolean).join(' or ')}` : '');
 
 /** One sentence saying what signing will do, for the line above the button. */
+export function describeHedgePair(s: HedgePairSpec, mid: number): string {
+  const sizeB = Number((Number(s.size) * Number(s.ratio)).toFixed(8));
+  const long = s.side === 'long';
+  const levA = `${s.leverageA}x ${s.isCrossA === false ? 'isolated' : 'cross'}`;
+  const levB = s.leverageB !== undefined || s.isCrossB !== undefined ? `${s.leverageB ?? s.leverageA}x ${(s.isCrossB ?? s.isCrossA) === false ? 'isolated' : 'cross'}` : levA;
+  const usd = (x: number) => (mid ? ` (about $${(x * mid).toFixed(2)})` : '');
+  return `Open a ${s.side} hedge on ${s.coin} at market: leg 0 ${long ? 'buys' : 'sells'} ${s.size}${usd(Number(s.size))} at ${levA}, leg 1 ${long ? 'sells' : 'buys'} ${sizeB}${usd(sizeB)} (${Math.round(Number(s.ratio) * 100)}%) at ${levB}.`;
+}
+
 export function describeSpec(s: OrderSpec, mid: number): string {
   const what = `${s.side === 'buy' ? 'Buy' : 'Sell'} ${s.size ?? ''} ${s.coin}`.replace('  ', ' ');
   const lev = s.leverage ? ` at ${s.leverage}x ${s.isCross === false ? 'isolated' : 'cross'}` : '';
