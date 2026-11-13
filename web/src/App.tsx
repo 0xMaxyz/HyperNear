@@ -4,7 +4,8 @@ import { commandTypedData, newCommand, ownerIntentTypedData, specHashOfJson, typ
 import { AGENT_ACCOUNT, AGENT_URL, CHAIN_TAG, CONTRACT_ID, DEMO_OWNER, TEE_AGENT_URL, getOwner, pointAgentAt, post, streamEvents, type AgentEvent, type Decision, type DecisionMode, type OwnerView } from './api';
 import { LegPanel } from './legpanel';
 import { decisionRows } from './decisions';
-import { Activity, DecisionCard, decisionText, FreezeSteps, nearScan, short } from './panels';
+import { Activity, DecisionCard, decisionText, FreezeSteps, nearScan, short, summarize } from './panels';
+import { NotificationsList, toast, ToastHost, useToasts } from './toast';
 import { OverviewTab } from './overview';
 import { TradeTab } from './trade';
 import type { HedgeSpec } from './trading';
@@ -38,7 +39,6 @@ export interface Auth {
 const TABS = ['trade', 'easy', 'portfolio', 'strategies', 'fund', 'protect', 'setup', 'activity', 'learn', 'home', 'overview', 'hedge', 'legs'];
 const MOVED: Record<string, string> = { home: 'setup', overview: 'portfolio', legs: 'portfolio/legs', hedge: 'protect' };
 
-type Notice = { kind: 'ok' | 'err'; text: string };
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const DECIMAL = /^\d{1,12}(\.\d{1,6})?$/;
 
@@ -58,7 +58,8 @@ export function App({ auth }: { auth: Auth }) {
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [stream, setStream] = useState<'live' | 'down' | 'connecting'>('connecting');
   const [busy, setBusy] = useState<string | null>(null);
-  const [notice, setNotice] = useState<Notice>();
+  const [bell, setBell] = useState(false);
+  const toasts = useToasts();
   const [dry, setDry] = useState(false);
   const [tee, setTee] = useState<TeeState>();
   const [teeErr, setTeeErr] = useState<string>();
@@ -162,11 +163,10 @@ export function App({ auth }: { auth: Auth }) {
 
   async function run(key: string, fn: () => Promise<string>) {
     setBusy(key);
-    setNotice(undefined);
     try {
-      setNotice({ kind: 'ok', text: await fn() });
+      toast('ok', await fn());
     } catch (e) {
-      setNotice({ kind: 'err', text: msg(e) });
+      toast('err', msg(e));
     } finally {
       setBusy(null);
       await refresh();
@@ -175,7 +175,7 @@ export function App({ auth }: { auth: Auth }) {
 
   const done = (out: Record<string, unknown>, what: string) => {
     if (out.dryRun) setDry(true);
-    return `${what}${out.dryRun ? ' (simulated, dry-run)' : ''}${out.txHash ? `, NEAR tx ${short(String(out.txHash))}` : ''}.`;
+    return `${what}${out.dryRun ? ' (simulated)' : ''}${out.txHash ? `, NEAR tx ${short(String(out.txHash))}` : ''}.`;
   };
 
   /** Fresh nonce from the contract view, sign the intent with the owner wallet, send through the relayer. */
@@ -366,7 +366,7 @@ export function App({ auth }: { auth: Auth }) {
   useEffect(() => {
     if (route.tab === 'activity' && mine[0]) setSeen(mine[0].id);
   }, [route.tab, mine[0]?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-  const unread = mine.filter((e) => e.id > seen).length;
+  const unread = mine.filter((e) => e.id > seen).length + toasts.filter((t) => !t.read).length;
   const guardHot = (view?.guard ?? []).filter((g) => g.trigger).length;
   const watched = (view?.guard ?? []).length;
 
@@ -402,6 +402,7 @@ export function App({ auth }: { auth: Auth }) {
 
   return (
     <>
+      <ToastHost />
       <header className="top">
         <div className="brand">
           <svg className="mark" viewBox="8 9 32 32" fill="none" stroke="currentColor" strokeWidth={4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -427,11 +428,12 @@ export function App({ auth }: { auth: Auth }) {
           )}
           {owner && view && <span className="pill agent" title={teeMode ? 'Your own TEE agent runs the policy and holds the trading keys' : 'Our server agent runs the policy and holds the trading keys'}>{teeMode ? 'TEE agent' : 'Server agent'}</span>}
           {owner && (
-            <a className="icon-btn" href="#/activity" aria-label={unread ? `Activity, ${unread} new` : 'Activity'}>
+            <button className="icon-btn" aria-haspopup="dialog" aria-expanded={bell} onClick={() => (setBell((x) => !x), mine[0] && setSeen(mine[0].id))} aria-label={unread ? `Notifications, ${unread} new` : 'Notifications'}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>
               {unread > 0 && <span className="count">{unread > 99 ? '99+' : unread}</span>}
-            </a>
+            </button>
           )}
+          {bell && <NotificationsList onClose={() => setBell(false)} extra={mine.slice(0, 8).map((e) => ({ key: `e${e.id}`, text: summarize(e), at: e.at }))} />}
           <a className="icon-btn help" href="#/learn" aria-label="Help and how it works">?</a>
           {owner && (
             <button className="addr" aria-haspopup="dialog" title={`Account ${owner}`} onClick={() => setMenu(true)}>
@@ -484,10 +486,6 @@ export function App({ auth }: { auth: Auth }) {
         </main>
       ) : (
         <main className={route.tab === 'trade' ? 'wide' : undefined}>
-          <div aria-live="polite" className="notice-slot">
-            {notice && <p className={`notice ${notice.kind}`} role={notice.kind === 'err' ? 'alert' : 'status'}>{notice.text}</p>}
-          </div>
-
           {attention && (
             <p className="attention" role="status">
               {attention.text} <a href={attention.href}>{attention.link}</a>
