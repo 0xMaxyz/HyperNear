@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Hex } from 'viem';
 import { commandTypedData, newCommand, ownerIntentTypedData, specHashOfJson, type Command, type OwnerIntent, type OwnerIntentTypedData } from '@hypernear/client';
 import { AGENT_ACCOUNT, AGENT_URL, CHAIN_TAG, CONTRACT_ID, DEMO_OWNER, TEE_AGENT_URL, getOwner, pendingDecision, pointAgentAt, post, streamEvents, type AgentEvent, type DecisionMode, type OwnerView } from './api';
@@ -16,6 +16,7 @@ import { AccountMenu, type AuthAccount } from './account';
 import { FundTab } from './fund';
 import { Learn } from './learn';
 import { EasyTab } from './easy';
+import { useLiveLegs, useOverlay } from './liveLegs';
 import { Panel, Tabs, useRoute, type TabDef } from './tabs';
 import { useSession } from './session';
 
@@ -45,7 +46,12 @@ export function App({ auth }: { auth: Auth }) {
   const owner = auth.address ?? (demo ? DEMO_OWNER : undefined);
   const canSign = Boolean(auth.address && owner === auth.address);
 
-  const [view, setView] = useState<OwnerView>();
+  const [polled, setView] = useState<OwnerView>();
+  // positions and balances are pushed by Hyperliquid's socket; the agent view is polled and fills in the rest
+  const live = useLiveLegs(polled);
+  const view = useOverlay(polled, live);
+  const liveRef = useRef(false);
+  liveRef.current = live.state === 'live';
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
   const [events, setEvents] = useState<AgentEvent[]>([]);
@@ -103,8 +109,13 @@ export function App({ auth }: { auth: Auth }) {
     setError(undefined);
     setLoading(true);
     void refresh();
-    const t = setInterval(() => void refresh(), 10_000);
-    return () => clearInterval(t);
+    // slower while the socket carries the positions, the old pace when it does not
+    let t: ReturnType<typeof setTimeout>;
+    const loop = () => {
+      t = setTimeout(() => (void refresh(), loop()), liveRef.current ? 30_000 : 10_000);
+    };
+    loop();
+    return () => clearTimeout(t);
   }, [owner, refresh]);
 
   useEffect(() => {
@@ -381,6 +392,11 @@ export function App({ auth }: { auth: Auth }) {
         {owner && <Tabs tabs={tabDefs} current={route.tab} onGo={go} />}
         <div className="who">
           {view?.config && <span className={`net ${view.config.hlNetwork}`} title={`${view.config.chainTag}, contract ${view.config.contractId}`}>{view.config.hlNetwork === 'mainnet' ? 'Mainnet' : 'Testnet'}</span>}
+          {owner && !dry && live.state !== 'idle' && (
+            <span className={`pill live ${live.state}`} title={live.state === 'live' ? 'Positions and orders are pushed by Hyperliquid as they change' : 'The live connection is down or paused; the page refreshes by polling'}>
+              {live.state === 'live' ? 'Live' : live.state === 'connecting' ? 'Connecting' : 'Polling'}
+            </span>
+          )}
           {dry && <span className="badge" title={`Served by the agent with ${AGENT_URL}; no keys, recorded testnet data`}>dry-run data</span>}
           {owner && view && (
             <a className={`pill ${guardHot ? 'hot' : ''}`} href="#/protect" title="The guard watches every open position's margin and liquidation distance">

@@ -723,3 +723,7 @@ details.fees tr.est { color: var(--muted); }
 .easy-card.refused { border-color: var(--accent); }
 .easy-summary { font-size: 1.05rem; margin: 0.4rem 0; }
 .easy-card ul { margin: 0.3rem 0 0.3rem 1.2rem; padding: 0; }
+
+.pill.live { font-size: 0.75rem; }
+.pill.live.live::before { content: ''; display: inline-block; width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--up, #1a9d5b); margin-right: 0.35rem; }
+.pill.live:not(.live) { color: var(--muted); }
