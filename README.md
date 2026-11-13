@@ -12,7 +12,7 @@ An owner (any ordinary EVM wallet) gets several Hyperliquid accounts ("legs"); t
 
 **For:** anyone who lets a bot, a desk or an AI agent trade a Hyperliquid account and wants a withdraw lock, spending caps and a kill switch the operator cannot bypass. Trading stays at native Hyperliquid speed with per-leg API wallets; only owner-level moves (transfers, approvals, withdrawals, freeze) go through the NEAR contract, ~8 s each (C6).
 
-The project was first called HyperNear, then HyperNear. The deployed testnet contract (`leash-spike-1107.testnet`), the `@hypernear/*` packages, the `HYPERNEAR_*` variables and the EIP-712 domain keep that name so the deployed contract and existing signatures stay valid.
+The project started under the working name HyperNear. The deployed testnet contract (`leash-spike-1107.testnet`), the `@hypernear/*` packages, the `HYPERNEAR_*` variables and the EIP-712 domain keep that name so the deployed contract and existing signatures stay valid.
 
 Tracks: **security** (AI Security & Defense), **defi** (Unstoppable DeFi), **agents** (Agent Economy). License: MIT.
 
@@ -188,8 +188,6 @@ Expected: five `PASS page shows "..."` lines and exit code 0.
 The video is a scripted screen recording (`web/e2e/demo-video.mjs`) of the real web page against the agent in `--dry-run --serve`. Every click and every signature in it is real and verified by the agent; the on-chain events it shows are replayed from the live testnet runs in `agent/results/` (NEAR and Hyperliquid tx links in [docs/claims.md](docs/claims.md)). No model and no network is called while recording. It is a replay, not a live session.
 
 ## Live evidence (NEAR testnet and Hyperliquid testnet, 2026-11-07)
-
-A one-page index for judges: [docs/submission/claims-for-judges.md](docs/submission/claims-for-judges.md).
 
 Every claim has a committed test or script and a result file; the full ledger with all numbers is [docs/claims.md](docs/claims.md). Contract: `leash-spike-1107.testnet`.
 
