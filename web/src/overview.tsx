@@ -6,8 +6,8 @@ import type { Hex } from 'viem';
 import type { OwnerView } from './api';
 import { n, usd } from './panels';
 import { Paged, useMedia } from './pager';
-import type { ProtectTarget } from './positions';
-import { ProtectModal } from './protectModal';
+import { PositionsTable, type ProtectTarget } from './positions';
+import { LimitCloseModal, ProtectModal } from './protectModal';
 import { getHistory, getOrders, getPositions, placeOrder, reduceSpec, setProtection, type Composite, type HistoryRow, type LegPosition, type OpenOrder, type ProtectSpec, type Sign } from './trading';
 
 const css = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -143,25 +143,6 @@ function Pnl({ c }: { c: Composite }) {
   );
 }
 
-function LegRow({ p, szDecimals, maxLev, locked, why, onReduce }: { p: LegPosition; szDecimals: number; maxLev?: number; locked: boolean; why?: string; onReduce: (frac: number) => void }) {
-  const [frac, setFrac] = useState('1');
-  return (
-    <tr>
-      <td>{p.leg}</td>
-      <td>{p.side} {n(p.size, szDecimals)}<br /><span className="muted small">{p.leverage.value}x {p.leverage.type}{maxLev ? `, max ${maxLev}x` : ''}</span></td>
-      <td className="num">{usd(p.entryPx)}<br /><span className="muted small">mark {usd(p.markPx)}</span></td>
-      <td className="num">{p.liquidationPx === null ? 'none' : usd(p.liquidationPx)}</td>
-      <td className="num">{signed(p.unrealized, 4)}</td>
-      <td>
-        <select value={frac} onChange={(e) => setFrac(e.target.value)} aria-label={`Reduce leg ${p.leg} by`} style={{ width: 'auto' }}>
-          <option value="0.25">25%</option><option value="0.5">50%</option><option value="0.75">75%</option><option value="1">Close</option>
-        </select>{' '}
-        <button disabled={locked} title={why} onClick={() => onReduce(Number(frac))}>{frac === '1' ? 'Close leg' : 'Reduce'}</button>
-      </td>
-    </tr>
-  );
-}
-
 const FILTERS = { all: 'Everything', trades: 'Trades', funding: 'Funding', transfers: 'Transfers' } as const;
 const KIND_TEXT: Record<HistoryRow['kind'], string> = { 'hedge-open': 'Hedge', 'hedge-close': 'Hedge', open: 'One-sided', reduce: 'One-sided', protect: 'Protective', strategy: 'Strategy', twap: 'TWAP', external: 'Outside', funding: 'Funding', transfer: 'Transfer' };
 
@@ -172,6 +153,7 @@ export function OverviewTab(p: OverviewProps) {
   const [filter, setFilter] = useState<keyof typeof FILTERS>('all');
   const [version, setVersion] = useState(0);
   const [prot, setProt] = useState<{ target: ProtectTarget; orders: OpenOrder[] }>();
+  const [limit, setLimit] = useState<LegPosition>();
   const phone = useMedia('(max-width: 820px)');
   const tick = p.view?.snapshot.at;
   useEffect(() => {
@@ -194,7 +176,8 @@ export function OverviewTab(p: OverviewProps) {
   const legs = p.view?.snapshot.legs ?? [];
   const equity = legs.reduce((s, l) => s + Number(l.clearinghouse.marginSummary.accountValue) + l.spotUsdc, 0);
   const sum = (f: (c: Composite) => number) => (pos ?? []).reduce((s, c) => s + f(c), 0);
-  const openPnl = sum((c) => c.totals.pnl);
+  const setupFees = sum((c) => c.totals.activationFee);
+  const openPnl = sum((c) => c.totals.pnl) + setupFees; // the one-off account setup fee is shown on its own line, not as a loss on the position
 
   const reduce = (leg: LegPosition, frac: number) =>
     p.run('reduce', async () => {
@@ -220,6 +203,14 @@ export function OverviewTab(p: OverviewProps) {
       return p.done(out, `TP/SL set on ${spec.legs.length > 1 ? 'legs ' + spec.legs.join(' and ') : 'leg ' + spec.legs[0]} ${spec.coin}`);
     });
 
+  const limitClose = (l: LegPosition, price: string, size: string) =>
+    p.run('limit', async () => {
+      const out = await placeOrder(p.sign, p.owner, { leg: l.leg, coin: l.coin, side: l.side === 'long' ? 'sell' : 'buy', type: 'limit', size, limitPx: price, tif: 'Gtc', reduceOnly: true });
+      setLimit(undefined);
+      setVersion((v) => v + 1);
+      return p.done(out, `Limit close for ${size} ${l.coin} on leg ${l.leg} at ${price}`);
+    });
+
   if (!p.view) return <p className="state">Waiting for data.</p>;
   const shownRows = (rows ?? []).filter((r) => filter === 'all' || (filter === 'trades' ? r.kind !== 'funding' && r.kind !== 'transfer' : filter === 'funding' ? r.kind === 'funding' : r.kind === 'transfer'));
 
@@ -231,7 +222,8 @@ export function OverviewTab(p: OverviewProps) {
           <dt>Total balance on all legs</dt><dd className="big">{usd(equity)}</dd>
           <dt>Open positions</dt><dd>{pos ? pos.length : '…'}</dd>
           <dt>Open PnL, after fees and funding</dt><dd>{pos ? signed(openPnl) : '…'}</dd>
-          <dt>Net if all closed now (estimate)</dt><dd>{pos ? signed(sum((c) => c.totals.netIfClosed)) : '…'}</dd>
+          <dt>Net if all closed now (estimate)</dt><dd>{pos ? signed(sum((c) => c.totals.netIfClosed) + setupFees) : '…'}</dd>
+          <dt>Account setup fees (one-off, per leg)</dt><dd>{pos ? signed(-setupFees, 2) : '…'}</dd>
         </dl>
         {err && <p className="state err" role="alert">{err}</p>}
       </section>
@@ -250,32 +242,31 @@ export function OverviewTab(p: OverviewProps) {
         </section>
       )}
 
-      {(pos ?? []).map((c) => (
-        <section className="card" key={c.id} aria-labelledby={`pos-${c.id}`}>
-          <h2 id={`pos-${c.id}`}>
-            {c.coin} {c.kind === 'hedge' ? 'hedge' : c.kind === 'strategy' ? 'strategy position' : `${c.legs[0]?.side}, one leg`}
-          </h2>
-          <p className="muted small">
-            {c.kind === 'hedge' ? `Leg 0 and leg 1 hold opposite sides, net ${n(c.netSize, decimals(c.coin))} ${c.coin}. ` : ''}
-            {ago(c.openedAt)}.
-          </p>
-          <div className="scroll">
-            <table className="mini">
-              <thead><tr><th>Leg</th><th>Position</th><th className="num">Entry</th><th className="num">Liquidation</th><th className="num">Unrealized</th><th /></tr></thead>
-              <tbody>
-                {c.legs.map((l) => <LegRow key={l.leg} p={l} szDecimals={decimals(c.coin)} maxLev={maxLevOf(c.coin)} locked={p.locked} why={p.why} onReduce={(f) => reduce(l, f)} />)}
-              </tbody>
-            </table>
-          </div>
-          <Pnl c={c} />
-          <div className="actions">
-            {c.kind === 'hedge' && <button className="primary" disabled={p.locked} title={p.why} onClick={() => p.onCloseHedge(c.coin, c.legs.map((l) => l.leg))}>Close the hedge</button>}
-            <button disabled={p.locked} title={p.why} onClick={() => void openProtect(c)}>{c.kind === 'hedge' ? 'TP/SL on both legs…' : 'TP/SL…'}</button>
-            <button onClick={() => p.onGo(`trade?leg=${c.legs[0]!.leg}&coin=${c.coin}`)}>Trade this leg</button>
-            {c.kind === 'one-sided' && <button onClick={() => p.onGo(`trade?leg=0&coin=${c.coin}&mode=hedge`)}>Hedge it</button>}
-          </div>
+      {pos && pos.length > 0 && (
+        <section className="card" aria-labelledby="ov-pos-h">
+          <h2 id="ov-pos-h">Open positions</h2>
+          <PositionsTable
+            comps={pos}
+            fit={false}
+            locked={p.locked}
+            why={p.why}
+            decimals={decimals}
+            maxLev={maxLevOf}
+            onReduce={reduce}
+            onCloseHedge={(c) => p.onCloseHedge(c.coin, c.legs.map((l) => l.leg))}
+            onTpsl={(t) => void getOrders(p.owner).then((o) => setProt({ target: t, orders: o.orders }), (e) => p.run('protect', async () => { throw e; }))}
+            onLimit={setLimit}
+          />
+          {pos.map((c) => (
+            <details key={c.id} className="t-adv">
+              <summary>{c.coin} {c.kind === 'hedge' ? 'hedge' : c.kind === 'strategy' ? 'strategy' : c.legs[0]?.side}: where the money went</summary>
+              <p className="muted small">{ago(c.openedAt)}.{c.kind === 'hedge' ? ` Net ${n(c.netSize, decimals(c.coin))} ${c.coin}.` : ''}</p>
+              <Pnl c={c} />
+              {c.kind === 'one-sided' && <div className="actions"><button onClick={() => p.onGo(`trade?leg=0&coin=${c.coin}&mode=hedge`)}>Hedge it</button></div>}
+            </details>
+          ))}
         </section>
-      ))}
+      )}
 
       <section className="card" aria-labelledby="ov-hist-h">
         <h2 id="ov-hist-h">History</h2>
@@ -305,6 +296,16 @@ export function OverviewTab(p: OverviewProps) {
         )}
         <p className="muted small">Result of a trade is its realized profit minus its fee. Rows marked Outside were placed from another tool, not by HyperNear. Hyperliquid keeps the latest 2000 fills per leg.</p>
       </section>
+      {limit && (
+        <LimitCloseModal
+          leg={limit}
+          mark={Number(p.view.snapshot.market.mids[limit.coin] ?? limit.markPx)}
+          decimals={decimals(limit.coin)}
+          busy={p.locked}
+          onSave={(price, size) => limitClose(limit, price, size)}
+          onClose={() => setLimit(undefined)}
+        />
+      )}
       {prot && (
         <ProtectModal
           target={prot.target}
