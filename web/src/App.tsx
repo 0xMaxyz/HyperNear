@@ -11,7 +11,6 @@ import { TradeTab } from './trade';
 import type { HedgeSpec } from './trading';
 import { LegCards } from './legcards';
 import { StrategiesPanel } from './strategies';
-import { ProtectPanel } from './protect';
 import { dryApply, inTeeMode, loadTee, lookupTeeAgent, priceMicro, type TeeState, ZERO_HASH } from './tee';
 import { HostingCard } from './teepanel';
 import { AccountMenu, type AuthAccount } from './account';
@@ -37,7 +36,7 @@ export interface Auth {
 
 /** the five sections in the nav, then routes reached from the top bar (setup, activity, learn), then old links that redirect */
 const TABS = ['trade', 'easy', 'portfolio', 'strategies', 'fund', 'protect', 'setup', 'activity', 'learn', 'home', 'overview', 'hedge', 'legs'];
-const MOVED: Record<string, string> = { home: 'setup', overview: 'portfolio', legs: 'portfolio/legs', hedge: 'protect' };
+const MOVED: Record<string, string> = { home: 'setup', overview: 'portfolio', legs: 'portfolio/legs', hedge: 'protect', strategies: 'easy' };
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const DECIMAL = /^\d{1,12}(\.\d{1,6})?$/;
@@ -99,6 +98,7 @@ export function App({ auth }: { auth: Auth }) {
     if (to) go(`${to}${route.params.toString() ? `?${route.params}` : ''}`);
   }, [route.tab]); // eslint-disable-line react-hooks/exhaustive-deps
   const [selLeg, setSelLeg] = useState<number>();
+  const [strategyAsk, setStrategyAsk] = useState({ text: '', n: 0 }); // words the Easy box routed to the strategy drafter
 
   const teeMode = inTeeMode(tee);
   const [agentId, setAgentId] = useState<string>(); // undefined until typed: then the agent's own account from /owner config
@@ -351,7 +351,6 @@ export function App({ auth }: { auth: Auth }) {
     { id: 'easy', label: 'Easy' },
     { id: 'trade', label: 'Trade' },
     { id: 'portfolio', label: 'Portfolio' },
-    { id: 'strategies', label: 'Strategies' },
     { id: 'fund', label: 'Fund' },
     { id: 'protect', label: 'Safety', dot: decision ? 'A decision is waiting for you' : policy?.frozen ? 'The account is frozen' : undefined },
   ];
@@ -526,7 +525,8 @@ export function App({ auth }: { auth: Auth }) {
 
           {route.tab === 'easy' && (
             <Panel id="easy">
-              <EasyTab view={view} owner={owner} locked={locked} why={why} sign={signCommand} session={session} run={run} done={done} onGo={go} />
+              <EasyTab view={view} owner={owner} locked={locked} why={why} sign={signCommand} session={session} run={run} done={done} onGo={go} onStrategy={(text) => setStrategyAsk((a) => ({ text, n: a.n + 1 }))} />
+              <StrategiesPanel embedded prefill={strategyAsk} legs={legs} owner={owner} canSign={canSign} events={mine} sign={signCommand} tick={view?.snapshot.at} leg={route.params.get('leg') === null ? undefined : Number(route.params.get('leg'))} />
             </Panel>
           )}
 
@@ -648,20 +648,6 @@ export function App({ auth }: { auth: Auth }) {
             </div>
           </div>
           </Panel>
-          )}
-
-          {route.tab === 'strategies' && (
-            <Panel id="strategies">
-              <ProtectPanel
-                view={view}
-                owner={owner}
-                canSign={canSign}
-                sign={signCommand}
-                preselect={{ leg: route.params.get('protect') === null ? undefined : Number(route.params.get('protect')), coin: route.params.get('coin') ?? undefined }}
-                onDone={() => void refresh()}
-              />
-              <StrategiesPanel legs={legs} owner={owner} canSign={canSign} events={mine} sign={signCommand} tick={view?.snapshot.at} leg={route.params.get('leg') === null ? undefined : Number(route.params.get('leg'))} />
-            </Panel>
           )}
 
           {route.tab === 'fund' && (

@@ -811,3 +811,8 @@ details.fees tr.est { color: var(--muted); }
 .t-sub { margin: 8px 0 0; font-size: 13px; }
 .t-row.tight .grow { flex: 1; }
 .t-phone-bar { grid-auto-flow: column; grid-auto-columns: 1fr; }
+
+/* ---------- portfolio: filter chips ---------- */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; }
+.chips button { min-height: 30px; padding: 0 12px; border-radius: 15px; }
+.chips button[aria-pressed='true'] { background: var(--line); color: var(--ink); border-color: var(--accent, var(--info)); }

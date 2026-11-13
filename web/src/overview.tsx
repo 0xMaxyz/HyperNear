@@ -5,7 +5,10 @@ import { ColorType, LineSeries, createChart, type UTCTimestamp } from 'lightweig
 import type { Hex } from 'viem';
 import type { OwnerView } from './api';
 import { n, usd } from './panels';
-import { getHistory, getPositions, placeOrder, reduceSpec, type Composite, type HistoryRow, type LegPosition, type Sign } from './trading';
+import { Paged, useMedia } from './pager';
+import type { ProtectTarget } from './positions';
+import { ProtectModal } from './protectModal';
+import { getHistory, getOrders, getPositions, placeOrder, reduceSpec, setProtection, type Composite, type HistoryRow, type LegPosition, type OpenOrder, type ProtectSpec, type Sign } from './trading';
 
 const css = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const signed = (v: number, dp = 4) => `${v < 0 ? '-' : '+'}${usd(Math.abs(v), dp)}`;
@@ -168,6 +171,8 @@ export function OverviewTab(p: OverviewProps) {
   const [err, setErr] = useState<string>();
   const [filter, setFilter] = useState<keyof typeof FILTERS>('all');
   const [version, setVersion] = useState(0);
+  const [prot, setProt] = useState<{ target: ProtectTarget; orders: OpenOrder[] }>();
+  const phone = useMedia('(max-width: 820px)');
   const tick = p.view?.snapshot.at;
   useEffect(() => {
     let live = true;
@@ -199,6 +204,22 @@ export function OverviewTab(p: OverviewProps) {
       return p.done(out, frac >= 1 ? `Closed leg ${leg.leg}'s ${leg.coin}` : `Reduced leg ${leg.leg}'s ${leg.coin} by ${frac * 100}%`);
     });
 
+  // TP/SL for a position or a hedge: read the levels in force first, so the dialog opens with them filled in
+  const openProtect = (c: Composite) =>
+    getOrders(p.owner).then(
+      (o) => setProt({ target: { coin: c.coin, legs: c.legs, hedge: c.kind === 'hedge' }, orders: o.orders }),
+      (e) => p.run('protect', async () => { throw e; }),
+    );
+  const saveProtect = (spec: ProtectSpec) =>
+    p.run('protect', async () => {
+      const out = await setProtection(p.sign, p.owner, spec);
+      setProt(undefined);
+      setVersion((v) => v + 1);
+      const failed = out.legs.filter((l) => !l.ok);
+      if (out.status !== 'ok') throw new Error(`TP/SL ${out.status === 'failed' ? 'was not set' : 'set on part of the hedge only'}: ${failed.map((l) => `leg ${l.leg}: ${l.error}`).join('; ')}`);
+      return p.done(out, `TP/SL set on ${spec.legs.length > 1 ? 'legs ' + spec.legs.join(' and ') : 'leg ' + spec.legs[0]} ${spec.coin}`);
+    });
+
   if (!p.view) return <p className="state">Waiting for data.</p>;
   const shownRows = (rows ?? []).filter((r) => filter === 'all' || (filter === 'trades' ? r.kind !== 'funding' && r.kind !== 'transfer' : filter === 'funding' ? r.kind === 'funding' : r.kind === 'transfer'));
 
@@ -213,6 +234,12 @@ export function OverviewTab(p: OverviewProps) {
           <dt>Net if all closed now (estimate)</dt><dd>{pos ? signed(sum((c) => c.totals.netIfClosed)) : '…'}</dd>
         </dl>
         {err && <p className="state err" role="alert">{err}</p>}
+      </section>
+
+      <section className="card" aria-labelledby="ov-chart-h">
+        <h2 id="ov-chart-h">PnL over time</h2>
+        <p className="muted small">Steps are realized results minus fees plus funding, from the history below; the last point adds today's open PnL.</p>
+        <PnlChart points={rows ? pnlSeries(rows, openPnl) : []} />
       </section>
 
       {pos && pos.length === 0 && (
@@ -243,50 +270,52 @@ export function OverviewTab(p: OverviewProps) {
           <Pnl c={c} />
           <div className="actions">
             {c.kind === 'hedge' && <button className="primary" disabled={p.locked} title={p.why} onClick={() => p.onCloseHedge(c.coin, c.legs.map((l) => l.leg))}>Close the hedge</button>}
-            <button onClick={() => p.onGo(`strategies?protect=${c.legs[0]!.leg}&coin=${c.coin}`)}>Protect…</button>
+            <button disabled={p.locked} title={p.why} onClick={() => void openProtect(c)}>{c.kind === 'hedge' ? 'TP/SL on both legs…' : 'TP/SL…'}</button>
             <button onClick={() => p.onGo(`trade?leg=${c.legs[0]!.leg}&coin=${c.coin}`)}>Trade this leg</button>
             {c.kind === 'one-sided' && <button onClick={() => p.onGo(`trade?leg=0&coin=${c.coin}&mode=hedge`)}>Hedge it</button>}
           </div>
         </section>
       ))}
 
-      <section className="card" aria-labelledby="ov-chart-h">
-        <h2 id="ov-chart-h">PnL over time</h2>
-        <p className="muted small">Steps are realized results minus fees plus funding, from the history below; the last point adds today's open PnL.</p>
-        <PnlChart points={rows ? pnlSeries(rows, openPnl) : []} />
-      </section>
-
       <section className="card" aria-labelledby="ov-hist-h">
         <h2 id="ov-hist-h">History</h2>
-        <div className="fields inline" style={{ maxWidth: 280 }}>
-          <label>
-            Show
-            <select value={filter} onChange={(e) => setFilter(e.target.value as keyof typeof FILTERS)}>
-              {Object.entries(FILTERS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-            </select>
-          </label>
+        <div className="chips" role="group" aria-label="Show">
+          {Object.entries(FILTERS).map(([k, v]) => <button key={k} aria-pressed={filter === k} onClick={() => setFilter(k as keyof typeof FILTERS)}>{v}</button>)}
         </div>
         {!rows ? <p className="state">Reading history…</p> : shownRows.length === 0 ? <p className="state">Nothing here yet.</p> : (
-          <div className="scroll">
-            <table className="mini">
-              <thead><tr><th>When</th><th>Type</th><th>What happened</th><th className="num">Size</th><th className="num">Price</th><th className="num">Result</th></tr></thead>
-              <tbody>
-                {shownRows.slice(0, 100).map((r, i) => (
-                  <tr key={`${r.time}-${i}`}>
-                    <td>{when(r.time)}</td>
-                    <td>{KIND_TEXT[r.kind]}</td>
-                    <td>{r.label}</td>
-                    <td className="num">{r.size ? n(r.size, 5) : ''}</td>
-                    <td className="num">{r.px ? usd(r.px) : ''}</td>
-                    <td className="num">{r.kind === 'funding' || r.kind === 'transfer' ? signed(r.amount ?? 0) : r.closedPnl !== undefined && r.closedPnl !== 0 ? `${signed(r.closedPnl - (r.fee ?? 0))}` : r.fee ? signed(-r.fee) : ''}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Paged items={shownRows} fit={false} fallbackRows={phone ? 8 : 10} resetKey={filter}>{(pg) => (
+            <div className="scroll">
+              <table className="mini">
+                <thead><tr><th>When</th><th>Type</th><th>What happened</th><th className="num">Size</th><th className="num">Price</th><th className="num">Result</th></tr></thead>
+                <tbody>
+                  {pg.map((r, i) => (
+                    <tr key={`${r.time}-${i}`}>
+                      <td>{when(r.time)}</td>
+                      <td>{KIND_TEXT[r.kind]}</td>
+                      <td>{r.label}</td>
+                      <td className="num">{r.size ? n(r.size, 5) : ''}</td>
+                      <td className="num">{r.px ? usd(r.px) : ''}</td>
+                      <td className="num">{r.kind === 'funding' || r.kind === 'transfer' ? signed(r.amount ?? 0) : r.closedPnl !== undefined && r.closedPnl !== 0 ? `${signed(r.closedPnl - (r.fee ?? 0))}` : r.fee ? signed(-r.fee) : ''}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}</Paged>
         )}
         <p className="muted small">Result of a trade is its realized profit minus its fee. Rows marked Outside were placed from another tool, not by HyperNear. Hyperliquid keeps the latest 2000 fills per leg.</p>
       </section>
+      {prot && (
+        <ProtectModal
+          target={prot.target}
+          orders={prot.orders}
+          mark={Number(p.view.snapshot.market.mids[prot.target.coin] ?? prot.target.legs[0]!.markPx)}
+          decimals={decimals(prot.target.coin)}
+          busy={p.locked}
+          onSave={saveProtect}
+          onClose={() => setProt(undefined)}
+        />
+      )}
     </div>
   );
 }

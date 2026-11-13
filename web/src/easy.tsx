@@ -9,6 +9,8 @@ import { SessionControl, type SessionApi } from './session';
 import { pairMessage, sendSpec, type CancelSpec, type HedgePairResult, type HedgePairSpec, type OrderSpec, type Sign } from './trading';
 
 const MAX_TEXT = 300;
+// shortcut: a keyword router, upgrade to one /assist/draft endpoint when misroutes appear
+const STRATEGY_WORDS = /\b(grid|dca|ladder|levels?|slices?|every)\b/i;
 
 type Ok =
   | { ok: true; kind: 'order'; action: 'placeOrder'; path: string; spec: OrderSpec; specHash: Hex; assumed: string[] }
@@ -26,6 +28,8 @@ export interface EasyProps {
   run: (key: string, fn: () => Promise<string>) => Promise<void>;
   done: (out: Record<string, unknown>, what: string) => string;
   onGo: (to: string) => void;
+  /** words that describe a strategy (grid, DCA, levels...) are handed to the strategy drafter below */
+  onStrategy: (text: string) => void;
 }
 
 function summary(d: Ok, mids: Record<string, string> | undefined): string {
@@ -52,6 +56,11 @@ export function EasyTab(p: EasyProps) {
   }, []);
 
   const draft = async () => {
+    if (STRATEGY_WORDS.test(text)) {
+      p.onStrategy(text);
+      setText('');
+      return;
+    }
     setBusy(true);
     setResult(undefined);
     try {
@@ -79,8 +88,8 @@ export function EasyTab(p: EasyProps) {
 
   return (
     <section className="easy" aria-labelledby="easy-h">
-      <h2 id="easy-h">Easy trading</h2>
-      <p className="muted">Say what you want. You read the draft and sign it; nothing is sent before that. This page cannot withdraw or move money.</p>
+      <h2 id="easy-h">Easy</h2>
+      <p className="muted">Say what you want: a trade, a hedge, or a strategy that keeps running. You read the draft and sign it; nothing is sent before that. This page cannot withdraw or move money.</p>
 
       {!available && <p className="t-msg err" role="alert">Easy trading is off on this agent (no assistant key is set). The Trade tab still works.</p>}
 

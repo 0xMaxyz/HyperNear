@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { toast } from './toast';
 import type { Hex } from 'viem';
 import { newCommand, type Command } from '@hypernear/client';
 import { ApiError, getJson, post, specHashOf, type AgentEvent, type LegSnap, type DraftOk, type DraftRefused, type LibraryListing, type SpecChange, type StrategySpec, type StrategyStatus } from './api';
@@ -116,11 +117,15 @@ export function StrategiesPanel(p: {
   tick: unknown;
   /** from a leg card's "Start a strategy" link */
   leg?: number;
+  /** on the Easy screen: its one text box feeds this panel, so the panel's own "describe it in words" box is not shown */
+  embedded?: boolean;
+  /** text the Easy screen routed here; `n` makes sending the same words twice work */
+  prefill?: { text: string; n: number };
 }) {
   const [text, setText] = useState('');
   const [draft, setDraft] = useState<Draft>();
   const [busy, setBusy] = useState<string | null>(null);
-  const [notice, setNotice] = useState<{ kind: 'ok' | 'err'; text: string }>();
+  const setNotice = (n?: { kind: 'ok' | 'err'; text: string }) => void (n && toast(n.kind, n.text));
   const [list, setList] = useState<{ state: 'loading' } | { state: 'off' | 'error'; message: string } | { state: 'ok'; rows: StrategyStatus[] }>({ state: 'loading' });
   const [lib, setLib] = useState<{ state: 'loading' } | { state: 'error'; message: string } | { state: 'ok'; data: LibraryListing }>({ state: 'loading' });
   const [how, setHow] = useState<string>();
@@ -203,12 +208,18 @@ export function StrategiesPanel(p: {
     return true;
   };
 
-  const doDraft = () =>
+  const doDraft = (words = text) =>
     act('draft', async () => {
       setEdit(undefined);
-      const ok = await show(await ask('/strategy/draft', { owner: p.owner, text }), text);
+      const ok = await show(await ask('/strategy/draft', { owner: p.owner, text: words }), words);
       return ok ? 'Draft ready. Read the spec and the warnings, then start it or discard it.' : 'The draft was refused. Nothing was started.';
     });
+
+  useEffect(() => {
+    if (!p.prefill?.n) return;
+    setText(p.prefill.text);
+    doDraft(p.prefill.text);
+  }, [p.prefill?.n]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // every change to the template form is checked by the agent shortly after the last keystroke
   useEffect(() => {
@@ -283,10 +294,6 @@ export function StrategiesPanel(p: {
       <p className="muted small">
         Each strategy runs on its own leg, so its losses stay on that leg. Describe one in plain words; a model drafts it, the agent checks every number against your order policy and contract policy, and nothing starts until you sign the exact spec shown here.
       </p>
-
-      <div aria-live="polite">
-        {notice && <p className={`notice ${notice.kind}`} role={notice.kind === 'err' ? 'alert' : 'status'}>{notice.text}</p>}
-      </div>
 
       {how && lib.state === 'ok' && <HowItWorks id={how} coin={lib.data.coin} mid={lib.data.mid} onClose={() => setHow(undefined)} />}
       <div className="strat-grid">
@@ -378,6 +385,7 @@ export function StrategiesPanel(p: {
             </div>
           )}
 
+          {!p.embedded && <>
           <h4>Or describe it in words</h4>
           <label>
             Your rules
@@ -385,9 +393,11 @@ export function StrategiesPanel(p: {
           </label>
           <p className="muted small">{text.length} of 600 characters. Free text only ever produces a proposal.</p>
           <div className="actions">
-            <button className="primary" disabled={!p.owner || busy !== null || text.trim() === ''} onClick={doDraft}>{busy === 'draft' ? 'Drafting…' : 'Draft strategy'}</button>
+            <button className="primary" disabled={!p.owner || busy !== null || text.trim() === ''} onClick={() => doDraft()}>{busy === 'draft' ? 'Drafting…' : 'Draft strategy'}</button>
             {draft && <button disabled={busy !== null} onClick={() => (setDraft(undefined), setEdit(undefined))}>Discard draft</button>}
           </div>
+          </>}
+          {p.embedded && draft && <button disabled={busy !== null} onClick={() => (setDraft(undefined), setEdit(undefined))}>Discard draft</button>}
 
           {draft?.kind === 'refused' && (
             <div className="draft refused" role="alert">
