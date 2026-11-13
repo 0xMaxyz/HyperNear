@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { HlUserFill, HlUserFunding } from '@perps-platform/core';
 import { makeCloid } from '../src/cloid.ts';
-import { buildCycles, historyRows, nextFundingAt, openComposites, openTime, setupFeePaid, type LegHistory } from '../src/positions.ts';
+import { buildCycles, feeLinesOf, historyRows, nextFundingAt, openComposites, openTime, setupFeePaid, type LegHistory } from '../src/positions.ts';
 import { ch, snap } from './agent-helpers.ts';
 
 let t = 1_000;
@@ -37,6 +37,31 @@ describe('buildCycles', () => {
     expect(a!.fees).toBeCloseTo(0.1 + 0.2, 9); // 0.01 of the 0.015 closes the long
     expect(b).toMatchObject({ side: 'short', realized: 0 });
     expect(b!.fees).toBeCloseTo(0.1, 9);
+  });
+
+  it('fee components: open/add vs reduce, taker vs maker, builder; they add up to the cycle total', () => {
+    // fills get their time when created, so create them in order
+    const f1 = fill({ side: 'B', sz: '0.01', start: '0', fee: '0.4' });
+    const maker = { ...fill({ side: 'B', sz: '0.01', start: '0.01', fee: '0.05' }), crossed: false };
+    const withBuilder = { ...fill({ side: 'A', sz: '0.005', start: '0.02', pnl: '1', fee: '0.2', dir: 'Close Long' }), builderFee: '0.03' };
+    const f4 = fill({ side: 'A', sz: '0.015', start: '0.015', fee: '0.6', dir: 'Close Long' });
+    const [c] = buildCycles([f1, maker, withBuilder, f4], 'BTC');
+    const lines = feeLinesOf(c!.parts);
+    const by = (label: string) => lines.find((l) => l.label === label)!;
+    expect(by('Opening and adding, taker')).toMatchObject({ fills: 1, amount: 0.4, notional: 1000 });
+    expect(by('Opening and adding, maker')).toMatchObject({ fills: 1, amount: 0.05 });
+    expect(by('Reducing and closing, taker')).toMatchObject({ fills: 2 });
+    expect(by('Reducing and closing, taker').amount).toBeCloseTo(0.8, 9);
+    expect(by('Builder fee').amount).toBeCloseTo(0.03, 9);
+    expect(by('Opening and adding, taker').ratePct).toBeCloseTo(0.04, 9);
+    expect(lines.reduce((s, l) => s + l.amount, 0)).toBeCloseTo(c!.fees, 9);
+    expect(c!.fees).toBeCloseTo(0.4 + 0.05 + 0.2 + 0.03 + 0.6, 9);
+  });
+
+  it('a flip books the closing share as reduce and the rest as open', () => {
+    const [a, b] = buildCycles([fill({ side: 'B', sz: '0.01', start: '0', fee: '0.1' }), fill({ side: 'A', sz: '0.015', start: '0.01', pnl: '2', fee: '0.3', dir: 'Long > Short' })], 'BTC');
+    expect(feeLinesOf(a!.parts).find((l) => l.role === 'reduce')!.amount).toBeCloseTo(0.2, 9);
+    expect(feeLinesOf(b!.parts)).toMatchObject([{ role: 'open', amount: expect.closeTo(0.1, 9) }]);
   });
 
   it('openTime is the last fill from flat', () => {

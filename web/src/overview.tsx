@@ -1,6 +1,6 @@
 // Overview tab: what is open now as the owner thinks of it (a hedge of two legs, a one-sided trade), what it has earned or cost line by line,
 // tools to shrink or close it, a PnL-over-time chart and the labelled trade history. Numbers come from the agent (agent/src/positions.ts).
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ColorType, LineSeries, createChart, type UTCTimestamp } from 'lightweight-charts';
 import type { Hex } from 'viem';
 import type { OwnerView } from './api';
@@ -74,6 +74,48 @@ function PnlChart({ points }: { points: { t: number; v: number }[] }) {
   return <div ref={box} className="chart" role="img" aria-label={points.length < 2 ? 'No PnL history yet' : `PnL since ${first ? when(first.t) : ''}: ${lastP ? signed(lastP.v) : ''}`} />;
 }
 
+/** Trading fees by component. Rate is amount / notional of those fills, so a fee tier or discount shows in it. */
+function FeeTable({ c }: { c: Composite }) {
+  const t = c.totals;
+  const rows = (lines: Composite['totals']['feeLines']) =>
+    lines.map((l) => (
+      <tr key={l.label}>
+        <td>{l.label}</td>
+        <td className="num">{l.fills}</td>
+        <td className="num">{usd(l.notional)}</td>
+        <td className="num">{l.ratePct.toFixed(4)}%</td>
+        <td className="num">{signed(-l.amount, 4)}</td>
+      </tr>
+    ));
+  return (
+    <details className="fees">
+      <summary>Fee components</summary>
+      <div className="tablewrap">
+        <table>
+          <thead><tr><th>Component</th><th className="num">Fills</th><th className="num">Traded</th><th className="num">Rate</th><th className="num">Amount</th></tr></thead>
+          <tbody>
+            {c.legs.length > 1 && c.legs.map((l) => l.feeLines.length > 0 && (
+              <FragmentRows key={l.leg} head={`Leg ${l.leg}`}>{rows(l.feeLines)}</FragmentRows>
+            ))}
+            {c.legs.length > 1 ? null : rows(t.feeLines)}
+            <tr className="total"><td><b>Paid so far</b></td><td className="num">{t.feeLines.reduce((s, l) => s + l.fills, 0)}</td><td className="num">{usd(t.feeLines.reduce((s, l) => s + l.notional, 0))}</td><td /><td className="num"><b>{signed(-t.fees, 4)}</b></td></tr>
+            <tr className="est"><td>Closing everything now (estimate)</td><td /><td className="num">{usd(c.legs.reduce((s, l) => s + l.size * l.markPx, 0))}</td><td className="num">{t.closeRatePct.toFixed(4)}%</td><td className="num">{signed(-t.closeFeesEst, 4)}</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p className="muted small">Taker fees are paid when an order takes liquidity, maker fees when it rests on the book first. Funding and the one-off account setup fee are shown above, not in here.</p>
+    </details>
+  );
+}
+function FragmentRows({ head, children }: { head: string; children: ReactNode }) {
+  return (
+    <>
+      <tr className="sub"><td colSpan={5} className="muted small">{head}</td></tr>
+      {children}
+    </>
+  );
+}
+
 function Pnl({ c }: { c: Composite }) {
   const t = c.totals;
   const hedge = c.kind === 'hedge';
@@ -90,6 +132,7 @@ function Pnl({ c }: { c: Composite }) {
         <dt>Closing fees (estimate)</dt><dd>{signed(-t.closeFeesEst)}</dd>
         <dt>Net if closed now (estimate)</dt><dd>{signed(t.netIfClosed)}</dd>
       </dl>
+      <FeeTable c={c} />
       <p className="muted small">
         Next funding in {countdown} min, at {utcHour(c.nextFundingAt)}: about {signed(t.nextFundingEstimate)} {hedge ? `net of both legs (${c.legs.map((l) => `leg ${l.leg} ${signed(l.nextFundingEstimate, 5)}`).join(', ')}). A balanced hedge pays and receives almost the same, so this stays close to zero.` : `for this ${c.legs[0]?.side}. A long pays when the hourly rate is positive and a short receives it.`}
       </p>
@@ -97,12 +140,12 @@ function Pnl({ c }: { c: Composite }) {
   );
 }
 
-function LegRow({ p, szDecimals, locked, why, onReduce }: { p: LegPosition; szDecimals: number; locked: boolean; why?: string; onReduce: (frac: number) => void }) {
+function LegRow({ p, szDecimals, maxLev, locked, why, onReduce }: { p: LegPosition; szDecimals: number; maxLev?: number; locked: boolean; why?: string; onReduce: (frac: number) => void }) {
   const [frac, setFrac] = useState('1');
   return (
     <tr>
       <td>{p.leg}</td>
-      <td>{p.side} {n(p.size, szDecimals)}<br /><span className="muted small">{p.leverage.value}x {p.leverage.type}</span></td>
+      <td>{p.side} {n(p.size, szDecimals)}<br /><span className="muted small">{p.leverage.value}x {p.leverage.type}{maxLev ? `, max ${maxLev}x` : ''}</span></td>
       <td className="num">{usd(p.entryPx)}<br /><span className="muted small">mark {usd(p.markPx)}</span></td>
       <td className="num">{p.liquidationPx === null ? 'none' : usd(p.liquidationPx)}</td>
       <td className="num">{signed(p.unrealized, 4)}</td>
@@ -139,6 +182,10 @@ export function OverviewTab(p: OverviewProps) {
 
   const assets = p.view?.snapshot.market.assets;
   const decimals = (coin: string) => assets?.find((a) => a.name === coin)?.szDecimals ?? 5;
+  const maxLevOf = (coin: string) => {
+    const m = assets?.find((a) => a.name === coin)?.maxLeverage;
+    return m === undefined ? undefined : Math.min(m, p.view?.orderPolicy.maxLeverage ?? m);
+  };
   const legs = p.view?.snapshot.legs ?? [];
   const equity = legs.reduce((s, l) => s + Number(l.clearinghouse.marginSummary.accountValue) + l.spotUsdc, 0);
   const sum = (f: (c: Composite) => number) => (pos ?? []).reduce((s, c) => s + f(c), 0);
@@ -189,7 +236,7 @@ export function OverviewTab(p: OverviewProps) {
             <table className="mini">
               <thead><tr><th>Leg</th><th>Position</th><th className="num">Entry</th><th className="num">Liquidation</th><th className="num">Unrealized</th><th /></tr></thead>
               <tbody>
-                {c.legs.map((l) => <LegRow key={l.leg} p={l} szDecimals={decimals(c.coin)} locked={p.locked} why={p.why} onReduce={(f) => reduce(l, f)} />)}
+                {c.legs.map((l) => <LegRow key={l.leg} p={l} szDecimals={decimals(c.coin)} maxLev={maxLevOf(c.coin)} locked={p.locked} why={p.why} onReduce={(f) => reduce(l, f)} />)}
               </tbody>
             </table>
           </div>

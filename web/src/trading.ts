@@ -57,6 +57,15 @@ export interface ModifySpec {
 }
 export const modifyOrder = (sign: Sign, owner: Hex, spec: ModifySpec) => sendSpec(sign, owner, 'modifyOrder', '/order/modify', spec);
 
+export interface FeeLine {
+  role: 'open' | 'reduce' | 'builder';
+  liquidity?: 'taker' | 'maker';
+  label: string;
+  fills: number;
+  notional: number;
+  amount: number;
+  ratePct: number;
+}
 export interface LegPosition {
   leg: number;
   address: Hex;
@@ -72,6 +81,7 @@ export interface LegPosition {
   unrealized: number;
   realized: number;
   fees: number;
+  feeLines: FeeLine[];
   funding: number;
   activationFee: number;
   pnl: number;
@@ -82,10 +92,12 @@ export interface Totals {
   realized: number;
   unrealized: number;
   fees: number;
+  feeLines: FeeLine[];
   funding: number;
   activationFee: number;
   pnl: number;
   closeFeesEst: number;
+  closeRatePct: number;
   netIfClosed: number;
   nextFundingEstimate: number;
 }

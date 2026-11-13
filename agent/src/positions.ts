@@ -47,6 +47,49 @@ export function setupFeePaid(ledger: HlLedgerUpdate[], address: string, network:
 /** Hourly funding rate per coin, from the asset contexts (signed: positive means longs pay shorts). */
 export type FundingRates = Record<string, number>;
 
+/** One component of a position's trading fees: what the fills were doing (open/add, reduce/close, builder) and whether they took or made liquidity. */
+export interface FeeLine {
+  role: 'open' | 'reduce' | 'builder';
+  /** taker = the order crossed the book; absent for the builder fee */
+  liquidity?: 'taker' | 'maker';
+  label: string;
+  fills: number;
+  notional: number;
+  amount: number;
+  /** amount / notional, in percent (the effective rate, so tier discounts show) */
+  ratePct: number;
+}
+type FeePart = { fills: number; notional: number; amount: number };
+
+const LABELS: Record<string, string> = {
+  'open:taker': 'Opening and adding, taker',
+  'open:maker': 'Opening and adding, maker',
+  'reduce:taker': 'Reducing and closing, taker',
+  'reduce:maker': 'Reducing and closing, maker',
+  builder: 'Builder fee',
+};
+export function feeLinesOf(parts: Record<string, FeePart>): FeeLine[] {
+  return Object.keys(LABELS)
+    .filter((k) => parts[k])
+    .map((k) => {
+      const p = parts[k]!;
+      const [role, liquidity] = k.split(':') as [FeeLine['role'], FeeLine['liquidity']];
+      return { role, ...(liquidity && { liquidity }), label: LABELS[k]!, fills: p.fills, notional: p.notional, amount: p.amount, ratePct: p.notional > 0 ? (100 * p.amount) / p.notional : 0 };
+    });
+}
+/** Adds `lines` of several legs into one list (same component, summed). */
+export function mergeFeeLines(all: FeeLine[][]): FeeLine[] {
+  const parts: Record<string, FeePart> = {};
+  for (const l of all.flat()) {
+    const k = l.role === 'builder' ? 'builder' : `${l.role}:${l.liquidity}`;
+    const p = (parts[k] ??= { fills: 0, notional: 0, amount: 0 });
+    p.fills += l.fills;
+    p.notional += l.notional;
+    p.amount += l.amount;
+  }
+  return feeLinesOf(parts);
+}
+
 export interface Cycle {
   coin: string;
   openedAt: number;
@@ -54,6 +97,8 @@ export interface Cycle {
   side: 'long' | 'short';
   realized: number;
   fees: number;
+  /** `fees` split by component; the parts add up to `fees` */
+  parts: Record<string, FeePart>;
   /** the fill that opened it: tells what the position was opened for */
   openKind?: CloidKind;
   openGroup?: string;
@@ -79,27 +124,39 @@ export function buildCycles(fills: HlUserFill[], coin: string): Cycle[] {
     const signed = f.side === 'B' ? sz : -sz;
     const before = num(f.startPosition);
     const after = before + signed;
-    const fee = num(f.fee) + num(f.builderFee);
+    // shortcut: builderFee is added to fee as a separate part; our agent sets no builder code so it is always 0 (unverified whether HL's `fee` already includes it)
+    const book = (c: Cycle, role: 'open' | 'reduce', share: number) => {
+      const notional = num(f.px) * sz * share;
+      const add = (key: string, amount: number) => {
+        const p = (c.parts[key] ??= { fills: 0, notional: 0, amount: 0 });
+        p.fills += 1;
+        p.notional += notional;
+        p.amount += amount;
+        c.fees += amount;
+      };
+      add(`${role}:${f.crossed ? 'taker' : 'maker'}`, num(f.fee) * share);
+      if (num(f.builderFee) !== 0) add('builder', num(f.builderFee) * share);
+    };
     const open = () => {
       const c = parseCloid(f.cloid);
-      cur = { coin, openedAt: f.time, side: signed > 0 ? 'long' : 'short', realized: 0, fees: 0, openKind: c?.kind, openGroup: c?.group };
+      cur = { coin, openedAt: f.time, side: signed > 0 ? 'long' : 'short', realized: 0, fees: 0, parts: {}, openKind: c?.kind, openGroup: c?.group };
       out.push(cur);
       return cur;
     };
     if (Math.abs(before) < 1e-12 || !cur) {
       const c = open();
-      c.fees += fee;
+      book(c, 'open', 1);
       c.realized += num(f.closedPnl);
     } else if (Math.sign(after) === Math.sign(before) || Math.abs(after) < 1e-12) {
-      cur.fees += fee;
+      book(cur, Math.abs(after) > Math.abs(before) ? 'open' : 'reduce', 1);
       cur.realized += num(f.closedPnl);
     } else {
       const closing = Math.abs(before) / sz;
-      cur.fees += fee * closing;
+      book(cur, 'reduce', closing);
       cur.realized += num(f.closedPnl);
       cur.closedAt = f.time;
       const c = open();
-      c.fees += fee * (1 - closing);
+      book(c, 'open', 1 - closing);
     }
     if (cur && Math.abs(after) < 1e-12) {
       cur.closedAt = f.time;
@@ -126,6 +183,8 @@ export interface LegPosition {
   /** closed by partial reductions of this position so far */
   realized: number;
   fees: number;
+  /** `fees` by component (they add up to it) */
+  feeLines: FeeLine[];
   /** received (+) or paid (-) since the position opened */
   funding: number;
   activationFee: number;
@@ -140,11 +199,15 @@ export interface Totals {
   realized: number;
   unrealized: number;
   fees: number;
+  /** `fees` by component, summed over the legs */
+  feeLines: FeeLine[];
   funding: number;
   activationFee: number;
   pnl: number;
   /** ESTIMATED taker fees to close everything at the mark */
   closeFeesEst: number;
+  /** the rate that estimate uses, in percent (the leg's own taker rate from userFees) */
+  closeRatePct: number;
   /** ESTIMATED: pnl - closeFeesEst */
   netIfClosed: number;
   nextFundingEstimate: number;
@@ -202,6 +265,7 @@ export function openComposites(s: OwnerSnapshot, data: LegHistory[], rates: Fund
         unrealized,
         realized,
         fees,
+        feeLines: feeLinesOf(cycle?.parts ?? {}),
         funding,
         activationFee,
         pnl: realized + unrealized - fees + funding - activationFee,
@@ -229,10 +293,12 @@ export function openComposites(s: OwnerSnapshot, data: LegHistory[], rates: Fund
       realized: sum(legs.map((p) => p.realized)),
       unrealized: sum(legs.map((p) => p.unrealized)),
       fees: sum(legs.map((p) => p.fees)),
+      feeLines: mergeFeeLines(legs.map((p) => p.feeLines)),
       funding: sum(legs.map((p) => p.funding)),
       activationFee: sum(legs.map((p) => p.activationFee)),
       pnl: sum(legs.map((p) => p.pnl)),
       closeFeesEst,
+      closeRatePct: (100 * closeFeesEst) / Math.max(1e-12, sum(legs.map((p) => p.size * p.markPx))),
       netIfClosed: sum(legs.map((p) => p.pnl)) - closeFeesEst,
       nextFundingEstimate: sum(legs.map((p) => p.nextFundingEstimate)),
     };
