@@ -121,6 +121,8 @@ export function StrategiesPanel(p: {
   embedded?: boolean;
   /** Easy screen: `running` is the compact list of what runs now (nothing is drawn when nothing runs); `build` is the template and draft column */
   view?: 'running' | 'build';
+  /** the Grid or DCA option picked on the Easy screen; `n` makes picking the same one twice work */
+  choose?: { family: 'grid' | 'dca'; n: number };
   /** text the Easy screen routed here; `n` makes sending the same words twice work */
   prefill?: { text: string; n: number };
 }) {
@@ -131,6 +133,8 @@ export function StrategiesPanel(p: {
   const [list, setList] = useState<{ state: 'loading' } | { state: 'off' | 'error'; message: string } | { state: 'ok'; rows: StrategyStatus[] }>({ state: 'loading' });
   const [lib, setLib] = useState<{ state: 'loading' } | { state: 'error'; message: string } | { state: 'ok'; data: LibraryListing }>({ state: 'loading' });
   const [how, setHow] = useState<string>();
+  const [family, setFamily] = useState<'grid' | 'dca'>();
+  const inFamily = (id: string) => (family === 'grid' ? id.startsWith('grid') : !id.startsWith('grid'));
   const [libCoin, setLibCoin] = useState<string>();
   const [libLeg, setLibLeg] = useState<number | undefined>(p.leg);
   const [edit, setEdit] = useState<Edit>();
@@ -218,6 +222,13 @@ export function StrategiesPanel(p: {
     });
 
   useEffect(() => {
+    if (!p.choose?.n) return;
+    setFamily(p.choose.family);
+    setDraft(undefined);
+    setEdit(undefined);
+  }, [p.choose?.n]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
     if (!p.prefill?.n) return;
     setText(p.prefill.text);
     doDraft(p.prefill.text);
@@ -243,6 +254,12 @@ export function StrategiesPanel(p: {
     setJsonText(undefined);
     setEdit(fromSpec(item.spec, item.id));
   };
+  // once the templates are in, the picked option starts on its first template; the Style list switches between its siblings
+  useEffect(() => {
+    if (!family || lib.state !== 'ok' || (edit && inFamily(edit.templateId))) return;
+    const first = lib.data.items.find((i) => inFamily(i.id));
+    if (first) pick(first);
+  }, [family, lib]); // eslint-disable-line react-hooks/exhaustive-deps
   const setField = (group: 'fields' | 'limits', key: string, value: string) => setEdit((e) => (e ? { ...e, [group]: { ...e[group], [key]: value } } : e));
   const applyJson = () => {
     try {
@@ -293,14 +310,15 @@ export function StrategiesPanel(p: {
   const showRun = p.view !== 'build';
   const active = list.state === 'ok' ? list.rows.filter((r) => r.state === 'running' || r.state === 'paused').length : 0;
   if (p.view === 'running' && list.state === 'ok' && list.rows.length === 0) return null;
+  if (p.view === 'build' && !family && !draft && !edit) return null;
 
   return (
     <section className="card wide" aria-labelledby="strat-h">
       {showNew ? (
         <>
-          <h2 id="strat-h">Start a strategy</h2>
+          <h2 id="strat-h">{family === 'grid' ? 'Grid bot' : family === 'dca' ? 'DCA bot' : 'Strategy'}</h2>
           <p className="muted small">
-            Each strategy runs on its own leg, so its losses stay on that leg. Pick a template or describe one in the box above; the agent checks every number against your order policy and contract policy, and nothing starts until you sign the exact spec shown here.
+            Each strategy runs on its own leg, so its losses stay on that leg. The agent checks every number against your order policy and contract policy, and nothing starts until you sign the exact spec shown here.
           </p>
         </>
       ) : (
@@ -310,11 +328,9 @@ export function StrategiesPanel(p: {
       {how && lib.state === 'ok' && <HowItWorks id={how} coin={lib.data.coin} mid={lib.data.mid} onClose={() => setHow(undefined)} />}
       <div className={`strat-grid${p.view ? ' single' : ''}`}>
         {showNew && <div>
-          <h3>New strategy</h3>
-          <h4>Start from a template</h4>
-          {lib.state === 'loading' && <p className="state">Reading templates…</p>}
+          {lib.state === 'loading' && family && <p className="state">Reading templates…</p>}
           {lib.state === 'error' && <p className="state err" role="alert">{lib.message}</p>}
-          {lib.state === 'ok' && (
+          {lib.state === 'ok' && family && (
             <>
               <div className="fields inline">
                 <label>
@@ -329,22 +345,20 @@ export function StrategiesPanel(p: {
                     {[...new Set([...lib.data.freeLegs, lib.data.leg])].sort((a, b) => a - b).map((l) => <option key={l} value={l}>Leg {l}</option>)}
                   </select>
                 </label>
+                <label>
+                  Style
+                  <span className="row-i">
+                    <select value={edit?.templateId ?? ''} onChange={(e) => { const it = lib.data.items.find((i) => i.id === e.target.value); if (it) pick(it); }}>
+                      {lib.data.items.filter((i) => inFamily(i.id)).map((i) => <option key={i.id} value={i.id}>{i.title}</option>)}
+                    </select>
+                    {edit && <button type="button" className="easy-info inline" aria-label="How this strategy works" title="How it works" onClick={() => setHow(edit.templateId)}>i</button>}
+                  </span>
+                </label>
               </div>
               <p className="muted small">
-                {lib.data.coin} is at {usd(lib.data.mid)}; every size below is worked out from that price.
+                {lib.data.items.find((i) => i.id === edit?.templateId)?.blurb} {lib.data.coin} is at {usd(lib.data.mid)}; every size is worked out from that price.
                 {lib.data.freeLegs.length === 0 && ' No leg is free for a strategy: register one on the Legs tab first.'}
               </p>
-              <fieldset className="tpl-list">
-                <legend className="sr">Template</legend>
-                {lib.data.items.map((i) => (
-                  <label key={i.id} className={`tpl${edit?.templateId === i.id ? ' on' : ''}`}>
-                    <input type="radio" name="tpl" checked={edit?.templateId === i.id} onChange={() => pick(i)} />
-                    <strong>{i.title}</strong>
-                    <span className="muted small">{i.blurb}</span>
-                    <button type="button" className="small-btn" style={{ justifySelf: 'start', marginTop: 6 }} onClick={(e) => (e.preventDefault(), e.stopPropagation(), setHow(i.id))}>How it works</button>
-                  </label>
-                ))}
-              </fieldset>
             </>
           )}
 

@@ -98,6 +98,7 @@ export function App({ auth }: { auth: Auth }) {
     if (to) go(`${to}${route.params.toString() ? `?${route.params}` : ''}`);
   }, [route.tab]); // eslint-disable-line react-hooks/exhaustive-deps
   const [selLeg, setSelLeg] = useState<number>();
+  const [strategyChoose, setStrategyChoose] = useState<{ family: 'grid' | 'dca'; n: number }>({ family: 'grid', n: 0 }); // the Grid or DCA option picked on the Easy screen
   const [strategyAsk, setStrategyAsk] = useState({ text: '', n: 0 }); // words the Easy box routed to the strategy drafter
 
   const teeMode = inTeeMode(tee);
@@ -526,8 +527,8 @@ export function App({ auth }: { auth: Auth }) {
           {route.tab === 'easy' && (
             <Panel id="easy">
               <StrategiesPanel view="running" legs={legs} owner={owner} canSign={canSign} events={mine} sign={signCommand} tick={view?.snapshot.at} />
-              <EasyTab view={view} owner={owner} locked={locked} why={why} sign={signCommand} session={session} run={run} done={done} onGo={go} onStrategy={(text) => setStrategyAsk((a) => ({ text, n: a.n + 1 }))} />
-              <StrategiesPanel embedded view="build" prefill={strategyAsk} legs={legs} owner={owner} canSign={canSign} events={mine} sign={signCommand} tick={view?.snapshot.at} leg={route.params.get('leg') === null ? undefined : Number(route.params.get('leg'))} />
+              <EasyTab view={view} owner={owner} locked={locked} why={why} sign={signCommand} session={session} run={run} done={done} onGo={go} onStrategy={(text) => setStrategyAsk((a) => ({ text, n: a.n + 1 }))} onStrategyChoose={(family) => setStrategyChoose((c) => ({ family, n: c.n + 1 }))} />
+              <StrategiesPanel embedded view="build" choose={strategyChoose} prefill={strategyAsk} legs={legs} owner={owner} canSign={canSign} events={mine} sign={signCommand} tick={view?.snapshot.at} leg={route.params.get('leg') === null ? undefined : Number(route.params.get('leg'))} />
             </Panel>
           )}
 

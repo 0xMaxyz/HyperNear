@@ -825,3 +825,13 @@ details.fees tr.est { color: var(--muted); }
 .easy-tile { display: grid; gap: 2px; text-align: left; align-content: start; min-height: 56px; padding: 8px 12px; }
 .easy-tile b { font-size: 14px; }
 .strat-grid.single { grid-template-columns: minmax(0, 1fr); }
+
+/* ---------- Easy: option tiles with an (i) button, the details step ---------- */
+.easy-tile-wrap { position: relative; display: grid; }
+.easy-tile-wrap .easy-tile { padding-right: 36px; }
+.easy-tile[aria-pressed='true'] { border-color: var(--accent, var(--info)); background: var(--surface-2); }
+.easy-info { width: 24px; min-width: 24px; height: 24px; min-height: 24px !important; padding: 0 !important; border-radius: 50%; font: italic 700 13px Georgia, serif; line-height: 1; display: inline-grid; place-items: center; }
+.easy-tile-wrap .easy-info { position: absolute; top: 6px; right: 6px; }
+.row-i { display: flex; gap: 6px; align-items: center; }
+.row-i select { flex: 1; min-width: 0; }
+.easy-step { border: 1px solid var(--line); border-radius: 8px; padding: 0.75rem 1rem; margin: 0.5rem 0; background: var(--surface); }
