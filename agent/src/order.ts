@@ -113,7 +113,7 @@ const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object
 const isDec = (v: unknown): v is string => typeof v === 'string' && /^\d+(\.\d+)?$/.test(v) && Number(v) > 0;
 const cents = (x: number) => Math.round(x * 100) / 100;
 
-function legAndMarket(ctx: OrderContext, leg: unknown, coin: unknown, errors: string[]) {
+export function legAndMarket(ctx: OrderContext, leg: unknown, coin: unknown, errors: string[]) {
   const { snapshot, policy } = ctx;
   if (!Number.isInteger(leg) || (leg as number) < 0) return void errors.push('leg must be a non-negative integer');
   const l = snapshot.legs.find((x) => x.leg === leg);

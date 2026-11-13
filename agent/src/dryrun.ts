@@ -295,6 +295,13 @@ export function buildDryRunDeps(fixtureName = 'hedged', opts: { replayStartMs?: 
         bus.emit('hedge', { owner, op: action, coin, simulated: true, orders });
         return { plan, simulatedFills: orders.map((o) => ({ leg: o.leg, oid: 0, totalSz: o.size, avgPx: String(mid) })) };
       },
+      async hedgePair(owner, spec, plan) {
+        book.pair(spec.coin, plan.isBuyA, plan.sizeA, plan.sizeB, plan.leverageA, plan.leverageB);
+        const px = plan.mid;
+        const legsOut = [0, 1].map((leg) => ({ leg, isBuy: leg === 0 ? plan.isBuyA : !plan.isBuyA, requested: leg === 0 ? plan.sizeA : plan.sizeB, filled: Number(leg === 0 ? plan.sizeA : plan.sizeB), avgPx: px }));
+        bus.emit('hedge', { owner, op: 'pair', coin: spec.coin, status: 'filled', simulated: true, legs: legsOut });
+        return { simulated: true, status: 'filled', legs: legsOut, unwind: [], spreadBps: 0, book: { bid: px, ask: px, spreadBps: 0 }, open: [Number(plan.sizeA), Number(plan.sizeB)], notes: [] };
+      },
       async order(owner, spec, plan) {
         bus.emit('order', { owner, op: 'place', leg: spec.leg, spec, simulated: true });
         return book.order(spec, plan);

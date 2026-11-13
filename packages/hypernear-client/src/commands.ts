@@ -15,8 +15,9 @@ export type DecisionAction = 'hold' | 'close_both' | 'reduce_hedge' | 'add_hedge
  * startSession: coin "", ratio "0", specHash = specHash(SessionSpec) sent beside the command (owner only, never a session key).
  * endSession: coin = the session key's address, ratio "0", zero specHash; signed by the owner or by that session key.
  * modifyOrder: coin "", ratio "0", specHash = specHash({leg, coin, oid, limitPx}): moves one resting limit order to a new price.
- * placeOrder / cancelOrder / modifyOrder may also be signed by a live session key of `owner` (session.ts). */
-export type CommandAction = 'openHedge' | 'closeHedge' | DecisionAction | 'setDecisionMode' | 'prepareAgents' | 'reject' | 'startStrategy' | 'pauseStrategy' | 'stopStrategy' | 'placeOrder' | 'cancelOrder' | 'modifyOrder' | 'startSession' | 'endSession' | 'continue_strategy' | 'pause_strategy' | 'adjust_strategy';
+ * placeHedge: coin "", ratio "0", specHash = specHash(HedgePairSpec) (agent/src/hedgePair.ts): opens a new hedge, leg 0 and leg 1 at market together.
+ * placeOrder / cancelOrder / modifyOrder (and placeHedge, when the session lists it) may also be signed by a live session key of `owner` (session.ts). */
+export type CommandAction = 'openHedge' | 'closeHedge' | DecisionAction | 'setDecisionMode' | 'prepareAgents' | 'reject' | 'startStrategy' | 'pauseStrategy' | 'stopStrategy' | 'placeOrder' | 'cancelOrder' | 'modifyOrder' | 'placeHedge' | 'startSession' | 'endSession' | 'continue_strategy' | 'pause_strategy' | 'adjust_strategy';
 
 export interface Command {
   owner: Hex;

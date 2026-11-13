@@ -125,6 +125,12 @@ export function createDryBook(snap: OwnerSnapshot) {
       const group = newGroup();
       for (const o of plan.orders) fill(o.leg, o.coin, o.isBuy, Number(o.size), action === 'openHedge' ? plan.leverage : undefined, action === 'openHedge' ? 'hedgeOpen' : 'hedgeClose', group);
     },
+    /** both legs of a hedge pair open together, one cloid group, each with its own leverage */
+    pair(coin: string, isBuyA: boolean, sizeA: string, sizeB: string, levA: { value: number; isCross: boolean }, levB: { value: number; isCross: boolean }) {
+      const group = newGroup();
+      fill(0, coin, isBuyA, Number(sizeA), levA, 'hedgeOpen', group);
+      fill(1, coin, !isBuyA, Number(sizeB), levB, 'hedgeOpen', group);
+    },
     order(spec: OrderSpec, plan: OrderPlan) {
       const leverage = plan.leverage;
       const m = mid(spec.coin);

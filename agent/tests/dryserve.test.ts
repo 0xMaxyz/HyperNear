@@ -272,6 +272,31 @@ describe('--dry-run --serve: signed orders', () => {
     expect((await post(`${base}/order/place`, await withSpec('cancelOrder', good))).status).toBe(400); // wrong action for the route
   });
 
+  it('a new hedged pair opens both legs in one signed action, each at its own leverage', async () => {
+    const base = await serve('hedged');
+    const spec = { coin: 'BTC', side: 'short', size: '0.0004', ratio: '0.5', leverageA: 3, leverageB: 5, isCrossB: false };
+    // both legs hold the fixture hedge: a new pair is refused until they are flat
+    const early = await post(`${base}/hedge/pair`, await withSpec('placeHedge', spec));
+    expect(early.status).toBe(422);
+    expect((await early.json()).error).toMatch(/already holds BTC/);
+    for (const [leg, side] of [[0, 'sell'], [1, 'buy']] as const) {
+      const size = leg === 0 ? '0.0004' : '0.0002';
+      expect((await post(`${base}/order/place`, await withSpec('placeOrder', { leg, coin: 'BTC', side, type: 'market', size, reduceOnly: true }))).status).toBe(200);
+    }
+    const forged = { ...(await withSpec('placeHedge', spec)), spec: { ...spec, size: '0.0006' } };
+    expect((await post(`${base}/hedge/pair`, forged)).status).toBe(401);
+    const opened = await post(`${base}/hedge/pair`, await withSpec('placeHedge', spec));
+    expect(opened.status).toBe(200);
+    expect(await opened.json()).toMatchObject({ simulated: true, status: 'filled', legs: [{ leg: 0, isBuy: false, filled: 0.0004 }, { leg: 1, isBuy: true, filled: 0.0002 }] });
+    const [l0, l1] = (await legs(base)).filter((l) => l.leg <= 1).map((l) => l.clearinghouse.assetPositions[0]!.position);
+    expect(l0).toMatchObject({ szi: '-0.0004', leverage: { type: 'cross', value: 3 } });
+    expect(l1).toMatchObject({ szi: '0.0002', leverage: { type: 'isolated', value: 5 } });
+    // they are one hedge in Positions, and the wrong action for the route is refused
+    const { positions } = await (await fetch(`${base}/positions/${OWNER}`)).json();
+    expect(positions.map((p: any) => [p.kind, p.legs.map((x: any) => x.leg)])).toEqual([['hedge', [0, 1]]]);
+    expect((await post(`${base}/hedge/pair`, await withSpec('placeOrder', spec))).status).toBe(400);
+  });
+
   it('a hedge opens at the leverage and margin mode the owner signed for leg 1', async () => {
     const base = await serve('hedged');
     // flatten leg 1 (reduce-only buy of its whole short), then hedge leg 0 again with a different setting

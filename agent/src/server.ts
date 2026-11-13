@@ -37,6 +37,7 @@ import { parseSessionSpec, publicSession, sessionPolicy, SessionStore } from './
 import { DEFAULT_GUARD_CONFIG, evaluateGuard, type GuardConfig } from './guard.ts';
 import { GuardLoop } from './guardLoop.ts';
 import { HedgeRefused, Hedger, parseHedgeSpec, type HedgeSpec } from './hedge.ts';
+import { HedgePairExecutor, validateHedgePairSpec, type HedgePairPlan, type HedgePairSpec } from './hedgePair.ts';
 import { OrderExecutor, OrderRefused } from './orders.ts';
 import { validateCancelSpec, validateModifySpec, validateOrderSpec, type CancelSpec, type ModifySpec, type OrderPlan, type OrderSpec, type RestingOrder } from './order.ts';
 import { parseCloid } from './cloid.ts';
@@ -66,6 +67,8 @@ export interface Deps {
   hedger: Hedger;
   /** signed single orders on one leg (placeOrder / cancelOrder); the dry run simulates them instead */
   orders?: OrderExecutor;
+  /** new hedged position, both legs at once (placeHedge) */
+  pairs?: HedgePairExecutor;
   relayer: Relayer;
   bus: EventBus;
   replay: ReplayCache;
@@ -110,6 +113,7 @@ export interface DryRunHooks {
   order?: (owner: Hex, spec: OrderSpec, plan: OrderPlan) => Promise<Record<string, unknown>>;
   cancel?: (owner: Hex, spec: CancelSpec) => Promise<Record<string, unknown>>;
   modify?: (owner: Hex, spec: ModifySpec) => Promise<Record<string, unknown>>;
+  hedgePair?: (owner: Hex, spec: HedgePairSpec, plan: HedgePairPlan) => Promise<Record<string, unknown>>;
   openOrders?: (owner: Hex) => { orders: Record<string, unknown>[]; twaps: Record<string, unknown>[] };
   relay: (body: unknown) => Promise<Record<string, unknown>>;
   /** simulated deposit: adds test USDC to a leg's spot balance */
@@ -332,6 +336,29 @@ export function handler(d: Deps) {
         if (!d.orders) throw new HttpError(503, 'orders off');
         return reply(200, await d.orders.cancel(cmd.owner, v.spec, v.asset));
       }
+      if (req.method === 'POST' && url.pathname === '/hedge/pair') {
+        const body = (await readJson(req)) as { spec?: unknown };
+        const { cmd, session } = await verifySessionCommand(verifier(d), body, 'placeHedge', sessions);
+        if (specHashOfJson(body.spec) !== cmd.specHash) throw new HttpError(401, 'command.specHash must be the specHash of the hedge spec (the owner signed another spec)');
+        await assertOptedIn(d, cmd.owner);
+        const v = validateHedgePairSpec(
+          body.spec,
+          {
+            snapshot: await d.legs.snapshot(cmd.owner),
+            policy: sessionPolicy(d.config.policy, session),
+            busyLegs: (d.strategies?.list(cmd.owner) ?? []).filter((s) => s.state !== 'stopped').map((s) => s.leg),
+          },
+          { combinedCap: Boolean(session) },
+        );
+        if (!v.ok) throw new HttpError(422, v.errors.join('; '));
+        d.bus.emit('command', { ...cmd, ...(session && { session: session.key }) });
+        if (d.dryRun) {
+          if (!d.dryRun.hedgePair) throw new HttpError(501, 'dry run has no order book');
+          return reply(200, await d.dryRun.hedgePair(cmd.owner, v.spec, v.plan));
+        }
+        if (!d.pairs) throw new HttpError(503, 'hedge pairs off');
+        return reply(200, await d.pairs.open(cmd.owner, v.spec, v.plan));
+      }
       if (req.method === 'POST' && url.pathname === '/session/start') {
         const body = (await readJson(req)) as { spec?: unknown };
         const cmd = await verifyCommand(verifier(d), body, 'startSession');
@@ -550,7 +577,7 @@ export function buildDeps(config: AgentConfig, tee?: TeeRuntime): Deps {
   });
   const hedger = new Hedger(legs, config.policy, bus);
   const d: Deps = {
-    config, client, legs, bus, guardConfig, guardLoop, scope, tee, annualVol: config.guard.annualVol, hedger, orders: new OrderExecutor(legs, config.policy, bus),
+    config, client, legs, bus, guardConfig, guardLoop, scope, tee, annualVol: config.guard.annualVol, hedger, orders: new OrderExecutor(legs, config.policy, bus), pairs: new HedgePairExecutor(legs, config.policy, bus),
     replay: new ReplayCache(),
     relayer: new Relayer(client, new RateLimiter(config.relayPerMinute), hlPoster(config.network), bus),
   };

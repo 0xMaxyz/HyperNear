@@ -6,7 +6,7 @@ import type { Session, SessionStore } from './sessions.ts';
 
 export const MAX_COMMAND_TTL_SEC = 60;
 /** Actions whose command signs the hash of a spec sent beside it. Every other action signs a zero hash (openHedge may bind a hedge spec: see `optionalSpec`). */
-export const SPEC_ACTIONS: ReadonlySet<CommandAction> = new Set<CommandAction>(['startStrategy', 'placeOrder', 'cancelOrder', 'modifyOrder', 'startSession']);
+export const SPEC_ACTIONS: ReadonlySet<CommandAction> = new Set<CommandAction>(['startStrategy', 'placeOrder', 'cancelOrder', 'modifyOrder', 'placeHedge', 'startSession']);
 const ADDR = /^0x[0-9a-f]{40}$/;
 const SIG = /^0x[0-9a-fA-F]{130}$/;
 const BYTES32 = /^0x[0-9a-f]{64}$/;
