@@ -36,7 +36,7 @@ import { ReplayCache, verifyCommand, verifySessionCommand } from './commands.ts'
 import { parseSessionSpec, publicSession, sessionPolicy, SessionStore } from './sessions.ts';
 import { DEFAULT_GUARD_CONFIG, evaluateGuard, type GuardConfig } from './guard.ts';
 import { GuardLoop } from './guardLoop.ts';
-import { HedgeRefused, Hedger, parseHedgeSpec, type HedgeSpec } from './hedge.ts';
+import { HedgeRefused, Hedger, parseCloseSpec, parseHedgeSpec, type HedgeSpec } from './hedge.ts';
 import { DailyBudget, EXAMPLE_PROMPTS, MAX_TRADE_TEXT, claudeIntentAsk, intentDrafter, type TradeDraft } from './trade/intent.ts';
 import { HedgePairExecutor, validateHedgePairSpec, type HedgePairPlan, type HedgePairSpec } from './hedgePair.ts';
 import { OrderExecutor, OrderRefused } from './orders.ts';
@@ -116,7 +116,7 @@ export interface TeeRuntime {
 }
 
 export interface DryRunHooks {
-  hedge: (action: 'openHedge' | 'closeHedge', owner: Hex, coin: string, ratio: number, spec?: HedgeSpec) => Promise<Record<string, unknown>>;
+  hedge: (action: 'openHedge' | 'closeHedge', owner: Hex, coin: string, ratio: number, spec?: HedgeSpec, legs?: number[]) => Promise<Record<string, unknown>>;
   /** validated order / cancel specs, simulated against the fixture book */
   order?: (owner: Hex, spec: OrderSpec, plan: OrderPlan) => Promise<Record<string, unknown>>;
   cancel?: (owner: Hex, spec: CancelSpec) => Promise<Record<string, unknown>>;
@@ -304,13 +304,15 @@ export function handler(d: Deps) {
         const open = url.pathname === '/hedge/open';
         const body = (await readJson(req)) as { spec?: unknown };
         // an open may carry the leg 1 leverage choice; then the command signs its hash, otherwise a zero hash
-        const cmd = await verifyCommand(verifier(d), body, open ? 'openHedge' : 'closeHedge', open && body.spec !== undefined);
+        const cmd = await verifyCommand(verifier(d), body, open ? 'openHedge' : 'closeHedge', body.spec !== undefined);
         const hedgeSpec = open && body.spec !== undefined ? parseHedgeSpec(body.spec) : undefined;
-        if (hedgeSpec && specHashOfJson(body.spec) !== cmd.specHash) throw new HttpError(401, 'command.specHash must be the specHash of the hedge spec (the owner signed another spec)');
+        // a close may name the two legs of the hedge it closes (any two legs); then the command signs the hash of that spec
+        const closeLegs = !open && body.spec !== undefined ? parseCloseSpec(body.spec) : undefined;
+        if ((hedgeSpec || closeLegs) && specHashOfJson(body.spec) !== cmd.specHash) throw new HttpError(401, 'command.specHash must be the specHash of the spec (the owner signed another spec)');
         await assertOptedIn(d, cmd.owner);
         d.bus.emit('command', { ...cmd });
-        if (d.dryRun) return reply(200, await d.dryRun.hedge(open ? 'openHedge' : 'closeHedge', cmd.owner, cmd.coin, Number(cmd.ratio), hedgeSpec));
-        const out = open ? await d.hedger.openHedge(cmd.owner, cmd.coin, Number(cmd.ratio), hedgeSpec) : await d.hedger.closeHedge(cmd.owner, cmd.coin);
+        if (d.dryRun) return reply(200, await d.dryRun.hedge(open ? 'openHedge' : 'closeHedge', cmd.owner, cmd.coin, Number(cmd.ratio), hedgeSpec, closeLegs));
+        const out = open ? await d.hedger.openHedge(cmd.owner, cmd.coin, Number(cmd.ratio), hedgeSpec) : await d.hedger.closeHedge(cmd.owner, cmd.coin, closeLegs);
         return reply(200, out);
       }
       if (req.method === 'POST' && (url.pathname === '/order/place' || url.pathname === '/order/cancel')) {

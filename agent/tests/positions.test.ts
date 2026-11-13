@@ -78,7 +78,7 @@ const hedged = (u0: string, u1: string) => {
   s.legs[1]!.clearinghouse.assetPositions[0]!.position.unrealizedPnl = u1;
   return s;
 };
-const legData = (leg: number, over: Partial<LegHistory>): LegHistory => ({ leg, address: snap(ch()).legs[leg]!.address, fills: [], funding: [], ledger: [], takerRate: 0.00045, activation: 'paid', setupFeeUsd: 1, ...over });
+const legData = (leg: number, over: Partial<LegHistory>): LegHistory => ({ leg, address: (snap(ch()).legs[leg]?.address ?? `0x${'0'.repeat(39)}${leg}`) as `0x${string}`, fills: [], funding: [], ledger: [], takerRate: 0.00045, activation: 'paid', setupFeeUsd: 1, ...over });
 
 describe('openComposites', () => {
   it('pairs legs 0 and 1 into a hedge; position PnL adds every line, the setup fee once per leg', () => {
@@ -114,6 +114,46 @@ describe('openComposites', () => {
     expect(c).toMatchObject({ kind: 'one-sided', legs: [{ leg: 0, activationFee: 0, realized: 0 }] });
     const [only] = openComposites(s, [legData(0, { fills: [second] })], {}, 9_000);
     expect(only!.totals.activationFee).toBe(1);
+  });
+
+  describe('hedges on any two legs, several coins at once', () => {
+    const P = (coin: string, szi: string) => ({ coin, szi });
+    /** legs by number, each with its positions; ETH next to BTC */
+    const many = (legsSpec: Record<number, { coin: string; szi: string }[]>) => {
+      const base = snap(ch(), ch());
+      return {
+        ...base,
+        legs: Object.entries(legsSpec).map(([leg, positions]) => ({ ...base.legs[0]!, leg: Number(leg), address: `0x${'0'.repeat(39)}${leg}` as `0x${string}`, clearinghouse: ch({ positions }) })),
+        market: { assets: [...base.market.assets, { name: 'ETH', asset: 4, szDecimals: 4, maxLeverage: 25 }], mids: { BTC: '100000', ETH: '3000' } },
+      };
+    };
+    const shape = (s: ReturnType<typeof many>, data: LegHistory[] = []) => openComposites(s, data).map((c) => [c.coin, c.kind, c.legs.map((l) => l.leg), c.hedge]);
+
+    it('a long on leg 0 and a short on leg 2 are a hedge (not only legs 0 and 1)', () => {
+      expect(shape(many({ 0: [P('BTC', '0.0004')], 1: [], 2: [P('BTC', '-0.0003')] }))).toEqual([['BTC', 'hedge', [0, 2], { longLeg: 0, shortLeg: 2 }]]);
+    });
+
+    it('two coins: each coin pairs its own legs, so a header "Hedge" is never shared across markets', () => {
+      const s = many({ 0: [P('BTC', '0.0004'), P('ETH', '-0.1')], 1: [P('BTC', '-0.0004')], 2: [P('ETH', '0.1')] });
+      expect(shape(s)).toEqual([['BTC', 'hedge', [0, 1], { longLeg: 0, shortLeg: 1 }], ['ETH', 'hedge', [0, 2], { longLeg: 2, shortLeg: 0 }]]);
+    });
+
+    it('long, short, short: one hedge and the extra short stays one-sided', () => {
+      expect(shape(many({ 0: [P('BTC', '0.0004')], 1: [P('BTC', '-0.0002')], 2: [P('BTC', '-0.0002')] })).map((x) => [x[1], x[2]])).toEqual([['hedge', [0, 1]], ['one-sided', [2]]]);
+    });
+
+    it('legs opened by one action (same cloid group) pair first, even when a lower leg is free', () => {
+      const g = 'aabbccddee';
+      const open = (leg: number, side: 'B' | 'A', start: string) => legData(leg, { fills: [fill({ side, sz: '0.0004', start, cloid: makeCloid('hedgeOpen', g) })] });
+      const s = many({ 0: [P('BTC', '0.0004')], 1: [P('BTC', '-0.0004')], 2: [P('BTC', '0.0004')] });
+      // legs 1 and 2 were opened together (leg 0's long is unrelated): they pair, leg 0 stays one-sided
+      const data = [legData(0, { fills: [fill({ side: 'B', sz: '0.0004', start: '0' })] }), open(1, 'A', '0'), open(2, 'B', '0')];
+      expect(shape(s, data).map((x) => [x[1], x[2]])).toEqual([['one-sided', [0]], ['hedge', [1, 2]]]);
+    });
+
+    it('a strategy leg (3 and up) never pairs with the owners legs', () => {
+      expect(shape(many({ 0: [P('BTC', '0.0004')], 3: [P('BTC', '-0.0004')] })).map((x) => [x[1], x[2]])).toEqual([['one-sided', [0]], ['strategy', [3]]]);
+    });
   });
 
   it('the same side on both legs is not a hedge', () => {

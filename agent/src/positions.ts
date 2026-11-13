@@ -178,6 +178,8 @@ export interface LegPosition {
   leverage: { type: 'cross' | 'isolated'; value: number };
   marginUsed: number;
   openedAt: number | null;
+  /** cloid group of the order that opened it: legs opened together share it */
+  openGroup?: string;
   /** profit or loss still open, as HL computes it from the mark */
   unrealized: number;
   /** closed by partial reductions of this position so far */
@@ -219,6 +221,8 @@ export interface Composite {
   /** hedge: legs 0 and 1 opposite; one-sided: a single leg; strategy: a strategy leg (3 and up) */
   kind: 'hedge' | 'one-sided' | 'strategy';
   legs: LegPosition[];
+  /** for a hedge: which leg is the long and which the short */
+  hedge?: { longLeg: number; shortLeg: number };
   /** signed: long minus short, in base units */
   netSize: number;
   openedAt: number | null;
@@ -227,6 +231,8 @@ export interface Composite {
   nextFundingAt: number;
 }
 
+/** Legs from here on belong to strategies, not to the owner's own trading. */
+export const STRATEGY_LEG_FROM = 3;
 export const nextFundingAt = (now: number) => Math.floor(now / HOUR_MS) * HOUR_MS + HOUR_MS;
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 
@@ -262,6 +268,7 @@ export function openComposites(s: OwnerSnapshot, data: LegHistory[], rates: Fund
         leverage: p.leverage,
         marginUsed: Number(p.marginUsed),
         openedAt: since,
+        ...(cycle?.openGroup ? { openGroup: cycle.openGroup } : {}),
         unrealized,
         realized,
         fees,
@@ -275,17 +282,29 @@ export function openComposites(s: OwnerSnapshot, data: LegHistory[], rates: Fund
       });
     }
   }
-  const take = (leg: number, coin: string) => legPositions.find((p) => p.leg === leg && p.coin === coin);
+  // a hedge is a long and a short in the same coin on two different legs (any two; strategy legs 3+ never pair). Legs opened together
+  // (same cloid group) pair first, then the lowest legs, so several positions in several coins each find their other half.
   const used = new Set<LegPosition>();
   const groups: { kind: Composite['kind']; legs: LegPosition[] }[] = [];
-  for (const p of legPositions.filter((x) => x.leg === 0)) {
-    const other = take(1, p.coin);
-    if (other && other.side !== p.side) {
-      groups.push({ kind: 'hedge', legs: [p, other] });
-      used.add(p).add(other);
+  const own = legPositions.filter((p) => p.leg < STRATEGY_LEG_FROM).sort((a, b) => a.leg - b.leg);
+  for (const coin of new Set(own.map((p) => p.coin))) {
+    const longs = own.filter((p) => p.coin === coin && p.side === 'long');
+    const shorts = own.filter((p) => p.coin === coin && p.side === 'short');
+    const pair = (l: LegPosition, s: LegPosition) => {
+      groups.push({ kind: 'hedge', legs: [l, s].sort((a, b) => a.leg - b.leg) });
+      used.add(l).add(s);
+    };
+    for (const l of longs) {
+      const s = l.openGroup ? shorts.find((x) => !used.has(x) && x.openGroup === l.openGroup) : undefined;
+      if (s) pair(l, s);
+    }
+    for (const l of longs) {
+      const s = !used.has(l) ? shorts.find((x) => !used.has(x)) : undefined;
+      if (s) pair(l, s);
     }
   }
-  for (const p of legPositions) if (!used.has(p)) groups.push({ kind: p.leg >= 3 ? 'strategy' : 'one-sided', legs: [p] });
+  for (const p of legPositions) if (!used.has(p)) groups.push({ kind: p.leg >= STRATEGY_LEG_FROM ? 'strategy' : 'one-sided', legs: [p] });
+  groups.sort((a, b) => a.legs[0]!.leg - b.legs[0]!.leg);
   return groups.map(({ kind, legs }) => {
     const coin = legs[0]!.coin;
     const closeFeesEst = sum(legs.map((p) => p.size * p.markPx * (data.find((d) => d.leg === p.leg)?.takerRate ?? DEFAULT_TAKER_RATE)));
@@ -308,6 +327,7 @@ export function openComposites(s: OwnerSnapshot, data: LegHistory[], rates: Fund
       coin,
       kind,
       legs,
+      ...(kind === 'hedge' ? { hedge: { longLeg: legs.find((p) => p.side === 'long')!.leg, shortLeg: legs.find((p) => p.side === 'short')!.leg } } : {}),
       netSize: sum(legs.map((p) => (p.side === 'long' ? p.size : -p.size))),
       openedAt: opened.length ? Math.min(...opened) : null,
       totals,

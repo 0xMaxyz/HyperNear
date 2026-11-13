@@ -86,12 +86,22 @@ export function planOpenHedge(s: OwnerSnapshot, coin: string, ratio: number, pol
   };
 }
 
-/** Reduce-only IOC that flattens `coin` on legs 0 and 1. */
-export function planCloseHedge(s: OwnerSnapshot, coin: string, policy: OrderPolicy): ClosePlan {
+/** Exact-shape check of the optional close spec the owner signed: the two legs of the hedge to close. */
+export function parseCloseSpec(v: unknown): number[] {
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) throw new HedgeRefused('close spec must be a JSON object');
+  const o = v as Record<string, unknown>;
+  for (const k of Object.keys(o)) if (k !== 'legs') throw new HedgeRefused(`${k} is not a close spec field`);
+  const legs = o.legs;
+  if (!Array.isArray(legs) || legs.length !== 2 || !legs.every((x) => Number.isInteger(x) && x >= 0) || legs[0] === legs[1]) throw new HedgeRefused('legs must be two different leg numbers');
+  return legs as number[];
+}
+
+/** Reduce-only IOC that flattens `coin` on the hedge's legs (default legs 0 and 1; the page passes the two legs of the hedge it shows). */
+export function planCloseHedge(s: OwnerSnapshot, coin: string, policy: OrderPolicy, legs: number[] = [0, 1]): ClosePlan {
   const m = marketOf(s, coin);
   if (!m) return { ok: false, reason: `no market data for ${coin}` };
   const orders: PlannedOrder[] = [];
-  for (const l of s.legs.filter((x) => x.leg === 0 || x.leg === 1)) {
+  for (const l of s.legs.filter((x) => legs.includes(x.leg))) {
     const szi = Number(position(l.clearinghouse, coin)?.szi ?? 0);
     if (szi === 0) continue;
     const isBuy = szi < 0;
@@ -182,9 +192,9 @@ export class Hedger {
     return { plan, leverage, order: res, fill };
   }
 
-  async closeHedge(owner: Hex, coin: string) {
+  async closeHedge(owner: Hex, coin: string, legs?: number[]) {
     const snap = await this.legs.snapshot(owner);
-    const plan = planCloseHedge(snap, coin, this.policy);
+    const plan = planCloseHedge(snap, coin, this.policy, legs);
     if (!plan.ok) {
       this.bus?.emit('hedge', { owner, op: 'close', coin, refused: plan.reason });
       throw new HedgeRefused(plan.reason);

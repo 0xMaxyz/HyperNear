@@ -299,9 +299,9 @@ export function buildDryRunDeps(fixtureName = 'hedged', opts: { replayStartMs?: 
     }),
     chatLimits: { perIp: new RateLimiter(100), perOwner: new RateLimiter(100), daily: new DailyBudget(10_000) },
     dryRun: {
-      async hedge(action, owner, coin, ratio, spec) {
+      async hedge(action, owner, coin, ratio, spec, closeLegs) {
         const s = await legs.snapshot(owner);
-        const plan = action === 'openHedge' ? planOpenHedge(s, coin, ratio, config.policy, spec) : planCloseHedge(s, coin, config.policy);
+        const plan = action === 'openHedge' ? planOpenHedge(s, coin, ratio, config.policy, spec) : planCloseHedge(s, coin, config.policy, closeLegs);
         if (!plan.ok) throw new HedgeRefused(plan.reason);
         const orders = 'order' in plan ? [plan.order] : plan.orders;
         const mid = Number(s.market.mids[coin]);
