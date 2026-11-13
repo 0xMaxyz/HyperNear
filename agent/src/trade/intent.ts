@@ -172,13 +172,6 @@ export async function intentToDraft(i: TradeIntent, owner: Hex, d: Pick<IntentDe
   const dp = asset.szDecimals;
   const assumed: string[] = [];
   const ready = snapshot.legs.filter((l) => l.agent?.approvedAt && !busyLegs.includes(l.leg));
-  const legNo = (fallback: number | undefined): number | undefined => {
-    if (i.leg >= 0) return i.leg;
-    if (fallback !== undefined) return fallback;
-    const first = ready[0]?.leg;
-    if (first !== undefined) assumed.push(`leg ${first} (you did not name a leg)`);
-    return first;
-  };
   const px = (x: number) => roundPx(x, dp);
   const heldOn = snapshot.legs.filter((l) => Number(position(l.clearinghouse, i.coin)?.szi ?? 0) !== 0);
   const need = (what: string[]) => fail([`Tell me ${what.map((w) => MISSING_TEXT[w] ?? w).join(', ')}.`], what);
@@ -200,9 +193,13 @@ export async function intentToDraft(i: TradeIntent, owner: Hex, d: Pick<IntentDe
       const ref = price === 'limit' ? i.limitPrice : price === 'bbo' ? (i.side === 'buy' ? bookTouch!.bid : bookTouch!.ask) : mid;
       const size = sizeAt(ref);
       if (!size || Number(size) <= 0) return need(['size']);
-      const leg = legNo(undefined);
+      // a new position goes to a leg that has none in this coin, so it does not grow a hedge leg; the first one with a key if every leg holds it
+      const holds = (n: number) => heldOn.some((l) => l.leg === n);
+      const free = ready.find((l) => !holds(l.leg));
+      const leg = i.leg >= 0 ? i.leg : (free ?? ready[0])?.leg;
       if (leg === undefined) return fail(['No leg can trade yet: a leg needs its agent key approved.']);
-      const held = Number(position(snapshot.legs.find((l) => l.leg === leg)?.clearinghouse ?? ({ assetPositions: [] } as never), i.coin)?.szi ?? 0) !== 0;
+      if (i.leg < 0) assumed.push(`leg ${leg} (you did not name a leg${free ? `; it is the first with no ${i.coin}` : ''})`);
+      const held = holds(leg);
       const spec: OrderSpec = { leg, coin: i.coin, side: i.side, type: price === 'market' ? 'market' : 'limit', size: clean(size) };
       if (price !== 'market') {
         spec.limitPx = px(price === 'mid' ? mid : ref);
@@ -210,7 +207,10 @@ export async function intentToDraft(i: TradeIntent, owner: Hex, d: Pick<IntentDe
         if (price === 'limit' && Number(spec.limitPx) !== i.limitPrice) assumed.push(`price rounded to ${spec.limitPx}, the nearest ${i.coin} price Hyperliquid accepts`);
         if (price === 'bbo') assumed.push(`best ${i.side === 'buy' ? 'bid' : 'ask'} ${spec.limitPx}, post-only: it rests on the book at the touch and may not fill`);
       }
-      if (!held) {
+      if (held) {
+        const have = position(snapshot.legs.find((l) => l.leg === leg)!.clearinghouse, i.coin)!;
+        if (i.leverage || i.margin) assumed.push(`leg ${leg} already holds ${i.coin} at ${have.leverage.value}x ${have.leverage.type}: it keeps that, so the ${i.leverage ? `${i.leverage}x` : i.margin} you asked for was not applied`);
+      } else {
         // a flat leg needs a leverage; one that already holds the coin keeps its own
         spec.leverage = i.leverage || Math.min(5, Math.min(d.policy.maxLeverage, asset.maxLeverage));
         if (!i.leverage) assumed.push(`${spec.leverage}x leverage (you did not say)`);

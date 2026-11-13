@@ -34,6 +34,17 @@ describe('intentToDraft: the model describes, this builds the spec the validator
     expect(short).toMatchObject({ ok: true, spec: { tpPx: '95000', slPx: '102000' } });
   });
 
+  it('a new position goes to a leg with none in that coin; a held leg keeps its leverage and says so', async () => {
+    const held = deps(heldSnap());
+    const free = await draft({ action: 'open', coin: 'BTC', side: 'buy', sizeUsd: 30, leverage: 4, price: 'market' }, held);
+    expect(free).toMatchObject({ ok: true, spec: { leg: 1, leverage: 4 } });
+    expect(free.ok && free.assumed.join(' ')).toMatch(/leg 1 \(you did not name a leg; it is the first with no BTC\)/);
+    const same = await draft({ action: 'open', coin: 'BTC', side: 'buy', sizeUsd: 30, leverage: 10, price: 'market', leg: 0 }, held);
+    expect(same).toMatchObject({ ok: true, spec: { leg: 0 } });
+    expect(same.ok && 'leverage' in same.spec).toBe(false);
+    expect(same.ok && same.assumed.join(' ')).toMatch(/leg 0 already holds BTC at 3x cross: it keeps that, so the 10x you asked for was not applied/);
+  });
+
   it('asks for what is missing instead of guessing', async () => {
     expect(await draft({ action: 'open', coin: 'BTC', side: 'buy', price: 'market' })).toMatchObject({ ok: false, missing: ['size'] });
     expect(await draft({ action: 'open', coin: 'BTC', sizeUsd: 30 })).toMatchObject({ ok: false, missing: ['side'] });
