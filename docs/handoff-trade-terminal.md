@@ -75,6 +75,13 @@ cd web && npx vite            # open http://localhost:5173, "Explore recorded da
 3. **Logged-in 1-click flow in a browser.** Login wasn't possible in the session. Check turning it on (one wallet signature), placing orders with no popup, Turn off, and that a freeze ends it.
 4. ~~Live order modify needs `tif`.~~ Confirmed present (`"tif":"Alo"`), so a post-only order stays post-only after a move.
 
+## Round 3 (13 Nov 2026): what changed and what is still open
+
+- Built and tested (ci32 unit tests, `web/e2e/round3.mjs` dry-run e2e, live testnet for the hedge pair and Easy trading drafts): atomic-ish hedged open (`placeHedge`, `/hedge/pair`), leverage that follows the market, fee components, Easy trading (`/trade/draft`), live positions over one Hyperliquid socket.
+- Reviewed twice by the Fable 5.2 advisor; every MUST item was fixed (lost replies settled by positions, no percent clamping, one pair per owner, socket Live only after data, leverage default stays 5 with `HYPERNEAR_MAX_LEVERAGE=100` set explicitly on ci32).
+- Not verified: the socket on a real browser with a logged-in wallet (the dry-run e2e disables it); whether `openOrders` pushes periodically (the page only refetches when the orders differ); `builderFee` inside `fee` (our agent sets no builder code, so it is 0); 1-click with the hedge box ticked; the Easy tab with real mainnet markets; hedge pair on mainnet.
+- Known limits: the chat daily budget and per-owner limit can be spent by anyone who names an opted-in owner (the `owner` field is not authenticated; fine for the testnet demo, sign the draft request with a session key before mainnet); hedges use legs 0 and 1 only (the decision layer also assumes leg 0 long, leg 1 short); two tabs use two of the ten sockets.
+
 ## Known gaps and next steps
 
 - **Old end-to-end scripts:** `web/e2e/*.mjs` still use the old tab names (`#/home`, `#/hedge`) and the old ticket fields ("Order type" select, "Sign and send"). Update the selectors before running them.
