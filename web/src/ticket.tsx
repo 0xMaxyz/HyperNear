@@ -30,7 +30,7 @@ export interface TicketProps {
   run: (key: string, fn: () => Promise<string>) => Promise<void>;
   done: (out: Record<string, unknown>, what: string) => string;
   onPlaced: () => void;
-  onCloseHedge: (coin: string) => void;
+  onCloseHedge: (coin: string, legs?: number[]) => void;
   onGo: (to: string) => void;
   /** from a link: #/trade?mode=hedge opens the hedge mode */
   initialMode?: 'single' | 'hedge';

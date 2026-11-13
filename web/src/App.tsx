@@ -43,6 +43,16 @@ const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const DECIMAL = /^\d{1,12}(\.\d{1,6})?$/;
 
 export function App({ auth }: { auth: Auth }) {
+  // the Trade screen is as tall as the window minus the header: tell the CSS how tall the header is
+  useEffect(() => {
+    const el = document.querySelector('header.top');
+    if (!el) return;
+    const set = () => document.documentElement.style.setProperty('--top-h', `${el.getBoundingClientRect().height}px`);
+    const ro = new ResizeObserver(set);
+    ro.observe(el);
+    set();
+    return () => ro.disconnect();
+  });
   const [demo, setDemo] = useState(false);
   const owner = auth.address ?? (demo ? DEMO_OWNER : undefined);
   const canSign = Boolean(auth.address && owner === auth.address);
@@ -292,12 +302,14 @@ export function App({ auth }: { auth: Auth }) {
     const spec: HedgeSpec = { ...(lev1 ? { leg1Leverage: Number(lev1) } : {}), ...(margin1 !== 'same' ? { leg1IsCross: margin1 === 'cross' } : {}) };
     return Object.keys(spec).length ? spec : undefined;
   };
-  const hedge = (open: boolean, c = coin) =>
+  const hedge = (open: boolean, c = coin, closeLegs?: number[]) =>
     run(open ? 'open' : 'close', async () => {
-      const spec = open ? hedgeSpec() : undefined;
+      // a close names the two legs of the hedge shown (any two legs); an open may carry leg 1's own leverage
+      const openSpec = open ? hedgeSpec() : undefined;
+      const spec = openSpec ?? (closeLegs && !open ? { legs: closeLegs } : undefined);
       const cmd = newCommand(owner!, open ? 'openHedge' : 'closeHedge', c, open ? ratio : '0', 30, Date.now(), spec ? specHashOfJson(spec) : undefined);
       const sig = await auth.sign(commandTypedData(chainTag, contractId, cmd));
-      return done(await post(open ? '/hedge/open' : '/hedge/close', { command: cmd, sig, ...(spec ? { spec } : {}) }), open ? `Hedge on ${c} opened at ratio ${ratio}${spec ? ` (leg 1 ${spec.leg1Leverage ? `${spec.leg1Leverage}x ` : ''}${spec.leg1IsCross === undefined ? '' : spec.leg1IsCross ? 'cross' : 'isolated'})` : ''}` : `Hedge on ${c} closed`);
+      return done(await post(open ? '/hedge/open' : '/hedge/close', { command: cmd, sig, ...(spec ? { spec } : {}) }), open ? `Hedge on ${c} opened at ratio ${ratio}${openSpec ? ` (leg 1 ${openSpec.leg1Leverage ? `${openSpec.leg1Leverage}x ` : ''}${openSpec.leg1IsCross === undefined ? '' : openSpec.leg1IsCross ? 'cross' : 'isolated'})` : ''}` : `Hedge on ${c} closed`);
     });
 
   // /events carries every owner's events: keep this owner's and the global ones
@@ -507,7 +519,7 @@ export function App({ auth }: { auth: Auth }) {
                   <LegPanel view={view} demo={demo} leg={selLeg} onLeg={setSelLeg} />
                 </>
               ) : (
-              <OverviewTab view={view} owner={owner} canSign={canSign} locked={locked} why={why} sign={signCommand} run={run} done={done} onCloseHedge={(c) => hedge(false, c)} onGo={go} />
+              <OverviewTab view={view} owner={owner} canSign={canSign} locked={locked} why={why} sign={signCommand} run={run} done={done} onCloseHedge={(c, legs) => hedge(false, c, legs)} onGo={go} />
               )}
             </Panel>
           )}
@@ -531,7 +543,7 @@ export function App({ auth }: { auth: Auth }) {
                 events={mine}
                 run={run}
                 done={done}
-                onCloseHedge={(c) => hedge(false, c)}
+                onCloseHedge={(c, legs) => hedge(false, c, legs)}
                 onGo={go}
                 mode={route.params.get('mode') === 'hedge' ? 'hedge' : undefined}
                 initial={{

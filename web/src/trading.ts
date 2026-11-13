@@ -90,6 +90,18 @@ export async function sendSpec(sign: Sign, owner: Hex, action: CommandAction, pa
 }
 export const placeOrder = (sign: Sign, owner: Hex, spec: OrderSpec) => sendSpec(sign, owner, 'placeOrder', '/order/place', spec);
 export const placeHedge = (sign: Sign, owner: Hex, spec: HedgePairSpec) => sendSpec(sign, owner, 'placeHedge', '/hedge/pair', spec) as Promise<HedgePairResult & Record<string, unknown>>;
+/** Exit levels for the named legs: `upPx` above the market, `downPx` below it; none given clears the protection. A hedge's legs share the two prices. */
+export interface ProtectSpec {
+  coin: string;
+  legs: number[];
+  upPx?: string;
+  downPx?: string;
+}
+export interface ProtectResult {
+  status: 'ok' | 'partial' | 'failed';
+  legs: { leg: number; ok: boolean; placed: number; cancelled: number[]; error?: string }[];
+}
+export const setProtection = (sign: Sign, owner: Hex, spec: ProtectSpec) => sendSpec(sign, owner, 'setProtection', '/order/protect', spec) as Promise<ProtectResult & Record<string, unknown>>;
 export const cancelOrder = (sign: Sign, owner: Hex, spec: CancelSpec) => sendSpec(sign, owner, 'cancelOrder', '/order/cancel', spec);
 /** Moves one resting limit order to a new price (same size, side and cloid; the exchange assigns a new oid). */
 export interface ModifySpec {

@@ -9,11 +9,13 @@ import type { Interval } from './hl';
 import { useMarket } from './market';
 import { emptyForm, type OrderForm } from './orderForm';
 import type { SessionApi } from './session';
+import { LimitCloseModal, ProtectModal } from './protectModal';
+import type { ProtectTarget } from './positions';
 import { Ticket } from './ticket';
 import { Blotter, BookPanel, chartLines, LegAccount, MarketBar, PriceChart, type Layout } from './terminal';
 import {
-  cancelOrder, floorSize, getHistory, getOrders, getPositions, modifyOrder, placeOrder, reduceSpec, roundPx,
-  type Composite, type HistoryRow, type LegPosition, type OpenOrder, type RunningTwap, type Sign,
+  cancelOrder, getHistory, getOrders, getPositions, modifyOrder, placeOrder, reduceSpec, roundPx, setProtection,
+  type Composite, type HistoryRow, type LegPosition, type OpenOrder, type ProtectSpec, type RunningTwap, type Sign,
 } from './trading';
 
 /** the guard's trigger, in multiples of maintenance margin (agent HYPERNEAR_GUARD_MARGIN_FLOOR, default 2) */
@@ -32,7 +34,7 @@ export interface TradeProps {
   events: AgentEvent[];
   run: (key: string, fn: () => Promise<string>) => Promise<void>;
   done: (out: Record<string, unknown>, what: string) => string;
-  onCloseHedge: (coin: string) => void;
+  onCloseHedge: (coin: string, legs?: number[]) => void;
   onGo: (to: string) => void;
   /** from a link: #/trade?leg=1&coin=BTC&side=sell&type=bracket */
   initial?: Partial<Pick<OrderForm, 'leg' | 'coin' | 'side' | 'type'>>;
@@ -60,6 +62,9 @@ export function TradeTab(p: TradeProps) {
   // a dragged limit order waiting for confirmation, the shortcut list, and the remembered layout
   const [move, setMove] = useState<{ order: OpenOrder; px: string }>();
   const [help, setHelp] = useState(false);
+  // the TP/SL and limit-close dialogs opened from a position row
+  const [protect, setProtect] = useState<ProtectTarget>();
+  const [limitClose, setLimitClose] = useState<LegPosition>();
   const [layout, setLayoutState] = useState<Layout>(() => {
     try {
       const v = localStorage.getItem('hypernear.layout');
@@ -174,6 +179,29 @@ export function TradeTab(p: TradeProps) {
       return p.done(out, frac >= 1 ? `Closed leg ${l.leg}'s ${l.coin} at market` : `Reduced leg ${l.leg}'s ${l.coin} by ${frac * 100}%`);
     });
 
+  const saveProtection = (spec: ProtectSpec) =>
+    p.run('protect', async () => {
+      const out = await setProtection(p.sign, owner, spec);
+      bump();
+      setProtect(undefined);
+      const what = spec.upPx === undefined && spec.downPx === undefined ? 'removed' : 'set';
+      const names = spec.legs.length > 1 ? `legs ${spec.legs.join(' and ')}` : `leg ${spec.legs[0]}`;
+      if (out.status === 'failed') throw new Error(`TP/SL was not ${what}: ${out.legs.map((l) => `leg ${l.leg}: ${l.error}`).join('; ')}`);
+      if (out.status === 'partial') throw new Error(`TP/SL ${what} on part of the hedge only: ${out.legs.map((l) => (l.ok ? `leg ${l.leg} done` : `leg ${l.leg} failed (${l.error})`)).join('; ')}`);
+      return p.done(out, `TP/SL ${what} on ${names} ${spec.coin}`);
+    });
+  const placeLimitClose = (l: LegPosition, price: string, size: string) =>
+    p.run('limit', async () => {
+      const out = await placeOrder(p.sign, owner, { leg: l.leg, coin: l.coin, side: l.side === 'long' ? 'sell' : 'buy', type: 'limit', size, limitPx: price, tif: 'Gtc', reduceOnly: true });
+      bump();
+      setLimitClose(undefined);
+      return p.done(out, `Limit close for ${size} ${l.coin} on leg ${l.leg} at ${price}`);
+    });
+  const maxLev = (coin: string) => {
+    const m = view?.snapshot.market.assets?.find((a) => a.name === coin)?.maxLeverage;
+    return m === undefined ? undefined : Math.min(m, view?.orderPolicy.maxLeverage ?? m);
+  };
+
   if (!view) return <p className="state">Waiting for data.</p>;
 
   return (
@@ -249,12 +277,36 @@ export function TradeTab(p: TradeProps) {
         why={p.why}
         decimals={decimals}
         onReduce={reduce}
-        onCloseHedge={p.onCloseHedge}
-        onProtect={(l) => toTicket({ leg: l.leg, coin: l.coin, type: 'bracket', reduceOnly: false })}
-        onLimitClose={(l) => toTicket({ leg: l.leg, coin: l.coin, type: 'limit', side: l.side === 'long' ? 'sell' : 'buy', size: floorSize(l.size, decimals(l.coin)), limitPx: roundPx(l.markPx, decimals(l.coin)), reduceOnly: true, tif: 'Gtc' })}
+        onCloseHedge={(c) => p.onCloseHedge(c.coin, c.legs.map((l) => l.leg))}
+        onTpsl={setProtect}
+        maxLev={maxLev}
+        onLimit={setLimitClose}
         onCancel={cancel}
         onCancelAll={cancelAll}
       />
+      {protect && (
+        <ProtectModal
+          target={protect}
+          orders={orders?.orders ?? []}
+          mark={Number(view.snapshot.market.mids[protect.coin] ?? protect.legs[0]!.markPx)}
+          decimals={decimals(protect.coin)}
+          busy={p.locked}
+          onSave={saveProtection}
+          onClose={() => setProtect(undefined)}
+        />
+      )}
+      {limitClose && (
+        <LimitCloseModal
+          leg={limitClose}
+          bid={market.book?.bids[0]?.px}
+          ask={market.book?.asks[0]?.px}
+          mark={Number(view.snapshot.market.mids[limitClose.coin] ?? limitClose.markPx)}
+          decimals={decimals(limitClose.coin)}
+          busy={p.locked}
+          onSave={(price, size) => placeLimitClose(limitClose, price, size)}
+          onClose={() => setLimitClose(undefined)}
+        />
+      )}
       {sheet && <div className="t-backdrop" onClick={() => setSheet(false)} aria-hidden="true" />}
       <div className="t-phone-bar">
         <button className="t-submit buy" onClick={() => toTicket({ side: 'buy' })}>Buy / Long</button>

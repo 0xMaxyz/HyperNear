@@ -309,6 +309,10 @@ export function buildDryRunDeps(fixtureName = 'hedged', opts: { replayStartMs?: 
         bus.emit('hedge', { owner, op: action, coin, simulated: true, orders });
         return { plan, simulatedFills: orders.map((o) => ({ leg: o.leg, oid: 0, totalSz: o.size, avgPx: String(mid) })) };
       },
+      async protect(owner, spec, plans) {
+        bus.emit('order', { owner, op: 'protect', spec, simulated: true });
+        return { simulated: true, spec, ...book.protect(spec.coin, plans) };
+      },
       async hedgePair(owner, spec, plan) {
         book.pair(spec.coin, plan.isBuyA, plan.sizeA, plan.sizeB, plan.leverageA, plan.leverageB);
         const px = plan.mid;

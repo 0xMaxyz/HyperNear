@@ -26,7 +26,7 @@ export interface OverviewProps {
   sign: Sign;
   run: (key: string, fn: () => Promise<string>) => Promise<void>;
   done: (out: Record<string, unknown>, what: string) => string;
-  onCloseHedge: (coin: string) => void;
+  onCloseHedge: (coin: string, legs?: number[]) => void;
   onGo: (to: string) => void;
 }
 
@@ -242,7 +242,7 @@ export function OverviewTab(p: OverviewProps) {
           </div>
           <Pnl c={c} />
           <div className="actions">
-            {c.kind === 'hedge' && <button className="primary" disabled={p.locked} title={p.why} onClick={() => p.onCloseHedge(c.coin)}>Close the hedge</button>}
+            {c.kind === 'hedge' && <button className="primary" disabled={p.locked} title={p.why} onClick={() => p.onCloseHedge(c.coin, c.legs.map((l) => l.leg))}>Close the hedge</button>}
             <button onClick={() => p.onGo(`strategies?protect=${c.legs[0]!.leg}&coin=${c.coin}`)}>Protect…</button>
             <button onClick={() => p.onGo(`trade?leg=${c.legs[0]!.leg}&coin=${c.coin}`)}>Trade this leg</button>
             {c.kind === 'one-sided' && <button onClick={() => p.onGo(`trade?leg=0&coin=${c.coin}&mode=hedge`)}>Hedge it</button>}

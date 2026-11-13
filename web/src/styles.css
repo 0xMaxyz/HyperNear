@@ -770,3 +770,33 @@ details.fees tr.est { color: var(--muted); }
 .pop li.err { border-left-color: var(--sell); }
 .pop li.info { border-left-color: var(--info); }
 @media (max-width: 760px) { .toasts { bottom: 72px; } }
+
+/* ---------- dialogs (TP/SL, limit close) ---------- */
+.modal-back { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, 0.55); }
+.modal { width: min(440px, 100%); max-height: calc(100dvh - 32px); overflow-y: auto; display: grid; gap: 12px; padding: 16px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; }
+.modal-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.modal-head button { min-height: 28px; width: 28px; padding: 0; }
+.modal-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.modal .t-input.stack { display: grid; gap: 4px; }
+.modal .t-row.tight { display: flex; gap: 6px; }
+.modal .t-row.tight input { flex: 1; min-width: 0; }
+
+/* ---------- paged tables and grouped positions ---------- */
+.paged { display: flex; flex-direction: column; min-height: 0; }
+.paged.fit { flex: 1; }
+.paged-body { min-height: 0; overflow-x: auto; }
+.paged.fit .paged-body { flex: 1; overflow-y: hidden; }
+.pager { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 4px 8px; border-top: 1px solid var(--grid); }
+.pager button { min-height: 26px; }
+.t-chev { min-height: 24px; width: 24px; padding: 0; background: transparent; border: 0; color: var(--muted); }
+.t-leg-row td { background: color-mix(in srgb, var(--surface-2) 60%, transparent); }
+.t-leg-row td:first-child { border-left: 3px solid var(--info); padding-left: 16px; }
+
+/* ---------- Trade fits the window on wide screens: only the ticket column and the pages inside the dock move ---------- */
+@media (min-width: 1281px) {
+  main.wide { height: calc(100dvh - var(--top-h, 53px)); padding-bottom: 8px; grid-template-rows: minmax(0, 1fr); overflow: hidden; }
+  main.wide > .terminal { min-height: 0; grid-template-rows: auto minmax(0, 1fr) minmax(220px, 36%); }
+  .terminal .t-side-col { min-height: 0; overflow-y: auto; }
+  .terminal .t-blotter { min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .terminal .t-blotter > .paged, .terminal .t-blotter > .t-scroll { flex: 1; min-height: 0; }
+}

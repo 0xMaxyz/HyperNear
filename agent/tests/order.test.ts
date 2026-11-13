@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { makeCloid, newGroup, parseCloid } from '../src/cloid.ts';
 import { parseHedgeSpec, planOpenHedge } from '../src/hedge.ts';
 import { OrderRefused, statusesOf } from '../src/orders.ts';
-import { validateCancelSpec, validateModifySpec, validateOrderSpec, type OrderContext, type OrderSpec, type RestingOrder } from '../src/order.ts';
+import { validateCancelSpec, validateModifySpec, validateOrderSpec, validateProtectSpec, type OrderContext, type OrderSpec, type RestingOrder } from '../src/order.ts';
 import { ch, POLICY, snap } from './agent-helpers.ts';
 
 // mid 100000, BTC szDecimals 5, policy: 5x, $100 per order
@@ -205,5 +205,50 @@ describe('validateModifySpec', () => {
     expect(m({ limitPx: '250000' })).toMatch(/above the policy maximum \$100/);
     // a reduce-only order may sit above the cap: it can only shrink risk
     expect(m({ limitPx: '250000' }, [rest({ reduceOnly: true, side: 'sell' })])).toBe('');
+  });
+});
+
+describe('validateProtectSpec (exit levels for one or more legs)', () => {
+  // mid 100000; leg 0 long, leg 1 short, both approved
+  const hedge = (): OrderContext => ({ snapshot: approved(snap(ch({ positions: [{ coin: 'BTC', szi: '0.0004' }] }), ch({ positions: [{ coin: 'BTC', szi: '-0.0002' }] }))), policy: POLICY });
+  const errs = (spec: unknown, ctx = hedge()) => {
+    const r = validateProtectSpec(spec, ctx);
+    return r.ok ? '' : r.errors.join(' | ');
+  };
+
+  it('a hedge: the same two levels become take-profit above and stop-loss below on the long, and the reverse on the short', () => {
+    const r = validateProtectSpec({ coin: 'BTC', legs: [0, 1], upPx: '110000', downPx: '90000' }, hedge());
+    expect(r.ok && r.plans).toMatchObject([
+      { leg: 0, long: true, tpPx: '110000', slPx: '90000' },
+      { leg: 1, long: false, slPx: '110000', tpPx: '90000' },
+    ]);
+  });
+
+  it('one level only, or none (which clears the protection)', () => {
+    expect(validateProtectSpec({ coin: 'BTC', legs: [0], upPx: '110000' }, hedge())).toMatchObject({ ok: true, plans: [{ leg: 0, tpPx: '110000' }] });
+    const none = validateProtectSpec({ coin: 'BTC', legs: [0, 1] }, hedge());
+    expect(none.ok && none.plans.every((p) => p.tpPx === undefined && p.slPx === undefined)).toBe(true);
+  });
+
+  it.each([
+    ['not an object', 'x', /JSON object/],
+    ['extra field', { coin: 'BTC', legs: [0], tpPx: '1' }, /tpPx is not a field/],
+    ['no legs', { coin: 'BTC', legs: [] }, /1 to 4 different leg numbers/],
+    ['duplicate legs', { coin: 'BTC', legs: [0, 0] }, /different leg numbers/],
+    ['upper level below the market', { coin: 'BTC', legs: [0], upPx: '99000' }, /upPx must be above the market/],
+    ['lower level above the market', { coin: 'BTC', legs: [0], downPx: '101000' }, /downPx must be below the market/],
+    ['not a price', { coin: 'BTC', legs: [0], upPx: 'abc' }, /positive decimal/],
+    ['too many digits', { coin: 'BTC', legs: [0], upPx: '110000.123456' }, /not a valid BTC price/],
+    ['a leg that is not registered', { coin: 'BTC', legs: [0, 2] }, /leg 2 is not registered/],
+    ['coin outside the allow-list', { coin: 'DOGE', legs: [0] }, /coin must be one of/],
+  ])('refuses %s', (_n, spec, re) => {
+    expect(errs(spec)).toMatch(re);
+  });
+
+  it('refuses a leg with no position, a leg without a key, and a leg running a strategy', () => {
+    const flatLeg: OrderContext = { snapshot: approved(snap(ch(), ch({ positions: [{ coin: 'BTC', szi: '-0.0002' }] }))), policy: POLICY };
+    expect(errs({ coin: 'BTC', legs: [0, 1], upPx: '110000' }, flatLeg)).toMatch(/leg 0 holds no BTC to protect/);
+    expect(errs({ coin: 'BTC', legs: [0] }, { snapshot: snap(ch({ positions: [{ coin: 'BTC', szi: '1' }] }), ch()), policy: POLICY })).toMatch(/no approved agent key/);
+    expect(errs({ coin: 'BTC', legs: [1] }, { ...hedge(), busyLegs: [1] })).toMatch(/leg 1 is running a strategy/);
   });
 });

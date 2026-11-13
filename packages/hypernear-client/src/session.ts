@@ -7,10 +7,10 @@
 import type { Hex } from 'viem';
 
 /** The only actions a session key may sign (plus `endSession` of its own key). */
-export const SESSION_ACTIONS = ['placeOrder', 'cancelOrder', 'modifyOrder', 'placeHedge'] as const;
+export const SESSION_ACTIONS = ['placeOrder', 'cancelOrder', 'modifyOrder', 'setProtection', 'placeHedge'] as const;
 export type SessionAction = (typeof SESSION_ACTIONS)[number];
 /** What a session allows unless the owner adds more: single orders only. `placeHedge` is an explicit opt-in. */
-export const DEFAULT_SESSION_ACTIONS: SessionAction[] = ['placeOrder', 'cancelOrder', 'modifyOrder'];
+export const DEFAULT_SESSION_ACTIONS: SessionAction[] = ['placeOrder', 'cancelOrder', 'modifyOrder', 'setProtection'];
 
 /** Session lifetime bounds, seconds. */
 export const MIN_SESSION_SEC = 60;

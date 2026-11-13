@@ -6,9 +6,24 @@ import type { OrderPolicy } from './config.ts';
 import type { EventBus } from './events.ts';
 import type { Legs } from './legs.ts';
 import { roundPx } from './market.ts';
-import type { CancelSpec, ModifyCheck, OrderPlan, OrderSpec } from './order.ts';
+import type { CancelSpec, ModifyCheck, OrderPlan, OrderSpec, ProtectLegPlan, ProtectSpec } from './order.ts';
 
 export class OrderRefused extends Error {}
+
+export interface ProtectLegResult {
+  leg: number;
+  ok: boolean;
+  /** triggers placed on the leg */
+  placed: number;
+  /** old triggers cancelled */
+  cancelled: number[];
+  error?: string;
+}
+export interface ProtectResult {
+  spec: ProtectSpec;
+  status: 'ok' | 'partial' | 'failed';
+  legs: ProtectLegResult[];
+}
 
 export interface PlacedStatus {
   oid?: number;
@@ -134,6 +149,41 @@ export class OrderExecutor {
     await verdict(() => hl.modifyOrder({ oid: spec.oid, order }));
     this.bus?.emit('order', { owner, op: 'modify', leg: spec.leg, spec, from: o.limitPx });
     return { spec, modified: spec.oid, from: o.limitPx };
+  }
+
+  /**
+   * Replace the position take-profit / stop-loss triggers of each named leg. Per leg, concurrently: place the new position-sized bracket first
+   * (if that is refused the old protection stays), then cancel the old triggers. One leg failing never undoes the other; the result says which
+   * legs ended up how. A leg's new triggers are `positionTpsl` size 0: they follow the position as it is resized.
+   */
+  async protect(owner: Hex, spec: ProtectSpec, plans: ProtectLegPlan[]): Promise<ProtectResult> {
+    const slip = this.policy.slippage;
+    const one = async (p: ProtectLegPlan): Promise<ProtectLegResult> => {
+      const hl = this.legs.tradingClient(owner, p.leg);
+      const user = await this.legs.client.getLeg(owner, p.leg);
+      if (!user) throw new OrderRefused(`leg ${p.leg} is not registered`);
+      const old = (await this.legs.hl.frontendOpenOrders({ user })).filter((o) => o.coin === spec.coin && o.isPositionTpsl && o.isTrigger).map((o) => o.oid);
+      // closing orders: a long is closed by sells, a short by buys; the market trigger's limit price leaves room for slippage
+      const child = (px: string, tpsl: 'tp' | 'sl'): HlOrderInput => ({ a: p.asset, b: !p.long, p: roundPx(Number(px) * (p.long ? 1 - slip : 1 + slip), p.szDecimals), s: '0', r: true, t: { trigger: { isMarket: true, triggerPx: px, tpsl } }, c: makeCloid('protect', newGroup()) });
+      const orders = [...(p.tpPx ? [child(p.tpPx, 'tp')] : []), ...(p.slPx ? [child(p.slPx, 'sl')] : [])];
+      const placed = orders.length ? statusesOf(await verdict(() => hl.order({ orders, grouping: 'positionTpsl' }))).length : 0;
+      const cancelled: number[] = [];
+      let cancelError: string | undefined;
+      for (const oid of old) {
+        try {
+          await verdict(() => hl.cancelOrder({ asset: p.asset, oid }));
+          cancelled.push(oid);
+        } catch (e) {
+          cancelError = (e as Error).message;
+        }
+      }
+      return { leg: p.leg, ok: !cancelError, placed, cancelled, ...(cancelError ? { error: `the new triggers are set but an old one could not be cancelled: ${cancelError}` } : {}) };
+    };
+    const settled = await Promise.allSettled(plans.map(one));
+    const legs = settled.map((r, i): ProtectLegResult => (r.status === 'fulfilled' ? r.value : { leg: plans[i]!.leg, ok: false, placed: 0, cancelled: [], error: r.reason instanceof OrderRefused ? r.reason.message : String((r.reason as Error)?.message ?? r.reason) }));
+    const status = legs.every((l) => l.ok) ? 'ok' : legs.some((l) => l.ok) ? 'partial' : 'failed';
+    this.bus?.emit('order', { owner, op: 'protect', spec, status, legs });
+    return { spec, status, legs };
   }
 
   async cancel(owner: Hex, spec: CancelSpec, asset: number) {

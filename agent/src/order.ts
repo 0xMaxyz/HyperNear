@@ -262,6 +262,69 @@ export function validateOrderSpec(input: unknown, ctx: OrderContext): OrderCheck
   return { ok: true, spec, plan: { asset: a.asset, szDecimals: a.szDecimals, mid, isBuy, szi, notionalUsd, kind, leverage } };
 }
 
+/**
+ * Exit levels for one or more legs holding `coin`: `upPx` above the market, `downPx` below it (each optional; none = clear the protection).
+ * A long uses the upper level as take-profit and the lower as stop-loss, a short the reverse, so a hedge's two legs get the SAME prices
+ * and Hyperliquid fires both exits off the same mark. The triggers are position-sized (they follow the position) and replace the leg's old ones.
+ */
+export interface ProtectSpec {
+  coin: string;
+  legs: number[];
+  upPx?: string;
+  downPx?: string;
+}
+export interface ProtectLegPlan {
+  leg: number;
+  asset: number;
+  szDecimals: number;
+  mid: number;
+  /** the leg's position is long: its closing orders are sells */
+  long: boolean;
+  tpPx?: string;
+  slPx?: string;
+}
+export type ProtectCheck = { ok: true; spec: ProtectSpec; plans: ProtectLegPlan[] } | { ok: false; errors: string[] };
+
+export function validateProtectSpec(input: unknown, ctx: OrderContext): ProtectCheck {
+  if (!isObj(input)) return { ok: false, errors: ['protection spec must be a JSON object'] };
+  const errors: string[] = [];
+  for (const k of Object.keys(input)) if (!['coin', 'legs', 'upPx', 'downPx'].includes(k)) errors.push(`${k} is not a field of a protection spec`);
+  const legs = input.legs;
+  if (!Array.isArray(legs) || legs.length < 1 || legs.length > 4 || !legs.every((x) => Number.isInteger(x) && x >= 0) || new Set(legs).size !== legs.length) errors.push('legs must be 1 to 4 different leg numbers');
+  if (errors.length) return { ok: false, errors };
+  const spec = input as unknown as ProtectSpec;
+  const plans: ProtectLegPlan[] = [];
+  for (const leg of spec.legs) {
+    const found = legAndMarket(ctx, leg, spec.coin, errors);
+    if (!found) continue;
+    const szi = Number(position(found.l.clearinghouse, spec.coin)?.szi ?? 0);
+    if (szi === 0) errors.push(`leg ${leg} holds no ${spec.coin} to protect`);
+    plans.push({ leg, asset: found.a.asset, szDecimals: found.a.szDecimals, mid: found.mid, long: szi > 0 });
+  }
+  const price = (name: 'upPx' | 'downPx'): number | undefined => {
+    const v = (input as Record<string, unknown>)[name];
+    if (v === undefined) return undefined;
+    const dp = plans[0]?.szDecimals ?? 5;
+    if (!isDec(v)) return void errors.push(`${name} must be a positive decimal string`);
+    if (Number(roundPx(Number(v), dp)) !== Number(v)) return void errors.push(`${name} ${v} is not a valid ${spec.coin} price: ${roundPx(Number(v), dp)}`);
+    return Number(v);
+  };
+  const up = price('upPx');
+  const down = price('downPx');
+  const mid = plans[0]?.mid;
+  if (mid !== undefined) {
+    if (up !== undefined && up <= mid) errors.push(`upPx must be above the market (${mid})`);
+    if (down !== undefined && down >= mid) errors.push(`downPx must be below the market (${mid})`);
+  }
+  if (errors.length) return { ok: false, errors };
+  for (const p of plans) {
+    // a long takes profit above and stops loss below; a short the other way round
+    if (up !== undefined) p[p.long ? 'tpPx' : 'slPx'] = spec.upPx;
+    if (down !== undefined) p[p.long ? 'slPx' : 'tpPx'] = spec.downPx;
+  }
+  return { ok: true, spec, plans };
+}
+
 /** Cancel one open order, one TWAP, or everything on the leg for the coin. */
 export function validateCancelSpec(input: unknown, ctx: OrderContext): CancelCheck {
   if (!isObj(input)) return { ok: false, errors: ['cancel spec must be a JSON object'] };

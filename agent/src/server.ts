@@ -40,7 +40,7 @@ import { HedgeRefused, Hedger, parseCloseSpec, parseHedgeSpec, type HedgeSpec } 
 import { DailyBudget, EXAMPLE_PROMPTS, MAX_TRADE_TEXT, claudeIntentAsk, intentDrafter, type TradeDraft } from './trade/intent.ts';
 import { HedgePairExecutor, validateHedgePairSpec, type HedgePairPlan, type HedgePairSpec } from './hedgePair.ts';
 import { OrderExecutor, OrderRefused } from './orders.ts';
-import { validateCancelSpec, validateModifySpec, validateOrderSpec, type CancelSpec, type ModifySpec, type OrderPlan, type OrderSpec, type RestingOrder } from './order.ts';
+import { validateCancelSpec, validateModifySpec, validateOrderSpec, validateProtectSpec, type CancelSpec, type ModifySpec, type OrderPlan, type OrderSpec, type ProtectLegPlan, type ProtectSpec, type RestingOrder } from './order.ts';
 import { parseCloid } from './cloid.ts';
 import { activationStatus } from './activation.ts';
 import { guardInputs, Legs, pendingApprovals, type OwnerSnapshot } from './legs.ts';
@@ -122,6 +122,7 @@ export interface DryRunHooks {
   cancel?: (owner: Hex, spec: CancelSpec) => Promise<Record<string, unknown>>;
   modify?: (owner: Hex, spec: ModifySpec) => Promise<Record<string, unknown>>;
   hedgePair?: (owner: Hex, spec: HedgePairSpec, plan: HedgePairPlan) => Promise<Record<string, unknown>>;
+  protect?: (owner: Hex, spec: ProtectSpec, plans: ProtectLegPlan[]) => Promise<Record<string, unknown>>;
   openOrders?: (owner: Hex) => { orders: Record<string, unknown>[]; twaps: Record<string, unknown>[] };
   relay: (body: unknown) => Promise<Record<string, unknown>>;
   /** simulated deposit: adds test USDC to a leg's spot balance */
@@ -361,6 +362,25 @@ export function handler(d: Deps) {
         if (!lim.daily.take()) throw new HttpError(429, 'the daily limit for Easy trading is used up');
         const draft = await d.tradeDrafter(owner, b.text);
         return reply(draft.ok ? 200 : 422, draft);
+      }
+      if (req.method === 'POST' && url.pathname === '/order/protect') {
+        const body = (await readJson(req)) as { spec?: unknown };
+        const { cmd, session } = await verifySessionCommand(verifier(d), body, 'setProtection', sessions);
+        if (specHashOfJson(body.spec) !== cmd.specHash) throw new HttpError(401, 'command.specHash must be the specHash of the protection spec (the owner signed another spec)');
+        await assertOptedIn(d, cmd.owner);
+        const v = validateProtectSpec(body.spec, {
+          snapshot: await d.legs.snapshot(cmd.owner),
+          policy: sessionPolicy(d.config.policy, session),
+          busyLegs: (d.strategies?.list(cmd.owner) ?? []).filter((s) => s.state !== 'stopped').map((s) => s.leg),
+        });
+        if (!v.ok) throw new HttpError(422, v.errors.join('; '));
+        d.bus.emit('command', { ...cmd, ...(session && { session: session.key }) });
+        if (d.dryRun) {
+          if (!d.dryRun.protect) throw new HttpError(501, 'dry run has no order book');
+          return reply(200, await d.dryRun.protect(cmd.owner, v.spec, v.plans));
+        }
+        if (!d.orders) throw new HttpError(503, 'orders off');
+        return reply(200, await d.orders.protect(cmd.owner, v.spec, v.plans));
       }
       if (req.method === 'POST' && url.pathname === '/hedge/pair') {
         const body = (await readJson(req)) as { spec?: unknown };

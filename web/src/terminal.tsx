@@ -6,17 +6,14 @@ import { CandlestickSeries, ColorType, HistogramSeries, LineStyle, createChart, 
 import type { AgentEvent, LegSnap, OwnerView } from './api';
 import type { Candle, Interval } from './hl';
 import { fundingCountdown, type Book, type FeedState, type Market, type Trade } from './market';
+import { clock, pct, pxFmt, signedUsd, tone, when } from './fmt';
+import { Paged, useMedia } from './pager';
 import { n, summarize, usd } from './panels';
+import { PositionsTable, type ProtectTarget } from './positions';
 import type { Composite, HistoryRow, LegPosition, OpenOrder, RunningTwap } from './trading';
 
 const css = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-const signedUsd = (v: number, dp = 2) => `${v < 0 ? '−' : '+'}${usd(Math.abs(v), dp)}`;
-const pct = (v: number, dp = 2) => `${v < 0 ? '−' : '+'}${Math.abs(v * 100).toFixed(dp)}%`;
 const compact = (v: number) => (v >= 1e9 ? `$${(v / 1e9).toFixed(2)}B` : v >= 1e6 ? `$${(v / 1e6).toFixed(2)}M` : v >= 1e3 ? `$${(v / 1e3).toFixed(1)}K` : usd(v));
-const pxFmt = (v: number) => v.toLocaleString('en-US', { minimumFractionDigits: v >= 1000 ? 1 : 2, maximumFractionDigits: v >= 1000 ? 1 : v >= 1 ? 4 : 6 });
-const clock = (t: number) => new Date(t).toLocaleTimeString('en-GB');
-const when = (t: number) => new Date(t).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
-const tone = (v: number) => (v > 0 ? 'up' : v < 0 ? 'down' : '');
 
 /* ---------- market bar ---------- */
 
@@ -349,9 +346,10 @@ export interface BlotterProps {
   why?: string;
   decimals: (coin: string) => number;
   onReduce: (p: LegPosition, frac: number) => void;
-  onCloseHedge: (coin: string) => void;
-  onProtect: (p: LegPosition) => void;
-  onLimitClose: (p: LegPosition) => void;
+  onCloseHedge: (c: Composite) => void;
+  onTpsl: (t: ProtectTarget) => void;
+  onLimit: (p: LegPosition) => void;
+  maxLev?: (coin: string) => number | undefined;
   onCancel: (o: OpenOrder | RunningTwap) => void;
   onCancelAll: (pairs: { leg: number; coin: string }[]) => void;
 }
@@ -360,6 +358,8 @@ export function Blotter(p: BlotterProps) {
   const [tab, setTab] = useState<BlotterTab>('positions');
   const [leg, setLeg] = useState<'all' | number>('all');
   const [onlyCoin, setOnlyCoin] = useState(false);
+  // wide screens: the dock has a fixed share of the viewport and pages its tables to fit it
+  const fit = useMedia('(min-width: 1281px)');
   const keep = (l: number, c: string) => (leg === 'all' || l === leg) && (!onlyCoin || c === p.coin);
 
   const comps = (p.positions ?? []).map((c) => ({ ...c, legs: c.legs.filter((l) => keep(l.leg, l.coin)) })).filter((c) => c.legs.length > 0);
@@ -405,49 +405,9 @@ export function Blotter(p: BlotterProps) {
 
       <div className="t-scroll">
         {tab === 'positions' &&
-          (!p.positions ? <p className="t-empty">Reading positions…</p> : comps.length === 0 ? <p className="t-empty">No open positions{leg !== 'all' ? ` on leg ${leg}` : ''}.</p> : (
+          (!p.positions ? <p className="t-empty">Reading positions…</p> : comps.length === 0 ? <p className="t-empty">No open positions{leg !== 'all' ? ` on leg ${leg}` : ''}. Place an order from the ticket, or open a hedge.</p> : (
             <>
-              <div className="t-cards phone">
-                {comps.map((c) => (
-                  <div key={c.id} className="t-cardgroup">
-                    {c.kind === 'hedge' && (
-                      <div className="t-group-line card-head">
-                        <span className="t-tag info">Hedge</span>
-                        <b>{c.coin}</b>
-                        <span className="t-spacer" />
-                        <span className={`t-num ${tone(c.totals.netIfClosed)}`}>{signedUsd(c.totals.netIfClosed)}</span>
-                        <button disabled={p.locked} title={p.why} onClick={() => p.onCloseHedge(c.coin)}>Close hedge</button>
-                      </div>
-                    )}
-                    {c.legs.map((l) => <PositionCard key={l.leg} l={l} dp={p.decimals(l.coin)} {...p} />)}
-                  </div>
-                ))}
-              </div>
-              <table className="t-table desk">
-                <thead>
-                  <tr><th>Leg</th><th>Coin</th><th className="num">Size</th><th className="num">Value</th><th className="num">Entry</th><th className="num">Mark</th><th className="num">PnL (ROE)</th><th className="num">Liq. price</th><th className="num">Margin</th><th className="num">Funding</th><th className="end">Close</th></tr>
-                </thead>
-                {comps.map((c) => (
-                  <tbody key={c.id}>
-                    {c.kind === 'hedge' && (
-                      <tr className="t-group-row">
-                        <td colSpan={11}>
-                          <div className="t-group-line">
-                            <span className="t-tag info">Hedge</span>
-                            <b>{c.coin}</b>
-                            <span className="muted">{c.legs.map((l) => `leg ${l.leg} ${l.side}`).join(' · ')} · net {n(c.netSize, p.decimals(c.coin))} {c.coin}</span>
-                            <span className="t-spacer" />
-                            <span className="muted">Net if closed</span>
-                            <span className={`t-num ${tone(c.totals.netIfClosed)}`}>{signedUsd(c.totals.netIfClosed)}</span>
-                            <button disabled={p.locked} title={p.why} onClick={() => p.onCloseHedge(c.coin)}>Close hedge</button>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                    {c.legs.map((l) => <PositionRow key={l.leg} l={l} kind={c.kind} dp={p.decimals(l.coin)} {...p} />)}
-                  </tbody>
-                ))}
-              </table>
+              <PositionsTable comps={comps} fit={fit} locked={p.locked} why={p.why} decimals={p.decimals} maxLev={p.maxLev} onReduce={p.onReduce} onCloseHedge={p.onCloseHedge} onTpsl={p.onTpsl} onLimit={p.onLimit} />
               <p className="t-totals">
                 <span>Unrealized <b className={`t-num ${tone(totals.u)}`}>{signedUsd(totals.u)}</b></span>
                 <span>Realized <b className="t-num">{signedUsd(totals.r)}</b></span>
@@ -457,12 +417,12 @@ export function Blotter(p: BlotterProps) {
               </p>
             </>
           ))}
-
         {tab === 'orders' &&
           (!p.orders ? <p className="t-empty">Reading open orders…</p> : orders.length === 0 ? <p className="t-empty">Nothing is resting{leg !== 'all' ? ` on leg ${leg}` : ''}. A freeze cancels resting orders, protective ones included.</p> : (
+            <Paged items={orders} fit={fit} fallbackRows={8} reservedPx={34}>{(pg) => (
             <>
             <ul className="t-cards phone">
-              {orders.map((o) => (
+              {pg.map((o) => (
                 <li key={o.oid} className="t-pcard">
                   <div className="t-pcard-top">
                     <span className="t-leg">Leg {o.leg}</span>
@@ -482,7 +442,7 @@ export function Blotter(p: BlotterProps) {
             <table className="t-table desk">
               <thead><tr><th>Leg</th><th>Placed</th><th>Coin</th><th>Type</th><th className="num">Size</th><th className="num">Price</th><th className="num">Trigger</th><th>Flags</th><th className="end" /></tr></thead>
               <tbody>
-                {orders.map((o) => (
+                {pg.map((o) => (
                   <tr key={o.oid}>
                     <td><span className="t-leg">Leg {o.leg}</span></td>
                     <td className="t-num muted">{when(o.placedAt)}</td>
@@ -498,14 +458,16 @@ export function Blotter(p: BlotterProps) {
               </tbody>
             </table>
             </>
+            )}</Paged>
           ))}
 
         {tab === 'twap' &&
           (twaps.length === 0 ? <p className="t-empty">No TWAP is running. Start one from the ticket's Pro menu.</p> : (
+            <Paged items={twaps} fit={fit} fallbackRows={8} reservedPx={34}>{(pg) => (
             <table className="t-table">
               <thead><tr><th>Leg</th><th>Started</th><th>Coin</th><th>Side</th><th className="num">Done</th><th className="num">Minutes</th><th className="end" /></tr></thead>
               <tbody>
-                {twaps.map((t) => (
+                {pg.map((t) => (
                   <tr key={t.twapId}>
                     <td><span className="t-leg">Leg {t.leg}</span></td>
                     <td className="t-num muted">{when(t.startedAt)}</td>
@@ -518,14 +480,16 @@ export function Blotter(p: BlotterProps) {
                 ))}
               </tbody>
             </table>
+            )}</Paged>
           ))}
 
         {tab === 'history' &&
           (!p.history ? <p className="t-empty">Reading history…</p> : hist.length === 0 ? <p className="t-empty">Nothing here yet.</p> : (
+            <Paged items={hist} fit={fit} fallbackRows={10} reservedPx={34} resetKey={`${leg}${onlyCoin}`}>{(pg) => (
             <table className="t-table">
               <thead><tr><th>When</th><th>Legs</th><th>Label</th><th>What happened</th><th className="num">Size</th><th className="num">Price</th><th className="num">Result</th></tr></thead>
               <tbody>
-                {hist.slice(0, 200).map((r, i) => (
+                {pg.map((r, i) => (
                   <tr key={`${r.time}-${i}`}>
                     <td className="t-num muted">{when(r.time)}</td>
                     <td>{r.legs.map((l) => <span key={l} className="t-leg">Leg {l}</span>)}</td>
@@ -538,12 +502,14 @@ export function Blotter(p: BlotterProps) {
                 ))}
               </tbody>
             </table>
+            )}</Paged>
           ))}
 
         {tab === 'activity' &&
           (p.events.length === 0 ? <p className="t-empty">No events yet. Orders, guard checks and rebalances appear here as the agent emits them.</p> : (
+            <Paged items={p.events} fit={fit} fallbackRows={10} reservedPx={4}>{(pg) => (
             <ol className="t-events">
-              {p.events.slice(0, 80).map((e) => (
+              {pg.map((e) => (
                 <li key={e.id} className={e.type.startsWith('guard.trigger') || e.type === 'guard.error' ? 'flag' : ''}>
                   <time className="t-num muted" dateTime={new Date(e.at).toISOString()}>{clock(e.at)}</time>
                   <span className="t-tag">{e.type}</span>
@@ -551,66 +517,10 @@ export function Blotter(p: BlotterProps) {
                 </li>
               ))}
             </ol>
+            )}</Paged>
           ))}
       </div>
     </section>
-  );
-}
-
-function PositionRow({ l, kind, dp, locked, why, onReduce, onProtect, onLimitClose }: { l: LegPosition; kind: Composite['kind']; dp: number } & Pick<BlotterProps, 'locked' | 'why' | 'onReduce' | 'onProtect' | 'onLimitClose'>) {
-  const [frac, setFrac] = useState('1');
-  const roe = l.marginUsed > 0 ? l.unrealized / l.marginUsed : 0;
-  const long = l.side === 'long';
-  return (
-    <tr>
-      <td><span className="t-leg">Leg {l.leg}</span>{kind === 'strategy' && <span className="t-tag violet">Strategy</span>}</td>
-      <td><b>{l.coin}</b> <span className={`small ${long ? 'up' : 'down'}`}>{l.leverage.value}x {l.leverage.type}</span></td>
-      <td className={`num t-num ${long ? 'up' : 'down'}`}>{long ? '+' : '−'}{n(l.size, dp)}</td>
-      <td className="num t-num">{usd(l.size * l.markPx)}</td>
-      <td className="num t-num">{pxFmt(l.entryPx)}</td>
-      <td className="num t-num">{pxFmt(l.markPx)}</td>
-      <td className={`num t-num ${tone(l.unrealized)}`}>{signedUsd(l.unrealized)} ({pct(roe, 1)})</td>
-      <td className="num t-num liq">{l.liquidationPx === null ? 'None' : pxFmt(l.liquidationPx)}</td>
-      <td className="num t-num">{usd(l.marginUsed)}</td>
-      <td className={`num t-num ${tone(l.funding)}`}>{signedUsd(l.funding, 4)}</td>
-      <td className="end">
-        <div className="t-actions">
-          <button disabled={locked} title={why} onClick={() => onProtect(l)}>TP/SL</button>
-          <button disabled={locked} title={why ?? 'Fill the ticket with a reduce-only limit at the mark'} onClick={() => onLimitClose(l)}>Limit</button>
-          <select value={frac} onChange={(e) => setFrac(e.target.value)} aria-label={`How much of leg ${l.leg}'s ${l.coin} to close at market`}>
-            <option value="0.25">25%</option><option value="0.5">50%</option><option value="1">100%</option>
-          </select>
-          <button disabled={locked} title={why} onClick={() => onReduce(l, Number(frac))}>Market</button>
-        </div>
-      </td>
-    </tr>
-  );
-}
-
-function PositionCard({ l, dp, locked, why, onReduce, onProtect, onLimitClose }: { l: LegPosition; dp: number } & Pick<BlotterProps, 'locked' | 'why' | 'onReduce' | 'onProtect' | 'onLimitClose'>) {
-  const long = l.side === 'long';
-  const roe = l.marginUsed > 0 ? l.unrealized / l.marginUsed : 0;
-  return (
-    <div className="t-pcard">
-      <div className="t-pcard-top">
-        <span className="t-leg">Leg {l.leg}</span>
-        <b>{l.coin}</b>
-        <span className={`small ${long ? 'up' : 'down'}`}>{long ? 'Long' : 'Short'} {l.leverage.value}x</span>
-        <span className="t-spacer" />
-        <span className={`t-num ${tone(l.unrealized)}`}>{signedUsd(l.unrealized)} ({pct(roe, 1)})</span>
-      </div>
-      <dl className="t-pcard-kv t-num">
-        <dt>Size</dt><dd>{n(l.size, dp)}</dd>
-        <dt>Entry</dt><dd>{pxFmt(l.entryPx)}</dd>
-        <dt>Mark</dt><dd>{pxFmt(l.markPx)}</dd>
-        <dt>Liq.</dt><dd className="liq">{l.liquidationPx === null ? 'None' : pxFmt(l.liquidationPx)}</dd>
-      </dl>
-      <div className="t-actions">
-        <button disabled={locked} title={why} onClick={() => onProtect(l)}>TP/SL</button>
-        <button disabled={locked} title={why} onClick={() => onLimitClose(l)}>Limit close</button>
-        <button disabled={locked} title={why} onClick={() => onReduce(l, 1)}>Market close</button>
-      </div>
-    </div>
   );
 }
 

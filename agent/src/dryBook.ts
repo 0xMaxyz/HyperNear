@@ -125,6 +125,23 @@ export function createDryBook(snap: OwnerSnapshot) {
       const group = newGroup();
       for (const o of plan.orders) fill(o.leg, o.coin, o.isBuy, Number(o.size), action === 'openHedge' ? plan.leverage : undefined, action === 'openHedge' ? 'hedgeOpen' : 'hedgeClose', group);
     },
+    /** replaces the position TP/SL triggers of each leg: the old brackets go, one resting trigger per level comes */
+    protect(coin: string, plans: { leg: number; long: boolean; tpPx?: string; slPx?: string }[]) {
+      const legsOut = plans.map((p) => {
+        const cancelled: number[] = [];
+        for (let i = orders.length - 1; i >= 0; i--) {
+          const o = orders[i]!;
+          if (o.leg === p.leg && o.coin === coin && o.spec.type === 'bracket') {
+            cancelled.push(o.oid);
+            orders.splice(i, 1);
+          }
+        }
+        const close: OrderSpec = { leg: p.leg, coin, side: p.long ? 'sell' : 'buy', type: 'bracket' };
+        const placed = [p.tpPx && rest(p.leg, { ...close, tpPx: p.tpPx }), p.slPx && rest(p.leg, { ...close, slPx: p.slPx })].filter(Boolean).length;
+        return { leg: p.leg, ok: true, placed, cancelled };
+      });
+      return { status: 'ok' as const, legs: legsOut };
+    },
     /** both legs of a hedge pair open together, one cloid group, each with its own leverage */
     pair(coin: string, isBuyA: boolean, sizeA: string, sizeB: string, levA: { value: number; isCross: boolean }, levB: { value: number; isCross: boolean }) {
       const group = newGroup();
