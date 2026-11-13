@@ -20,6 +20,7 @@ import type { Deps } from './server.ts';
 import { position } from './market.ts';
 import type { Draft } from './strategy/builder.ts';
 import { strategyLibrary } from './strategy/library.ts';
+import { DailyBudget, dryIntentAsk, intentDrafter } from './trade/intent.ts';
 import { fundingService } from './funding.ts';
 import type { StrategyManager } from './strategy/manager.ts';
 import { specHash, validateSpec, type SpecContext, type StrategySpec } from './strategy/spec.ts';
@@ -284,6 +285,17 @@ export function buildDryRunDeps(fixtureName = 'hedged', opts: { replayStartMs?: 
     relayer: new Relayer(client, new RateLimiter(config.relayPerMinute)),
     legHistory: async () => book.history(), // the fixture has no fills of its own: the book writes them for its positions and for every simulated fill
     fundingRates: async () => ({ BTC: 0.0000125 }),
+    tradeDrafter: intentDrafter({
+      ask: dryIntentAsk,
+      snapshot: (o) => legs.snapshot(o),
+      policy: config.policy,
+      busyLegs: () => [],
+      touch: async (coin) => {
+        const mid = Number(snap.market.mids[coin]);
+        return mid > 0 ? { bid: mid * 0.9999, ask: mid * 1.0001 } : undefined;
+      },
+    }),
+    chatLimits: { perIp: new RateLimiter(100), perOwner: new RateLimiter(100), daily: new DailyBudget(10_000) },
     dryRun: {
       async hedge(action, owner, coin, ratio, spec) {
         const s = await legs.snapshot(owner);

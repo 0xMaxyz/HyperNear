@@ -39,6 +39,36 @@ export interface HedgeSpec {
   leg1IsCross?: boolean;
 }
 
+/** A new hedged position: leg 0 takes `side`, leg 1 the opposite side at `ratio` x the size, both at market (agent/src/hedgePair.ts). */
+export interface HedgePairSpec {
+  coin: string;
+  side: 'long' | 'short';
+  size: string;
+  ratio: string;
+  leverageA: number;
+  leverageB?: number;
+  isCrossA?: boolean;
+  isCrossB?: boolean;
+  maxSpreadBps?: number;
+}
+export interface PairLegOutcome {
+  leg: number;
+  isBuy: boolean;
+  requested: string;
+  filled: number;
+  avgPx: number | null;
+  error?: string;
+}
+export interface HedgePairResult {
+  status: 'filled' | 'trimmed' | 'unwound' | 'unbalanced' | 'failed';
+  legs: [PairLegOutcome, PairLegOutcome];
+  unwind: PairLegOutcome[];
+  spreadBps: number | null;
+  open: [number, number];
+  notes: string[];
+  simulated?: boolean;
+}
+
 export type Sign = (c: Command) => Promise<Hex>;
 
 /** Signs a command bound to `spec` and posts both; the agent hashes what it receives and refuses anything else. */
@@ -47,6 +77,7 @@ export async function sendSpec(sign: Sign, owner: Hex, action: CommandAction, pa
   return post(path, { command, sig: await sign(command), spec });
 }
 export const placeOrder = (sign: Sign, owner: Hex, spec: OrderSpec) => sendSpec(sign, owner, 'placeOrder', '/order/place', spec);
+export const placeHedge = (sign: Sign, owner: Hex, spec: HedgePairSpec) => sendSpec(sign, owner, 'placeHedge', '/hedge/pair', spec) as Promise<HedgePairResult & Record<string, unknown>>;
 export const cancelOrder = (sign: Sign, owner: Hex, spec: CancelSpec) => sendSpec(sign, owner, 'cancelOrder', '/order/cancel', spec);
 /** Moves one resting limit order to a new price (same size, side and cloid; the exchange assigns a new oid). */
 export interface ModifySpec {

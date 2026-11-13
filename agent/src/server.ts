@@ -37,6 +37,7 @@ import { parseSessionSpec, publicSession, sessionPolicy, SessionStore } from './
 import { DEFAULT_GUARD_CONFIG, evaluateGuard, type GuardConfig } from './guard.ts';
 import { GuardLoop } from './guardLoop.ts';
 import { HedgeRefused, Hedger, parseHedgeSpec, type HedgeSpec } from './hedge.ts';
+import { DailyBudget, EXAMPLE_PROMPTS, MAX_TRADE_TEXT, claudeIntentAsk, intentDrafter, type TradeDraft } from './trade/intent.ts';
 import { HedgePairExecutor, validateHedgePairSpec, type HedgePairPlan, type HedgePairSpec } from './hedgePair.ts';
 import { OrderExecutor, OrderRefused } from './orders.ts';
 import { validateCancelSpec, validateModifySpec, validateOrderSpec, type CancelSpec, type ModifySpec, type OrderPlan, type OrderSpec, type RestingOrder } from './order.ts';
@@ -69,6 +70,10 @@ export interface Deps {
   orders?: OrderExecutor;
   /** new hedged position, both legs at once (placeHedge) */
   pairs?: HedgePairExecutor;
+  /** Easy trading: plain text -> a draft spec the owner then signs (needs ANTHROPIC_API_KEY; the dry run answers its example prompts) */
+  tradeDrafter?: (owner: Hex, text: string) => Promise<TradeDraft>;
+  /** its own limits, apart from the relay limiter: per IP, per owner, and a daily cap on model calls */
+  chatLimits?: { perIp: RateLimiter; perOwner: RateLimiter; daily: DailyBudget };
   relayer: Relayer;
   bus: EventBus;
   replay: ReplayCache;
@@ -335,6 +340,20 @@ export function handler(d: Deps) {
         }
         if (!d.orders) throw new HttpError(503, 'orders off');
         return reply(200, await d.orders.cancel(cmd.owner, v.spec, v.asset));
+      }
+      if (req.method === 'GET' && url.pathname === '/trade/examples') return reply(200, { examples: EXAMPLE_PROMPTS, available: Boolean(d.tradeDrafter) });
+      if (req.method === 'POST' && url.pathname === '/trade/draft') {
+        if (!d.tradeDrafter || !d.chatLimits) throw new HttpError(503, 'Easy trading is off (ANTHROPIC_API_KEY not set)');
+        const b = (await readJson(req)) as { owner?: unknown; text?: unknown };
+        if (typeof b.text !== 'string' || !b.text.trim() || b.text.length > MAX_TRADE_TEXT) throw new HttpError(400, `text must be 1-${MAX_TRADE_TEXT} characters`);
+        const owner = ownerOf(b.owner);
+        const lim = d.chatLimits;
+        if (!lim.perIp.allow(req.socket.remoteAddress ?? 'unknown') || !lim.perOwner.allow(owner)) throw new HttpError(429, 'rate limited: wait a minute');
+        // only an owner who opted this agent in reaches the model (the `owner` field is not authenticated, so this keeps strangers from spending the budget)
+        if (!d.dryRun) await assertOptedIn(d, owner);
+        if (!lim.daily.take()) throw new HttpError(429, 'the daily limit for Easy trading is used up');
+        const draft = await d.tradeDrafter(owner, b.text);
+        return reply(draft.ok ? 200 : 422, draft);
       }
       if (req.method === 'POST' && url.pathname === '/hedge/pair') {
         const body = (await readJson(req)) as { spec?: unknown };
@@ -608,6 +627,18 @@ export function buildDeps(config: AgentConfig, tee?: TeeRuntime): Deps {
   });
   if (config.relayer) d.sweeper = (owner) => sweepFrozen(owner, livePorts({ client, hl: legs.hl, network: config.network }));
   if (process.env.ANTHROPIC_API_KEY) {
+    d.tradeDrafter = intentDrafter({
+      ask: claudeIntentAsk(),
+      snapshot: (o) => legs.snapshot(o),
+      policy: config.policy,
+      busyLegs: (o) => strategies.list(o).filter((s) => s.state !== 'stopped').map((s) => s.leg),
+      touch: async (coin) => {
+        const book = await legs.hl.l2Book({ coin });
+        const [bid, ask] = [Number(book?.levels[0][0]?.px), Number(book?.levels[1][0]?.px)];
+        return bid > 0 && ask > 0 ? { bid, ask } : undefined;
+      },
+    });
+    d.chatLimits = { perIp: new RateLimiter(10), perOwner: new RateLimiter(6), daily: new DailyBudget(Number(process.env.HYPERNEAR_CHAT_DAILY) || 300) };
     d.drafter = drafter({
       ask: claudeAsk(),
       context: (owner, selfId) => strategies.context(owner, selfId),

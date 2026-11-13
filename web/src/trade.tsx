@@ -234,7 +234,7 @@ export function TradeTab(p: TradeProps) {
             <b>{f.coin} order</b>
             <button aria-label="Close the order sheet" onClick={() => setSheet(false)}>×</button>
           </div>
-          <Ticket view={view} owner={owner} f={f} set={set} mid={mid} locked={p.locked} why={p.why} sign={p.sign} session={p.session} run={p.run} done={p.done} onPlaced={() => (bump(), setSheet(false))} onCloseHedge={p.onCloseHedge} onGo={p.onGo} initialMode={p.mode} />
+          <Ticket view={view} owner={owner} f={f} set={set} mid={mid} book={market.book?.bids[0] && market.book.asks[0] ? { bid: market.book.bids[0].px, ask: market.book.asks[0].px } : undefined} locked={p.locked} why={p.why} sign={p.sign} session={p.session} run={p.run} done={p.done} onPlaced={() => (bump(), setSheet(false))} onCloseHedge={p.onCloseHedge} onGo={p.onGo} initialMode={p.mode} />
         </div>
         <LegAccount leg={f.leg} snap={leg} guardFloor={GUARD_FLOOR} onGo={p.onGo} />
       </div>

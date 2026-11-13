@@ -1,10 +1,10 @@
 // 1-click trading: one wallet signature starts a session whose key lives in this tab (sessionStorage, gone when the tab
 // closes); orders and cancels are then signed by that key with no wallet popup. The agent accepts the key only for
-// placeOrder / cancelOrder, only for this owner, only until expiry, inside its order policy; a freeze ends it.
+// placeOrder / cancelOrder (and placeHedge when ticked), only for this owner, only until expiry, inside its order policy; a freeze ends it.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Hex } from 'viem';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
-import { commandTypedData, newCommand, newSessionSpec, type ChainTag, type Command, type SessionSpec } from './hypernear';
+import { commandTypedData, DEFAULT_SESSION_ACTIONS, newCommand, newSessionSpec, type ChainTag, type Command, type SessionSpec } from './hypernear';
 import { currentAgent, post, type OwnerView } from './api';
 import { sendSpec, type Sign } from './trading';
 
@@ -46,7 +46,7 @@ export interface SessionApi {
   secondsLeft: number;
   /** signs `c` with the session key when the session covers it; otherwise undefined (the wallet signs) */
   signFor: (c: Command) => Promise<Hex> | undefined;
-  start: (ttlSec: number) => Promise<string>;
+  start: (ttlSec: number, withHedge?: boolean) => Promise<string>;
   end: () => Promise<string>;
 }
 
@@ -81,10 +81,11 @@ export function useSession(owner: Hex | undefined, view: OwnerView | undefined, 
   );
 
   const start = useCallback(
-    async (ttlSec: number) => {
+    async (ttlSec: number, withHedge = false) => {
       if (!owner) throw new Error('Log in first');
       const pk = generatePrivateKey();
-      const spec = newSessionSpec(privateKeyToAccount(pk).address, ttlSec);
+      // opening a hedge (two legs at once) is never part of the default set: the owner ticks it for this session
+      const spec = newSessionSpec(privateKeyToAccount(pk).address, ttlSec, Date.now(), {}, withHedge ? [...DEFAULT_SESSION_ACTIONS, 'placeHedge'] : undefined);
       await sendSpec(ownerSign, owner, 'startSession', '/session/start', spec); // the one wallet signature
       const s = { pk, spec };
       save(owner, s);
@@ -113,10 +114,11 @@ const left = (s: number) => (s >= 3600 ? `${Math.floor(s / 3600)} h ${Math.floor
 /** The ticket's footer line: on with time left and Turn off, or off with a duration and Turn on. */
 export function SessionControl({ s, run, locked, why }: { s: SessionApi; run: (key: string, fn: () => Promise<string>) => Promise<void>; locked: boolean; why?: string }) {
   const [ttl, setTtl] = useState<number>(3600);
+  const [hedge, setHedge] = useState(false);
   if (s.spec) {
     return (
       <div className="session on" role="status">
-        <span>1-click trading on · {left(s.secondsLeft)} left</span>
+        <span>1-click trading on · {left(s.secondsLeft)} left{(s.spec.actions as string[]).includes('placeHedge') ? ' · hedges included' : ''}</span>
         <button className="link" onClick={() => run('session', s.end)}>Turn off</button>
       </div>
     );
@@ -128,9 +130,10 @@ export function SessionControl({ s, run, locked, why }: { s: SessionApi; run: (k
       <select id="session-ttl" value={ttl} onChange={(e) => setTtl(Number(e.target.value))}>
         {SESSION_DURATIONS.map((d) => <option key={d.sec} value={d.sec}>{d.label}</option>)}
       </select>
-      <button disabled={locked} title={why ?? 'One signature now; orders and cancels on this tab are then signed without a popup, inside the agent policy. Freeze ends it.'} onClick={() => run('session', () => s.start(ttl))}>
+      <button disabled={locked} title={why ?? 'One signature now; orders and cancels on this tab are then signed without a popup, inside the agent policy. Freeze ends it.'} onClick={() => run('session', () => s.start(ttl, hedge))}>
         Turn on 1-click
       </button>
+      <label className="t-check" title="A hedge opens two positions at once, so it counts both legs against the per-order cap. Off by default."><input type="checkbox" checked={hedge} onChange={(e) => setHedge(e.target.checked)} /> Also allow opening hedges</label>
     </div>
   );
 }

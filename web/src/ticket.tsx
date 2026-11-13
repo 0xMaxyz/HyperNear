@@ -9,7 +9,7 @@ import { newCommand } from './hypernear';
 import { n, usd } from './panels';
 import { buildSpec, CLOSING_TYPES, describeSpec, TYPE_LABEL, type OrderForm } from './orderForm';
 import { SessionControl, type SessionApi } from './session';
-import { floorSize, placeOrder, roundPx, sendSpec, type HedgeSpec, type OrderType, type Sign } from './trading';
+import { floorSize, placeHedge, placeOrder, roundPx, sendSpec, type HedgePairSpec, type HedgeSpec, type OrderType, type Sign } from './trading';
 
 const PRO_TYPES: OrderType[] = ['stopMarket', 'stopLimit', 'takeMarket', 'takeLimit', 'twap', 'trailing', 'bracket'];
 const PRO_LABEL: Partial<Record<OrderType, string>> = { bracket: 'TP/SL for the position' };
@@ -21,6 +21,8 @@ export interface TicketProps {
   set: (patch: Partial<OrderForm>) => void;
   /** mark price of f.coin */
   mid: number;
+  /** best bid and ask of f.coin from the live book, when there is one */
+  book?: { bid: number; ask: number };
   locked: boolean;
   why?: string;
   sign: Sign;
@@ -303,8 +305,142 @@ export function Ticket(p: TicketProps) {
   );
 }
 
-/** Hedge mode: the agent shorts (or longs) `ratio` of leg 0's position on leg 1, at leg 1's own leverage if set. */
+/** Hedge mode: open a NEW hedged position, or hedge one leg 0 already holds. */
 function HedgeTicket(p: TicketProps) {
+  const [kind, setKind] = useState<'new' | 'existing'>('new');
+  return (
+    <>
+      <div role="tablist" aria-label="Hedge kind" className="t-types">
+        <button role="tab" aria-selected={kind === 'new'} onClick={() => setKind('new')}>Open new hedge</button>
+        <button role="tab" aria-selected={kind === 'existing'} onClick={() => setKind('existing')}>Hedge leg 0's position</button>
+      </div>
+      {kind === 'new' ? <NewHedge {...p} /> : <ExistingHedge {...p} />}
+    </>
+  );
+}
+
+const TAKER_RATE = 0.00045; // Hyperliquid's base taker rate; the real rate of the account can be lower
+
+/** Long or short hedge in one action: leg 0 takes the side, leg 1 the opposite side at the ratio, both at market off one book read. */
+function NewHedge(p: TicketProps) {
+  const { view, f, mid, book } = p;
+  const [side, setSide] = useState<'long' | 'short'>('long');
+  const [size, setSize] = useState('');
+  const [ratio, setRatio] = useState(100);
+  const [levA, setLevA] = useState(5);
+  const [levB, setLevB] = useState<'same' | string>('same');
+  const [crossA, setCrossA] = useState(true);
+  const [crossB, setCrossB] = useState<'same' | 'cross' | 'isolated'>('same');
+  const asset = view.snapshot.market.assets?.find((a) => a.name === f.coin);
+  const dp = asset?.szDecimals ?? 5;
+  const maxLev = Math.min(view.orderPolicy.maxLeverage, asset?.maxLeverage ?? 40);
+  const cap = view.orderPolicy.maxNotionalUsd;
+  const legOf = (n: number) => view.snapshot.legs.find((l) => l.leg === n);
+  const ready = (n: number) => (view.legs ?? []).some((l) => l.leg === n && l.agent?.approvedAt);
+  const holds = (n: number) => legOf(n)?.clearinghouse.assetPositions.some((x) => x.position.coin === f.coin && Number(x.position.szi) !== 0);
+  const levBn = levB === 'same' ? Math.min(levA, maxLev) : Number(levB);
+  const sizeA = Number(size) || 0;
+  const sizeB = Number(floorSize(sizeA * (ratio / 100), dp));
+  const notionalA = sizeA * mid;
+  const notionalB = sizeB * mid;
+  const spreadBps = book && mid ? ((book.ask - book.bid) / mid) * 1e4 : undefined;
+  const feeEst = (notionalA + notionalB) * TAKER_RATE;
+  const avail = (n: number) => Number(legOf(n)?.clearinghouse.withdrawable ?? 0);
+  const need = (notional: number, lev: number) => (lev > 0 ? (notional / lev) * 1.05 : 0);
+  const why =
+    !ready(0) || !ready(1) ? 'Legs 0 and 1 both need an approved agent key (Home).'
+    : holds(0) || holds(1) ? `Leg ${holds(0) ? 0 : 1} already holds ${f.coin}: close it, or use "Hedge leg 0's position".`
+    : !(sizeA > 0) ? 'Enter a size.'
+    : Number(floorSize(sizeA, dp)) !== sizeA ? `${f.coin} sizes go to ${dp} decimals.`
+    : notionalA < 10 || notionalB < 10 ? `Each leg must be at least $10 (leg 1 would be ${usd(notionalB)}): raise the size or the ratio.`
+    : Math.max(notionalA, notionalB) > cap + 1e-9 ? `A leg is limited to ${usd(cap, 0)} per order; leg 0 would be ${usd(notionalA)}.`
+    : levA > maxLev || levBn > maxLev ? `${f.coin} allows up to ${maxLev}x.`
+    : need(notionalA, levA) > avail(0) ? `Leg 0 has ${usd(avail(0))} available but needs about ${usd(need(notionalA, levA))} margin.`
+    : need(notionalB, levBn) > avail(1) ? `Leg 1 has ${usd(avail(1))} available but needs about ${usd(need(notionalB, levBn))} margin.`
+    : undefined;
+  const spec: HedgePairSpec = {
+    coin: f.coin,
+    side,
+    size: String(sizeA),
+    ratio: String(ratio / 100),
+    leverageA: levA,
+    ...(levB !== 'same' ? { leverageB: Number(levB) } : {}),
+    isCrossA: crossA,
+    ...(crossB !== 'same' ? { isCrossB: crossB === 'cross' } : {}),
+  };
+  const px = (x: number | null) => (x === null ? '—' : usd(x));
+  const open = () =>
+    p.run('pair', async () => {
+      const out = await placeHedge(p.sign, p.owner, spec);
+      p.onPlaced();
+      const [a, b] = out.legs;
+      const lines = `leg 0 ${a.isBuy ? 'bought' : 'sold'} ${a.filled} at ${px(a.avgPx)}, leg 1 ${b.isBuy ? 'bought' : 'sold'} ${b.filled} at ${px(b.avgPx)}`;
+      if (out.status === 'failed') throw new Error(`Nothing was opened. ${out.notes.join(' ')}`);
+      if (out.status === 'unwound' || out.status === 'unbalanced') throw new Error(`${out.status === 'unwound' ? 'Only one leg filled, so it was closed again.' : 'The hedge is not balanced: look at Positions now.'} ${lines}. ${out.notes.join(' ')}`);
+      return p.done(out, `Hedge opened: ${lines}${out.spreadBps !== null ? `, entry spread ${out.spreadBps} bps` : ''}${out.status === 'trimmed' ? '. ' + out.notes.join(' ') : ''}`);
+    });
+
+  return (
+    <>
+      <div role="group" aria-label="Hedge direction" className="t-sides">
+        <button className="t-side buy" aria-pressed={side === 'long'} onClick={() => setSide('long')}>Long hedge</button>
+        <button className="t-side sell" aria-pressed={side === 'short'} onClick={() => setSide('short')}>Short hedge</button>
+      </div>
+      <p className="t-hint">Leg 0 goes {side}, leg 1 goes {side === 'long' ? 'short' : 'long'}. Both open at market at the same moment.</p>
+      <label className="t-input strong">
+        <span>Leg 0 size</span>
+        <input value={size} onChange={(e) => setSize(e.target.value)} inputMode="decimal" spellCheck={false} placeholder={mid ? `up to ${floorSize(cap / mid, dp)}` : undefined} />
+        <span className="t-unit">{f.coin}</span>
+      </label>
+      <div className="t-fracs">
+        {[0.25, 0.5, 0.75, 1].map((x) => <button key={x} disabled={!mid} onClick={() => setSize(String(Number(floorSize((cap / mid) * x, dp))))}>{x === 1 ? 'Max' : `${x * 100}%`}</button>)}
+      </div>
+      <div className="t-slider">
+        <div className="t-line"><span className="muted">Hedge ratio (leg 1 size)</span><span className="t-num">{ratio}%</span></div>
+        <input type="range" min={10} max={100} step={5} value={ratio} onChange={(e) => setRatio(Number(e.target.value))} aria-label="Hedge ratio" />
+        <div className="t-fracs">{[25, 50, 75, 100].map((x) => <button key={x} aria-pressed={ratio === x} onClick={() => setRatio(x)}>{x}%</button>)}</div>
+      </div>
+      <div className="t-row">
+        <label className="t-input stack">
+          <span>Leg 0 leverage (max {maxLev}x)</span>
+          <input type="number" min={1} max={maxLev} step={1} value={levA} onChange={(e) => setLevA(Math.max(1, Math.floor(Number(e.target.value)) || 1))} aria-label="Leg 0 leverage" />
+        </label>
+        <label className="t-input stack">
+          <span>Leg 1 leverage</span>
+          <select value={levB} onChange={(e) => setLevB(e.target.value)} aria-label="Leg 1 leverage">
+            <option value="same">Same as leg 0</option>
+            {Array.from({ length: maxLev }, (_, i) => i + 1).map((x) => <option key={x} value={x}>{x}x</option>)}
+          </select>
+        </label>
+      </div>
+      <div className="t-row">
+        <label className="t-input stack">
+          <span>Leg 0 margin</span>
+          <select value={crossA ? 'cross' : 'isolated'} onChange={(e) => setCrossA(e.target.value === 'cross')} aria-label="Leg 0 margin"><option value="cross">Cross</option><option value="isolated">Isolated</option></select>
+        </label>
+        <label className="t-input stack">
+          <span>Leg 1 margin</span>
+          <select value={crossB} onChange={(e) => setCrossB(e.target.value as typeof crossB)} aria-label="Leg 1 margin"><option value="same">Same as leg 0</option><option value="cross">Cross</option><option value="isolated">Isolated</option></select>
+        </label>
+      </div>
+      {Math.max(levA, levBn) >= 10 && <p className="t-hint" role="note">At {Math.max(levA, levBn)}x a {(100 / Math.max(levA, levBn)).toFixed(0)}% move against a leg liquidates it.</p>}
+      <dl className="t-kv">
+        <dt>Leg 0 {side === 'long' ? 'buys' : 'sells'}</dt><dd className="t-num">{sizeA ? `${sizeA} ${f.coin} · ${usd(notionalA)}` : '—'}</dd>
+        <dt>Leg 1 {side === 'long' ? 'sells' : 'buys'}</dt><dd className="t-num">{sizeB ? `${sizeB} ${f.coin} · ${usd(notionalB)}` : '—'}</dd>
+        <dt>Margin used</dt><dd className="t-num">{sizeA ? `${usd(notionalA / levA)} + ${usd(notionalB / (levBn || 1))}` : '—'}</dd>
+        <dt>Net exposure</dt><dd className="t-num">{sizeA ? `${n(Math.abs(sizeA - sizeB), dp)} ${f.coin} ${(sizeA - sizeB) * (side === 'long' ? 1 : -1) >= 0 ? side : side === 'long' ? 'short' : 'long'}` : '—'}</dd>
+        <dt>Book spread now</dt><dd className="t-num">{spreadBps !== undefined ? `${spreadBps.toFixed(2)} bps` : 'live book needed'}</dd>
+        <dt>Entry fees (about)</dt><dd className="t-num">{sizeA ? usd(feeEst, 4) : '—'}</dd>
+      </dl>
+      <p className="t-hint">Two accounts cannot share one exchange request, so the legs are sent together but not as a single atomic trade. If only one fills, the surplus is closed again. Each leg pays the book spread once.</p>
+      {why && size && <p className="t-msg err" role="alert">{why}</p>}
+      <button className="t-submit hedge" disabled={p.locked || Boolean(why)} title={p.why} onClick={open}>{p.session?.spec && (p.session.spec.actions as string[]).includes('placeHedge') ? '' : 'Sign · '}Open {side} hedge</button>
+    </>
+  );
+}
+
+/** The agent shorts (or longs) `ratio` of leg 0's position on leg 1, at leg 1's own leverage if set. */
+function ExistingHedge(p: TicketProps) {
   const { view, f } = p;
   const [ratio, setRatio] = useState(50);
   const [lev1, setLev1] = useState<'same' | string>('same');
@@ -374,7 +510,7 @@ function HedgeTicket(p: TicketProps) {
       {why && <p className="t-msg err" role="alert">{why}</p>}
       <button className="t-submit hedge" disabled={p.locked || Boolean(why)} title={p.why} onClick={open}>Sign · Open hedge on leg 1</button>
       {p1 && p0 && <button className="t-link" disabled={p.locked} onClick={() => p.onCloseHedge(f.coin)}>Close the {f.coin} hedge</button>}
-      <p className="t-hint">Hedges always sign with your wallet: 1-click covers single orders and cancels only.</p>
+      <p className="t-hint">1-click covers single orders and cancels; opening a hedge needs the box ticked when you turn it on.</p>
     </>
   );
 }
