@@ -795,7 +795,8 @@ details.fees tr.est { color: var(--muted); }
 /* ---------- Trade fits the window on wide screens: only the ticket column and the pages inside the dock move ---------- */
 @media (min-width: 1281px) {
   main.wide { height: calc(100dvh - var(--top-h, 53px)); padding-bottom: 8px; grid-template-rows: minmax(0, 1fr); overflow: hidden; }
-  main.wide > .terminal { min-height: 0; grid-template-rows: auto minmax(0, 1fr) minmax(220px, 36%); }
+  main.wide > .panel { min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr); }
+  main.wide > .panel > .terminal { min-height: 0; grid-template-rows: auto minmax(0, 1fr) clamp(200px, 36dvh, 420px); }
   .terminal .t-side-col { min-height: 0; overflow-y: auto; }
   .terminal .t-blotter { min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
   .terminal .t-blotter > .paged, .terminal .t-blotter > .t-scroll { flex: 1; min-height: 0; }

@@ -50,7 +50,14 @@ try {
     if (r.request().method() !== 'POST' || !/^http:\/\/(localhost|127\.0\.0\.1|192\.168\.1\.10):\d+\//.test(r.url())) return;
     posts.push({ path: new URL(r.url()).pathname, body: JSON.parse(r.request().postData() ?? '{}'), status: r.status(), out: await r.json().catch(() => ({})) });
   });
-  const note = async () => { await page.locator('.notice').first().waitFor({ timeout: 25000 }); await page.waitForTimeout(900); return page.locator('.notice').first().innerText(); };
+  // alerts are toasts now: the newest one that differs from the last one read
+  let lastNote = '';
+  const note = async () => {
+    await page.waitForFunction((prev) => { const t = [...document.querySelectorAll('.toast-text')].map((e) => e.textContent); return t.length > 0 && t[t.length - 1] !== prev; }, lastNote, { timeout: 25000 });
+    await page.waitForTimeout(300);
+    lastNote = await page.locator('.toast-text').last().innerText();
+    return lastNote;
+  };
   const go = async (hash) => { await page.evaluate((h) => { location.hash = h; }, hash); await page.waitForTimeout(1500); };
 
   await page.goto(PAGE);
