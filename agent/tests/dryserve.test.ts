@@ -266,9 +266,9 @@ describe('--dry-run --serve: signed orders', () => {
     const good = { leg: 2, coin: 'BTC', side: 'buy', type: 'market', size: '0.0002', leverage: 4 };
     const other = await withSpec('placeOrder', good);
     expect((await post(`${base}/order/place`, { ...other, spec: { ...good, size: '0.0003' } })).status).toBe(401);
-    const bad = await post(`${base}/order/place`, await withSpec('placeOrder', { ...good, leverage: 20 }));
+    const bad = await post(`${base}/order/place`, await withSpec('placeOrder', { ...good, leverage: 200 }));
     expect(bad.status).toBe(422);
-    expect((await bad.json()).error).toMatch(/above the policy maximum 5x/);
+    expect((await bad.json()).error).toMatch(/above the policy maximum 100x/);
     expect((await post(`${base}/order/place`, await withSpec('cancelOrder', good))).status).toBe(400); // wrong action for the route
   });
 

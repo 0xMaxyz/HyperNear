@@ -252,7 +252,7 @@ export function App({ auth }: { auth: Auth }) {
     });
 
   const ratioOk = /^\d+(\.\d+)?$/.test(ratio) && Number(ratio) > 0 && Number(ratio) <= 1;
-  const lev1Ok = lev1 === '' || (/^\d+$/.test(lev1) && Number(lev1) >= 1 && Number(lev1) <= (view?.orderPolicy.maxLeverage ?? 5));
+  const lev1Ok = lev1 === '' || (/^\d+$/.test(lev1) && Number(lev1) >= 1 && Number(lev1) <= Math.min(view?.orderPolicy.maxLeverage ?? 5, view?.snapshot.market.assets?.find((a) => a.name === coin)?.maxLeverage ?? 40));
   const hedgeCoinParam = route.tab === 'hedge' ? route.params.get('coin') : null;
   useEffect(() => {
     if (hedgeCoinParam && coins.includes(hedgeCoinParam)) setCoin(hedgeCoinParam);

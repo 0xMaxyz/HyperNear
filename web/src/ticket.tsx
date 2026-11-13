@@ -59,7 +59,8 @@ export function Ticket(p: TicketProps) {
   // a new leg or coin starts from that leg's own leverage and margin mode when it already holds the coin
   const posKey = `${f.leg}:${f.coin}:${pos ? `${pos.leverage.value}${pos.leverage.type}` : 'flat'}`;
   useEffect(() => {
-    set(pos ? { keepLeverage: true, leverage: String(pos.leverage.value), isCross: pos.leverage.type === 'cross' } : { keepLeverage: false });
+    // a flat leg keeps what was typed, held under the new coin's own maximum
+    set(pos ? { keepLeverage: true, leverage: String(pos.leverage.value), isCross: pos.leverage.type === 'cross' } : { keepLeverage: false, leverage: String(Math.min(Number(f.leverage) || 5, maxLev)) });
   }, [posKey]); // eslint-disable-line react-hooks/exhaustive-deps
   // a closing order is on the position's other side
   useEffect(() => {
@@ -97,6 +98,7 @@ export function Ticket(p: TicketProps) {
   const lev = f.keepLeverage && pos ? pos.leverage.value : Number(f.leverage) || 0;
   const overCap = opens && notional > cap + 1e-9;
   const overLev = opens && !f.keepLeverage && lev > maxLev;
+  const highLev = opens && lev >= 10 && !overLev;
   const blocked = overCap ? `${usd(notional)} is over the ${usd(cap)} per-order cap. The agent would refuse it.` : overLev ? `${lev}x is above the ${maxLev}x maximum.` : undefined;
   const [levOpen, setLevOpen] = useState(false);
 
@@ -153,9 +155,10 @@ export function Ticket(p: TicketProps) {
           <label className="sr-only" htmlFor="lev-range">Leverage</label>
           <input id="lev-range" type="range" min={1} max={maxLev} step={1} value={Math.min(lev || 1, maxLev)} onChange={(e) => set({ leverage: e.target.value, keepLeverage: false })} />
           <span className="t-num">{lev}x</span>
-          <span className="muted small">max {maxLev}x{pos && f.keepLeverage ? ' · leg\'s current' : ''}</span>
+          <span className="muted small">max {maxLev}x for {f.coin}{pos && f.keepLeverage ? ' · leg\'s current' : ''}</span>
         </div>
       )}
+      {highLev && <p className="t-hint" role="note">At {lev}x a {(100 / lev).toFixed(0)}% move against the position liquidates it.</p>}
 
       <div role="tablist" aria-label="Ticket mode" className="t-modes">
         <button role="tab" aria-selected={mode === 'single'} onClick={() => setMode('single')}>Single leg</button>
@@ -268,7 +271,7 @@ export function Ticket(p: TicketProps) {
 
           {opens && (
             <div className={`t-policy ${blocked ? 'over' : ''}`}>
-              <div className="t-policy-l"><span>Agent policy</span><span className="muted">{coins.join(', ')} · ≤ {policyLev}x · ≤ {usd(cap, 0)} per order</span></div>
+              <div className="t-policy-l"><span>Agent policy</span><span className="muted">{coins.join(', ')} · ≤ {maxLev}x for {f.coin} · ≤ {usd(cap, 0)} per order</span></div>
               <div className="t-meter" aria-hidden="true"><span className={`t-fill ${overCap ? 'down' : 'info'}`} style={{ width: `${Math.min(100, (notional / cap) * 100)}%` }} /></div>
               <div className="t-policy-l muted"><span>This order {notional ? usd(notional) : '—'}</span><span>{overCap ? `${usd(notional - cap)} over` : `${usd(Math.max(0, cap - notional))} left`}</span></div>
               {blocked && (
@@ -313,7 +316,7 @@ function HedgeTicket(p: TicketProps) {
   const leg1Ready = (view.legs ?? []).some((l) => l.leg === 1 && l.agent?.approvedAt);
   const s0 = Number(p0?.szi ?? 0);
   const hedgeSize = Number(floorSize((Math.abs(s0) * ratio) / 100, dp));
-  const maxLev = view.orderPolicy.maxLeverage;
+  const maxLev = Math.min(view.orderPolicy.maxLeverage, view.snapshot.market.assets?.find((a) => a.name === f.coin)?.maxLeverage ?? 40);
   const spec: HedgeSpec | undefined =
     lev1 === 'same' && margin1 === 'same' ? undefined : { ...(lev1 !== 'same' ? { leg1Leverage: Number(lev1) } : {}), ...(margin1 !== 'same' ? { leg1IsCross: margin1 === 'cross' } : {}) };
   const why = !p0 ? `Leg 0 holds no ${f.coin}. A hedge mirrors leg 0's position on leg 1, so open it on leg 0 first.` : !leg1Ready ? 'Leg 1 has no approved agent key yet (Home).' : p1 ? `Leg 1 already holds ${n(Math.abs(Number(p1.szi)), dp)} ${f.coin}: close that hedge before opening another.` : hedgeSize * p.mid < 10 ? 'That is below the $10 Hyperliquid minimum: raise the ratio.' : undefined;

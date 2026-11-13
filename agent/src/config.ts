@@ -71,7 +71,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AgentConfig {
     relayer: keyPair('HYPERNEAR_RELAYER_ACCOUNT_ID', 'HYPERNEAR_RELAYER_PRIVATE_KEY', env),
     nearAgent: keyPair('HYPERNEAR_AGENT_ACCOUNT_ID', 'HYPERNEAR_AGENT_PRIVATE_KEY', env),
     policy: {
-      maxLeverage: num(env.HYPERNEAR_MAX_LEVERAGE, 5),
+      // above every market's own maximum, so by default each market's max is the limit; an operator can set it lower
+      maxLeverage: num(env.HYPERNEAR_MAX_LEVERAGE, 100),
       maxNotionalUsd: num(env.HYPERNEAR_MAX_NOTIONAL_USD, 100),
       allowedCoins: (env.HYPERNEAR_ALLOWED_COINS ?? 'BTC,ETH').split(',').map((s) => s.trim()).filter(Boolean),
       slippage: num(env.HYPERNEAR_SLIPPAGE, 0.03),

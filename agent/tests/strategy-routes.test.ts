@@ -117,7 +117,7 @@ describe('strategy routes', () => {
     const other = { ...spec, params: { ...spec.params, slices: 2 } };
     expect((await post(`${base}/strategy/start`, await start(specHash(spec), other))).status).toBe(401);
     expect((await post(`${base}/strategy/start`, await start(`0x${'0'.repeat(64)}`, spec, Date.now() + 1))).status).toBe(400);
-    const bad = { ...spec, limits: { ...spec.limits, maxLeverage: 10 } };
+    const bad = { ...spec, limits: { ...spec.limits, maxLeverage: 200 } };
     const r = await post(`${base}/strategy/start`, await start(specHash(bad as never), bad, Date.now() + 2));
     expect(r.status).toBe(422);
     expect((await r.json()).error).toContain('can only tighten the policy');

@@ -27,7 +27,7 @@ export interface OrderForm {
 }
 
 export const emptyForm = (leg = 0, coin = 'BTC'): OrderForm => ({
-  leg, coin, side: 'buy', type: 'market', size: '', reduceOnly: false, leverage: '3', isCross: true, keepLeverage: false, limitPx: '', triggerPx: '', tif: 'Gtc', tpPx: '', slPx: '', attach: false, minutes: '30', trailBy: 'pct', trailValue: '5', activationPx: '',
+  leg, coin, side: 'buy', type: 'market', size: '', reduceOnly: false, leverage: '5', isCross: true, keepLeverage: false, limitPx: '', triggerPx: '', tif: 'Gtc', tpPx: '', slPx: '', attach: false, minutes: '30', trailBy: 'pct', trailValue: '5', activationPx: '',
 });
 
 export const TYPE_LABEL: Record<OrderType, string> = {
