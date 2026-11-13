@@ -97,7 +97,10 @@ export function parseCloseSpec(v: unknown): number[] {
 }
 
 /** Reduce-only IOC that flattens `coin` on the hedge's legs (default legs 0 and 1; the page passes the two legs of the hedge it shows). */
-export function planCloseHedge(s: OwnerSnapshot, coin: string, policy: OrderPolicy, legs: number[] = [0, 1]): ClosePlan {
+export function planCloseHedge(s: OwnerSnapshot, coin: string, policy: OrderPolicy, named?: number[]): ClosePlan {
+  const legs = named ?? [0, 1];
+  const missing = named?.filter((n) => !s.legs.some((x) => x.leg === n));
+  if (missing?.length) return { ok: false, reason: `leg ${missing.join(', ')} is not registered` };
   const m = marketOf(s, coin);
   if (!m) return { ok: false, reason: `no market data for ${coin}` };
   const orders: PlannedOrder[] = [];
@@ -202,18 +205,26 @@ export class Hedger {
     return { plan, results: await this.runOrders(owner, 'close', coin, plan.orders) };
   }
 
-  /** IOC orders in sequence with each leg's agent key; stops at the first rejected order. */
+  /** IOC orders in sequence with each leg's agent key; opening stops at the first rejected order, closing tries every leg. */
   async runOrders(owner: Hex, op: string, coin: string, orders: PlannedOrder[]) {
     const results = [];
+    const failed: string[] = [];
     const group = newGroup();
     for (const o of orders) {
-      const res = await this.legs
-        .tradingClient(owner, o.leg)
-        .limitOrderOpen({ asset: o.asset, isBuy: o.isBuy, price: o.price, size: o.size, tif: 'Ioc', reduceOnly: o.reduceOnly, c: makeCloid(o.reduceOnly ? 'hedgeClose' : 'hedgeOpen', group) });
-      const fill = fillOf(res);
-      this.bus?.emit('hedge', { owner, op, coin, order: o, fill });
-      results.push({ order: o, result: res, fill });
+      try {
+        const res = await this.legs
+          .tradingClient(owner, o.leg)
+          .limitOrderOpen({ asset: o.asset, isBuy: o.isBuy, price: o.price, size: o.size, tif: 'Ioc', reduceOnly: o.reduceOnly, c: makeCloid(o.reduceOnly ? 'hedgeClose' : 'hedgeOpen', group) });
+        const fill = fillOf(res);
+        this.bus?.emit('hedge', { owner, op, coin, order: o, fill });
+        results.push({ order: o, result: res, fill });
+      } catch (e) {
+        // opening: stop, so the second leg is not opened alone. Closing: keep going, so one refusal does not leave the other leg open
+        if (op !== 'close') throw e;
+        failed.push(`leg ${o.leg}: ${(e as Error).message}`);
+      }
     }
+    if (failed.length) throw new Error(`closing was not complete (${results.map((r) => `leg ${r.order.leg} closed`).join(', ') || 'no leg closed'}): ${failed.join('; ')}`);
     return results;
   }
 }

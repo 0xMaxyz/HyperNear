@@ -28,7 +28,7 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
 export function currentLevels(orders: OpenOrder[], leg: LegPosition): { up?: number; down?: number } {
   const out: { up?: number; down?: number } = {};
   for (const o of orders) {
-    if (o.leg !== leg.leg || o.coin !== leg.coin || !o.isPositionTpsl || !o.isTrigger) continue;
+    if (o.leg !== leg.leg || o.coin !== leg.coin || !o.isTrigger || !(o.isPositionTpsl || o.reduceOnly)) continue;
     const px = Number(o.triggerPx);
     if (!(px > 0)) continue;
     const takeProfit = /take profit/i.test(o.orderType);
@@ -96,7 +96,7 @@ export function ProtectModal({ target, orders, mark, decimals, busy, onSave, onC
       {row(downLabel, down, setDown, d, 'tpsl-down')}
       {err && <p className="t-msg err" role="alert">{err}</p>}
       <div className="modal-actions">
-        <button className="primary" disabled={busy || Boolean(err) || unchanged} onClick={() => onSave(spec())}>{busy ? 'Saving…' : up === '' && down === '' ? 'Sign · Remove TP/SL' : 'Sign · Save TP/SL'}</button>
+        <button className="primary" disabled={busy || Boolean(err) || (unchanged && !differ)} onClick={() => onSave(spec())}>{busy ? 'Saving…' : up === '' && down === '' ? 'Sign · Remove TP/SL' : 'Sign · Save TP/SL'}</button>
         <button onClick={onClose}>Cancel</button>
       </div>
       <p className="muted small">{hedge ? 'The two exits are sent to the exchange together and fire off the same price, but they are two orders on two accounts, not one transaction. A later change to one leg does not move the other leg\'s levels.' : 'The exchange holds these orders; nothing needs to stay open. A freeze cancels them.'}</p>

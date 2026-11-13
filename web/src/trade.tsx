@@ -288,10 +288,10 @@ export function TradeTab(p: TradeProps) {
         onCancel={cancel}
         onCancelAll={cancelAll}
       />
-      {protect && (
+      {protect && orders && (
         <ProtectModal
           target={protect}
-          orders={orders?.orders ?? []}
+          orders={orders.orders}
           mark={Number(view.snapshot.market.mids[protect.coin] ?? protect.legs[0]!.markPx)}
           decimals={decimals(protect.coin)}
           busy={p.locked}

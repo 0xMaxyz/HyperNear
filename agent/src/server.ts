@@ -63,6 +63,8 @@ import { pinAccount, teeAccount } from './teeAccount.ts';
 
 /** owners whose hedge pair is opening right now (see POST /hedge/pair) */
 const pairsInFlight = new Set<string>();
+/** owners with a TP/SL change in flight (see POST /order/protect) */
+const protectBusy = new Set<string>();
 
 export interface Deps {
   config: AgentConfig;
@@ -380,7 +382,14 @@ export function handler(d: Deps) {
           return reply(200, await d.dryRun.protect(cmd.owner, v.spec, v.plans));
         }
         if (!d.orders) throw new HttpError(503, 'orders off');
-        return reply(200, await d.orders.protect(cmd.owner, v.spec, v.plans));
+        // two changes at once (a double click, two tabs) would each read the old triggers and leave two new sets
+        if (protectBusy.has(cmd.owner)) throw new HttpError(409, 'a TP/SL change is already running for this account');
+        protectBusy.add(cmd.owner);
+        try {
+          return reply(200, await d.orders.protect(cmd.owner, v.spec, v.plans));
+        } finally {
+          protectBusy.delete(cmd.owner);
+        }
       }
       if (req.method === 'POST' && url.pathname === '/hedge/pair') {
         const body = (await readJson(req)) as { spec?: unknown };

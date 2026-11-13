@@ -162,24 +162,40 @@ export class OrderExecutor {
       const hl = this.legs.tradingClient(owner, p.leg);
       const user = await this.legs.client.getLeg(owner, p.leg);
       if (!user) throw new OrderRefused(`leg ${p.leg} is not registered`);
-      const old = (await this.legs.hl.frontendOpenOrders({ user })).filter((o) => o.coin === spec.coin && o.isPositionTpsl && o.isTrigger).map((o) => o.oid);
+      // every reduce-only exit trigger on the coin: the position bracket and any fixed-size TP/SL attached to an earlier order
+      const triggers = async () => (await this.legs.hl.frontendOpenOrders({ user })).filter((o) => o.coin === spec.coin && o.isTrigger && (o.isPositionTpsl || o.reduceOnly)).map((o) => o.oid);
+      const old = await triggers();
       // closing orders: a long is closed by sells, a short by buys; the market trigger's limit price leaves room for slippage
       const child = (px: string, tpsl: 'tp' | 'sl'): HlOrderInput => ({ a: p.asset, b: !p.long, p: roundPx(Number(px) * (p.long ? 1 - slip : 1 + slip), p.szDecimals), s: '0', r: true, t: { trigger: { isMarket: true, triggerPx: px, tpsl } }, c: makeCloid('protect', newGroup()) });
       const orders = [...(p.tpPx ? [child(p.tpPx, 'tp')] : []), ...(p.slPx ? [child(p.slPx, 'sl')] : [])];
-      const placed = orders.length ? statusesOf(await verdict(() => hl.order({ orders, grouping: 'positionTpsl' }))).length : 0;
+      let placed = 0;
+      if (orders.length) {
+        try {
+          placed = statusesOf(await verdict(() => hl.order({ orders, grouping: 'positionTpsl' }))).length;
+        } catch (e) {
+          // one of the two may be live while its sibling was refused: take the new ones back so the leg never holds two sets
+          const fresh = (await triggers().catch(() => [] as number[])).filter((oid) => !old.includes(oid));
+          for (const oid of fresh) await hl.cancelOrder({ asset: p.asset, oid }).catch(() => undefined);
+          throw e;
+        }
+      }
       const cancelled: number[] = [];
       let cancelError: string | undefined;
       for (const oid of old) {
-        try {
-          await verdict(() => hl.cancelOrder({ asset: p.asset, oid }));
-          cancelled.push(oid);
-        } catch (e) {
-          cancelError = (e as Error).message;
+        for (let attempt = 0; attempt < 2 && !cancelled.includes(oid); attempt++) {
+          try {
+            await verdict(() => hl.cancelOrder({ asset: p.asset, oid }));
+            cancelled.push(oid);
+            cancelError = undefined;
+          } catch (e) {
+            cancelError = (e as Error).message;
+          }
         }
       }
-      return { leg: p.leg, ok: !cancelError, placed, cancelled, ...(cancelError ? { error: `the new triggers are set but an old one could not be cancelled: ${cancelError}` } : {}) };
+      return { leg: p.leg, ok: !cancelError, placed, cancelled, ...(cancelError ? { error: `${orders.length ? 'the new triggers are set but an old one' : 'an old trigger'} could not be cancelled: ${cancelError}` } : {}) };
     };
-    const settled = await Promise.allSettled(plans.map(one));
+    // a network fault is retried once; an exchange refusal is an answer and is not
+    const settled = await Promise.allSettled(plans.map((p) => one(p).catch((e) => (e instanceof OrderRefused ? Promise.reject(e) : one(p)))));
     const legs = settled.map((r, i): ProtectLegResult => (r.status === 'fulfilled' ? r.value : { leg: plans[i]!.leg, ok: false, placed: 0, cancelled: [], error: r.reason instanceof OrderRefused ? r.reason.message : String((r.reason as Error)?.message ?? r.reason) }));
     const status = legs.every((l) => l.ok) ? 'ok' : legs.some((l) => l.ok) ? 'partial' : 'failed';
     this.bus?.emit('order', { owner, op: 'protect', spec, status, legs });
