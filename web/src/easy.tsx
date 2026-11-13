@@ -119,7 +119,7 @@ export function EasyTab(p: EasyProps) {
     });
 
   return (
-    <section className="easy" aria-labelledby="easy-h">
+    <section className="easy card wide" aria-labelledby="easy-h">
       <h2 id="easy-h">What do you want to do?</h2>
       <p className="muted">Pick a starting point or say it in your own words: a trade, a hedge, or a strategy that keeps running. You read the draft and sign it; nothing is sent before that. This page cannot withdraw or move money.</p>
 
