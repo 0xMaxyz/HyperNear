@@ -1,4 +1,6 @@
-import { decisionOf, sweepProblems, type Swept, type AgentEvent, type Decision, type DecisionMode, type GuardRow, type LegSnap, type OwnerView, type Position } from './api';
+import { useState } from 'react';
+import { decisionOf, sweepProblems, type Swept, type AgentEvent, type Decision, type DecisionMode, type DecisionOption, type GuardRow, type LegSnap, type OwnerView, type Position } from './api';
+import type { DecisionRow } from './decisions';
 
 const SOURCES: Record<string, string> = {
   jev: 'Jev decided alone',
@@ -189,6 +191,132 @@ export function summarize(e: AgentEvent): string {
     default:
       return `${who}${JSON.stringify(d).slice(0, 140)}`;
   }
+}
+
+/** What the agent suggests, in plain words (the raw action ids never reach the page). */
+const ACTION_TEXT: Record<string, (coin: string) => string> = {
+  hold: () => 'Keep both legs as they are',
+  close_both: (c) => `Close both ${c} legs`,
+  reduce_hedge: (c) => `Shrink the ${c} hedge`,
+  add_hedge: (c) => `Grow the ${c} hedge`,
+  take_profit: (c) => `Take profit on the winning ${c} leg`,
+  continue_strategy: () => 'Keep the strategy running',
+  pause_strategy: () => 'Pause the strategy',
+  adjust_strategy: () => 'Adjust the strategy',
+};
+export const decisionText = (d: { action: string; coin: string }) => (ACTION_TEXT[d.action]?.(d.coin) ?? d.action.replaceAll('_', ' '));
+const RISK_LABEL: Record<DecisionOption['risk'], string> = { safest: 'Safest', safer: 'Safer', none: 'No change', riskier: 'Riskier', riskiest: 'Riskiest' };
+const STATE_LABEL: Record<string, string> = { accepted: 'Accepted', declined: 'Declined', expired: 'Expired', replaced: 'Replaced by a newer suggestion', dismissed: 'Hidden' };
+const hm = (t: number) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+export function DecisionCard(p: {
+  rows: DecisionRow[];
+  mode?: DecisionMode;
+  canSign: boolean;
+  busy: string | null;
+  onAccept: (d: Decision, action?: string) => void;
+  onDecline: (d: Decision) => void;
+  onHide: (d: Decision) => void;
+  onMode: (m: DecisionMode) => void;
+  onAsk: () => void;
+}) {
+  const current = p.rows.find((r) => r.state === 'open');
+  const earlier = p.rows.filter((r) => r !== current);
+  const [open, setOpen] = useState(false);
+  const [pick, setPick] = useState<string>();
+  const why = p.canSign ? undefined : 'Log in to sign';
+  const d = current?.d;
+  const chosen = pick && d?.options?.some((o) => o.action === pick) ? pick : d?.action;
+  const mins = d?.expiresAt ? Math.max(0, Math.round((d.expiresAt - Date.now()) / 60_000)) : undefined;
+  return (
+    <section className="card" aria-labelledby="dec-h">
+      <h2 id="dec-h">Suggestions</h2>
+      {!d || !current ? (
+        <p className="state">No suggestions. The agent checks your hedges every few minutes.</p>
+      ) : (
+        <div className={`dec ${d.flagged ? 'flagged' : ''}`}>
+          <p className="dec-line">
+            <b>{decisionText(d)}</b>
+            <span className="muted small"> · arrived {hm(current.at)}{mins !== undefined ? `, expires in ${mins} min` : ''}</span>
+            <button className="link" aria-expanded={open} onClick={() => setOpen((x) => !x)}>{open ? 'Hide' : 'Review'}</button>
+          </p>
+          {open && (
+            <>
+              {d.rationale && <p className="rationale">{d.rationale}</p>}
+              {d.options && d.options.length > 1 && (
+                <fieldset className="dec-options">
+                  <legend className="sr-only">What to do</legend>
+                  {d.options.map((o) => (
+                    <label key={o.action} className={chosen === o.action ? 'on' : ''}>
+                      <input type="radio" name="dec-option" checked={chosen === o.action} onChange={() => setPick(o.action)} />
+                      <span className={`risk risk-${o.risk}`}>{RISK_LABEL[o.risk]}</span>
+                      <span>{o.text}{o.action === d.action ? ' (suggested)' : ''}</span>
+                    </label>
+                  ))}
+                </fieldset>
+              )}
+              <details className="how">
+                <summary>How the agent decided</summary>
+                <dl className="kv">
+                  <dt>Source</dt><dd className={d.flagged ? 'flag' : ''}>{SOURCES[d.source] ?? d.source}{d.flagged ? ', look twice' : ''}</dd>
+                  <dt>Model</dt><dd>{d.model}</dd>
+                  <dt>Latency</dt><dd>{(d.latencyMs / 1000).toFixed(1)} s</dd>
+                </dl>
+                {d.recorded && <p className="muted small">Recorded from a live testnet run.</p>}
+                <ul className="probs" aria-label="Probability of yes per factor">
+                  {Object.entries(d.factors ?? {}).map(([k, f]) => (
+                    <li key={k}>
+                      <span>{FACTORS[k] ?? k}</span>
+                      <meter min={0} max={1} value={f.p ?? 0} aria-label={`${k} ${f.p === null ? 'unknown' : `${(f.p * 100).toFixed(0)} percent`}`} />
+                      <span className="num">{f.p === null ? 'n/a' : `${(f.p * 100).toFixed(0)}%`}</span>
+                    </li>
+                  ))}
+                </ul>
+                {d.error && <p className="state err">{d.error}</p>}
+              </details>
+            </>
+          )}
+          <div className="actions">
+            <button className="primary" disabled={!p.canSign || p.busy !== null} title={why} onClick={() => p.onAccept(d, chosen)}>{p.busy === 'decision' ? 'Waiting for signature…' : 'Sign · Do this'}</button>
+            <button disabled={p.busy !== null} onClick={() => p.onHide(d)}>Not now</button>
+            <button className="link" disabled={!p.canSign || p.busy !== null} title={why ?? 'Tells the agent no. Opens your wallet.'} onClick={() => p.onDecline(d)}>Decline</button>
+          </div>
+        </div>
+      )}
+      <div className="actions">
+        <button disabled={p.busy !== null} onClick={p.onAsk}>{p.busy === 'ask' ? 'Asking…' : 'Ask now'}</button>
+      </div>
+      {earlier.length > 0 && (
+        <details className="dec-earlier">
+          <summary>Earlier ({earlier.length})</summary>
+          <ul>
+            {earlier.map((r) => (
+              <li key={r.d.id}>
+                <span>{decisionText(r.d)}</span>
+                <span className="muted small">{hm(r.at)}</span>
+                <span className={`chip chip-${r.state}`}>{STATE_LABEL[r.state]}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+      <details className="how">
+        <summary>Autonomy: {p.mode === 'auto' ? 'Auto' : p.mode === 'off' ? 'Off' : 'Propose'}</summary>
+        <fieldset className="mode" disabled={!p.canSign || p.busy !== null} title={why}>
+          <legend className="sr-only">Autonomy</legend>
+          {(['off', 'propose', 'auto'] as const).map((m) => (
+            <label key={m} className={p.mode === m ? 'on' : ''}>
+              <input type="radio" name="mode" checked={p.mode === m} onChange={() => p.onMode(m)} />
+              {m === 'off' ? 'Off' : m === 'propose' ? 'Propose' : 'Auto'}
+            </label>
+          ))}
+        </fieldset>
+        <p className="muted small">
+          {p.mode === 'auto' ? 'Auto runs unflagged suggestions within the contract and order policy. Flagged ones and "keep as is" still wait for you.' : p.mode === 'off' ? 'The agent makes no suggestions.' : 'The agent suggests and nothing runs until you sign.'}
+        </p>
+      </details>
+    </section>
+  );
 }
 
 export function DecisionPanel(p: {

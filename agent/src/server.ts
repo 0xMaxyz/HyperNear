@@ -293,7 +293,9 @@ export function handler(d: Deps) {
       if (req.method === 'POST' && decision) {
         if (!d.decider) throw new HttpError(503, 'decision layer off');
         const [, id, verb] = decision as unknown as [string, string, 'accept' | 'reject'];
-        const cmd = await verifyCommand(verifier(d), await readJson(req), verb === 'reject' ? 'reject' : d.decider.get(id).proposal.action);
+        const body = (await readJson(req)) as { option?: unknown };
+        // accept signs the proposal's own action, or one of the options it listed (`option`): the command must carry exactly that action
+        const cmd = await verifyCommand(verifier(d), body, (verb === 'reject' ? 'reject' : d.decider.actionFor(id, body?.option)) as never);
         if (verb === 'reject') return reply(200, d.decider.reject(id, cmd));
         await assertOptedIn(d, cmd.owner);
         return reply(200, await d.decider.accept(id, cmd));

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ZERO_SPEC_HASH, type Command } from '@hypernear/client';
-import type { Proposal } from '../src/decide.ts';
+import { decisionOptions, type Proposal } from '../src/decide.ts';
 import { Decider, DecisionModes, type DeciderDeps } from '../src/decisions.ts';
 import { EventBus } from '../src/events.ts';
 import { decisionInput } from '../src/facts.ts';
@@ -117,6 +117,18 @@ function decider(o: { proposal?: Proposal; optedIn?: boolean; mode?: 'off' | 'pr
 }
 const cmd = (over: Partial<Command> = {}): Command => ({ owner: OWNER, action: 'reduce_hedge', coin: 'BTC', ratio: '0', expiry: 0, nonce: 1, specHash: ZERO_SPEC_HASH, ...over });
 
+describe('decisionOptions (risk ranking for the owner)', () => {
+  const o = (ctx: Parameters<typeof decisionOptions>[0]) => Object.fromEntries(decisionOptions(ctx).map((x) => [x.action, x.risk]));
+  it('balanced hedge: closing is safest, "hold" is no change, growing or shrinking the short is riskier, take profit riskiest', () => {
+    expect(o({ longNotional: 100, shortNotional: 100, profitLeg: 'long' })).toEqual({ close_both: 'safest', hold: 'none', add_hedge: 'riskier', reduce_hedge: 'riskier', take_profit: 'riskiest' });
+  });
+  it('long-heavy hedge: growing the short is safer than holding', () => {
+    const r = o({ longNotional: 100, shortNotional: 50, profitLeg: 'short' });
+    expect(r).toMatchObject({ close_both: 'safest', hold: 'none', add_hedge: 'safer' });
+    expect(decisionOptions({ longNotional: 100, shortNotional: 50, profitLeg: 'short' })[0]!.action).toBe('close_both');
+  });
+});
+
 describe('Decider', () => {
   it('propose mode: emits a flat decision.proposed and executes nothing', async () => {
     const { dec, bus, executed } = decider();
@@ -124,9 +136,24 @@ describe('Decider', () => {
     expect('input' in p && p.input.coin).toBe('BTC');
     await dec.run((p as { input: any }).input);
     const e = bus.since().find((x) => x.type === 'decision.proposed')!.data;
-    expect(Object.keys(e).sort()).toEqual(['action', 'coin', 'factors', 'flagged', 'id', 'latencyMs', 'model', 'owner', 'rationale', 'source']);
+    expect(Object.keys(e).sort()).toEqual(['action', 'at', 'coin', 'expiresAt', 'factors', 'flagged', 'id', 'latencyMs', 'model', 'options', 'owner', 'rationale', 'source']);
     expect(e).toMatchObject({ id: 'p1', owner: OWNER, coin: 'BTC', action: 'reduce_hedge' });
     expect(executed).toHaveLength(0);
+  });
+
+  it('the owner may sign any listed option instead of the suggestion; it runs through the same policy and the event says what was proposed', async () => {
+    const { dec, bus, executed } = decider();
+    await dec.run((await dec.prepare(OWNER) as { input: any }).input);
+    const e = bus.since().find((x) => x.type === 'decision.proposed')!.data as { options: { action: string; risk: string }[]; expiresAt: number; at: number };
+    expect(e.options.map((o) => o.action).sort()).toEqual(['add_hedge', 'close_both', 'hold', 'reduce_hedge', 'take_profit']);
+    expect(e.expiresAt).toBeGreaterThan(e.at);
+    expect(dec.actionFor('p1')).toBe('reduce_hedge');
+    expect(dec.actionFor('p1', 'close_both')).toBe('close_both');
+    expect(() => dec.actionFor('p1', 'withdraw')).toThrow(/option must be one of/);
+    const out = await dec.accept('p1', cmd({ action: 'close_both' }));
+    expect(out).toMatchObject({ action: 'close_both', proposed: 'reduce_hedge' });
+    expect(executed[0]).toMatchObject({ action: 'close_both' });
+    expect(bus.since().find((x) => x.type === 'decision.accepted')!.data).toMatchObject({ action: 'close_both', proposed: 'reduce_hedge' });
   });
 
   it('prepare skips: mode off, not opted in, no hedge', async () => {
@@ -140,7 +167,7 @@ describe('Decider', () => {
   it('accept: must match the proposal; executes once within the policy; decision.accepted', async () => {
     const { dec, bus, executed } = decider();
     await dec.run((await dec.prepare(OWNER) as { input: any }).input);
-    await expect(dec.accept('p1', cmd({ action: 'add_hedge' }))).rejects.toMatchObject({ status: 400 });
+    await expect(dec.accept('p1', cmd({ action: 'pause_strategy' as never }))).rejects.toMatchObject({ status: 400 });
     await expect(dec.accept('p1', cmd({ coin: 'ETH' }))).rejects.toMatchObject({ status: 400 });
     await expect(dec.accept('p1', cmd({ owner: '0x0000000000000000000000000000000000000001' }))).rejects.toMatchObject({ status: 403 });
     await expect(dec.accept('nope', cmd())).rejects.toMatchObject({ status: 404 });

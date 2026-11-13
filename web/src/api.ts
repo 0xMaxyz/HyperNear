@@ -145,23 +145,8 @@ export function streamEvents(onEvent: (e: AgentEvent) => void, onState: (s: 'liv
   return () => ctl.abort();
 }
 
-/** decision.proposed payload (agent/src/decisions.ts proposalEvent), flat. */
-export interface Decision {
-  id: string;
-  owner: Hex;
-  coin: string;
-  action: string;
-  /** jev: Jev decided alone. claude: Claude decided. disagree: they differed, the less risky action was taken. */
-  source: 'jev' | 'claude' | 'disagree' | string;
-  flagged: boolean;
-  /** probability of "yes" per factor question, and who settled it */
-  factors: Record<string, { p: number | null; decidedBy: 'jev' | 'claude' }>;
-  rationale: string;
-  latencyMs: number;
-  model: string;
-  error?: string;
-  recorded?: boolean;
-}
+export type { Decision, DecisionOption } from './decisions';
+import type { Decision } from './decisions';
 
 export interface PendingApproval {
   type: 'approveAgent';
@@ -175,17 +160,6 @@ export type DecisionMode = 'off' | 'propose' | 'auto';
 
 const asDecision = (e: AgentEvent) => (e.data as Partial<Decision>).id !== undefined ? (e.data as unknown as Decision) : undefined;
 export const decisionOf = asDecision;
-
-/** The newest proposal (events are newest first) that no accepted or rejected event has closed; else /owner's open latest. */
-export function pendingDecision(events: AgentEvent[], dismissed: Set<string>, fromView?: OwnerView['decision']): Decision | undefined {
-  const closed = new Set(events.filter((e) => e.type === 'decision.accepted' || e.type === 'decision.rejected').map((e) => String(e.data.id)));
-  for (const e of events) {
-    const d = e.type === 'decision.proposed' ? asDecision(e) : undefined;
-    if (d && !closed.has(d.id) && !dismissed.has(d.id)) return d;
-  }
-  const l = fromView?.latest;
-  return l && l.status === 'open' && !closed.has(l.id) && !dismissed.has(l.id) ? l : undefined;
-}
 
 export async function getJson<T>(path: string): Promise<T> {
   try {

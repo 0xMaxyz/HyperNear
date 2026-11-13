@@ -69,6 +69,10 @@ input, select { cursor: text; }
 select { cursor: pointer; }
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 
+/* the popup of a native select takes its colours from the option rows, not from the (often transparent) select */
+select option, select optgroup { background-color: var(--surface); color: var(--ink); }
+select option:checked { background-color: var(--line); }
+
 input, select {
   min-height: 44px;
   width: 100%;
@@ -713,6 +717,25 @@ details.fees summary { cursor: pointer; }
 details.fees tr.sub td { padding-top: 0.5rem; }
 details.fees tr.est td, details.fees tr.total td { border-top: 1px solid var(--line); }
 details.fees tr.est { color: var(--muted); }
+
+/* decisions */
+.dec { border: 1px solid var(--line); border-left: 3px solid var(--info); border-radius: 6px; padding: 10px 12px; margin: 8px 0; }
+.dec.flagged { border-left-color: var(--warn); }
+.dec-line { margin: 0 0 6px; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.dec-options { border: 0; padding: 0; margin: 8px 0; display: grid; gap: 4px; }
+.dec-options label { display: flex; gap: 8px; align-items: center; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
+.dec-options label.on { border-color: var(--ink); }
+.dec-options input { width: auto; min-height: 0; }
+.risk { font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 10px; border: 1px solid currentColor; white-space: nowrap; }
+.risk-safest, .risk-safer { color: var(--ok); }
+.risk-none { color: var(--muted); }
+.risk-riskier { color: var(--warn); }
+.risk-riskiest { color: var(--sell); }
+.how { margin: 8px 0; }
+.how summary { cursor: pointer; color: var(--muted); }
+.dec-earlier ul { list-style: none; padding: 0; margin: 6px 0; display: grid; gap: 4px; }
+.dec-earlier li { display: flex; gap: 8px; align-items: baseline; color: var(--muted); }
+.chip { font-size: 12px; padding: 0 8px; border: 1px solid var(--line); border-radius: 10px; margin-left: auto; }
 
 /* Easy trading */
 .easy { max-width: 46rem; margin: 0 auto; }

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Hex } from 'viem';
 import { commandTypedData, newCommand, ownerIntentTypedData, specHashOfJson, type Command, type OwnerIntent, type OwnerIntentTypedData } from '@hypernear/client';
-import { AGENT_ACCOUNT, AGENT_URL, CHAIN_TAG, CONTRACT_ID, DEMO_OWNER, TEE_AGENT_URL, getOwner, pendingDecision, pointAgentAt, post, streamEvents, type AgentEvent, type DecisionMode, type OwnerView } from './api';
+import { AGENT_ACCOUNT, AGENT_URL, CHAIN_TAG, CONTRACT_ID, DEMO_OWNER, TEE_AGENT_URL, getOwner, pointAgentAt, post, streamEvents, type AgentEvent, type Decision, type DecisionMode, type OwnerView } from './api';
 import { LegPanel } from './legpanel';
-import { Activity, DecisionPanel, FreezeSteps, nearScan, short } from './panels';
+import { decisionRows } from './decisions';
+import { Activity, DecisionCard, decisionText, FreezeSteps, nearScan, short } from './panels';
 import { OverviewTab } from './overview';
 import { TradeTab } from './trade';
 import type { HedgeSpec } from './trading';
@@ -61,7 +62,24 @@ export function App({ auth }: { auth: Auth }) {
   const [dry, setDry] = useState(false);
   const [tee, setTee] = useState<TeeState>();
   const [teeErr, setTeeErr] = useState<string>();
-  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  // "Not now" hides a suggestion in this browser (no wallet); it stays hidden after a reload
+  const [dismissed, setDismissed] = useState<Set<string>>(() => {
+    try {
+      return new Set<string>(JSON.parse(localStorage.getItem('hypernear.hidden-decisions') ?? '[]'));
+    } catch {
+      return new Set<string>();
+    }
+  });
+  const hide = (id: string) =>
+    setDismissed((x) => {
+      const next = new Set(x).add(id);
+      try {
+        localStorage.setItem('hypernear.hidden-decisions', JSON.stringify([...next].slice(-200)));
+      } catch {
+        /* storage off: hidden until reload */
+      }
+      return next;
+    });
   const [menu, setMenu] = useState(false);
   const [route, go] = useRoute(TABS);
   // old links (#/home, #/overview, #/legs, #/hedge) land on the section that now holds them
@@ -284,24 +302,27 @@ export function App({ auth }: { auth: Auth }) {
 
   // /events carries every owner's events: keep this owner's and the global ones
   const mine = events.filter((e) => !e.data.owner || String(e.data.owner).toLowerCase() === owner);
-  const decision = pendingDecision(mine, dismissed, view?.decision);
+  const decisionList = decisionRows(mine, dismissed, view?.decision);
+  const decision = decisionList.find((r) => r.state === 'open')?.d;
   /** A signed Command whose action (and coin) the agent checks against the proposal or mode it names. */
   const signed = async (action: string, coinField: string, path: string) => {
     const cmd = newCommand(owner!, action as never, coinField, '0');
     const sig = await auth.sign(commandTypedData(chainTag, contractId, cmd));
     return post(path, { command: cmd, sig });
   };
-  const acceptDecision = () =>
+  const acceptDecision = (d: Decision, action = d.action) =>
     run('decision', async () => {
-      const d = decision!;
-      return done(await signed(d.action, d.coin, `/decision/${encodeURIComponent(d.id)}/accept`), `Accepted: ${d.action.replaceAll('_', ' ')} on ${d.coin}`);
+      // a chosen option other than the suggestion is named in the request; the command carries that action
+      const cmd = newCommand(owner!, action as never, d.coin, '0');
+      const sig = await auth.sign(commandTypedData(chainTag, contractId, cmd));
+      const out = await post(`/decision/${encodeURIComponent(d.id)}/accept`, { command: cmd, sig, ...(action !== d.action ? { option: action } : {}) });
+      return done(out, `Done: ${decisionText({ action, coin: d.coin })}`);
     });
-  const dismissDecision = () =>
+  const declineDecision = (d: Decision) =>
     run('decision', async () => {
-      const d = decision!;
       const out = await signed('reject', d.coin, `/decision/${encodeURIComponent(d.id)}/reject`);
-      setDismissed((x) => new Set(x).add(d.id));
-      return done(out, 'Proposal dismissed');
+      hide(d.id);
+      return done(out, 'Suggestion declined');
     });
   const setMode = (m: DecisionMode) => run('mode', async () => done(await signed('setDecisionMode', m, '/decision/mode'), `Autonomy set to ${m}`));
   const askProposal = () =>
@@ -320,7 +341,7 @@ export function App({ auth }: { auth: Auth }) {
     { id: 'portfolio', label: 'Portfolio' },
     { id: 'strategies', label: 'Strategies' },
     { id: 'fund', label: 'Fund' },
-    { id: 'protect', label: 'Protect', dot: decision ? 'A decision is waiting for you' : policy?.frozen ? 'The account is frozen' : undefined },
+    { id: 'protect', label: 'Safety', dot: decision ? 'A decision is waiting for you' : policy?.frozen ? 'The account is frozen' : undefined },
   ];
   // setup: the five steps, done or not (the Setup page and the banner read the same list)
   const setupDone = [
@@ -334,7 +355,7 @@ export function App({ auth }: { auth: Auth }) {
   // approvals must not hide behind a section: say so on every other page
   const attention =
     decision && route.tab !== 'protect'
-      ? { text: 'A decision is waiting for you.', link: 'Review it', href: '#/protect' }
+      ? { text: `The agent suggests: ${decisionText(decision)}.`, link: 'Review', href: '#/protect' }
       : pending.length > 0 && route.tab !== 'setup'
         ? { text: 'An agent key is waiting for your approval.', link: 'Approve it', href: '#/setup' }
         : view && !dry && canSign && setupCount < 5 && route.tab !== 'setup'
@@ -591,7 +612,7 @@ export function App({ auth }: { auth: Auth }) {
                 </div>
                 <FreezeSteps events={mine} show={Boolean(policy?.frozen) || (dry && mine.some((e) => e.type === 'agents.revoked' || e.type === 'orders.swept'))} />
               </section>
-              <DecisionPanel d={decision} mode={view?.decision?.mode} canSign={canSign} busy={busy} onAccept={acceptDecision} onDismiss={dismissDecision} onMode={setMode} onAsk={askProposal} />
+              <DecisionCard rows={decisionList} mode={view?.decision?.mode} canSign={canSign} busy={busy} onAccept={acceptDecision} onDecline={declineDecision} onHide={(d) => hide(d.id)} onMode={setMode} onAsk={askProposal} />
             </div>
             <div className="col">
               <section className="card" aria-labelledby="agent-h">

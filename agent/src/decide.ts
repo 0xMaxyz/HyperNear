@@ -68,6 +68,42 @@ export function actionRisk(action: Action, ctx: DecideContext): { exposure: numb
   return { exposure: Math.abs(net), orders: ORDERS[action] };
 }
 
+export type OptionRisk = 'safest' | 'safer' | 'none' | 'riskier' | 'riskiest';
+export interface DecisionOption {
+  action: Action;
+  risk: OptionRisk;
+  /** directional notional left after it (USD) */
+  exposure: number;
+  /** what it does, in a sentence for the owner */
+  text: string;
+}
+const OPTION_TEXT: Record<Action, string> = {
+  hold: 'Keep both legs as they are.',
+  close_both: 'Close both legs. No price exposure left.',
+  reduce_hedge: 'Shrink the short leg. More price exposure.',
+  add_hedge: 'Grow the short leg. Less price exposure.',
+  take_profit: 'Close the leg that is in profit. The other side stays open.',
+};
+
+/** Every action the owner may choose, ranked from least to most exposure (ties: fewer orders). `hold` is the reference ("no change"). */
+export function decisionOptions(ctx: DecideContext): DecisionOption[] {
+  const ranked = ACTION_IDS.map((action) => ({ action, ...actionRisk(action, ctx) })).sort((a, b) => a.exposure - b.exposure || a.orders - b.orders);
+  const hold = ranked.find((r) => r.action === 'hold')!.exposure;
+  const eps = 1e-9;
+  const more = ranked.filter((r) => r.exposure > hold + eps);
+  return ranked.map((r) => ({
+    action: r.action,
+    exposure: r.exposure,
+    text: OPTION_TEXT[r.action],
+    risk:
+      r.action === 'hold' ? 'none'
+      : r.exposure <= ranked[0]!.exposure + eps ? 'safest'
+      : r.exposure <= hold + eps ? 'safer'
+      : r === more[more.length - 1] && more.length > 1 ? 'riskiest'
+      : 'riskier',
+  }));
+}
+
 /** The less risky of two actions: lower exposure, then fewer orders, then the static order. */
 export function lessRisky(a: Action, b: Action, ctx?: DecideContext): Action {
   if (a === b) return a;

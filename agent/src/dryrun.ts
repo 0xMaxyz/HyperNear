@@ -10,8 +10,9 @@ import { ReplayCache } from './commands.ts';
 import { createDryBook } from './dryBook.ts';
 import { loadConfig, type OrderPolicy } from './config.ts';
 import { EventBus } from './events.ts';
-import { DECISION_EVENTS, type Proposal } from './decide.ts';
+import { DECISION_EVENTS, decisionOptions, type Proposal } from './decide.ts';
 import { Decider, DecisionModes, proposalEvent } from './decisions.ts';
+import { decisionInput } from './facts.ts';
 import { DEFAULT_GUARD_CONFIG, evaluateGuard } from './guard.ts';
 import { HedgeRefused, Hedger, planCloseHedge, planOpenHedge, type ClosePlan, type OpenPlan } from './hedge.ts';
 import { guardInputs, Legs, type LegState, type OwnerSnapshot } from './legs.ts';
@@ -245,7 +246,8 @@ export function buildDryRunDeps(fixtureName = 'hedged', opts: { replayStartMs?: 
     ttlMs: Number.POSITIVE_INFINITY,
   });
   let nextProposal = 0;
-  const replayedProposals = proposals.map((proposal) => ({ proposal, owner: snap.owner, coin: 'BTC', at: Date.now(), status: 'open' as const, recorded: true }));
+  const dryCtx = decisionInput(snap, config.policy.allowedCoins, { annualVol: config.guard.annualVol, now: Date.now() })?.ctx;
+  const replayedProposals = proposals.map((proposal) => ({ proposal, owner: snap.owner, coin: 'BTC', at: Date.now(), status: 'open' as const, recorded: true, ...(dryCtx ? { options: decisionOptions(dryCtx) } : {}), expiresAt: Date.now() + 5 * 60_000 }));
   for (const r of replayedProposals) decider.remember(r, true);
 
   const recordedDrafts = readJson<{ results: Record<string, unknown>[] }>(DRAFT_LIVE).results;

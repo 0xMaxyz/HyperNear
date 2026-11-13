@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import type { Hex } from 'viem';
 import type { Command } from '@hypernear/client';
 import type { OrderPolicy } from './config.ts';
-import { DECISION_EVENTS, type Action, type Proposal } from './decide.ts';
+import { DECISION_EVENTS, decisionOptions, type Action, type DecisionOption, type Proposal } from './decide.ts';
 import type { EventBus } from './events.ts';
 import { decisionInput, type DecisionInput } from './facts.ts';
 import { HedgeRefused, planDecision, type PlannedOrder } from './hedge.ts';
@@ -44,6 +44,10 @@ export interface ProposalRecord {
   at: number;
   status: 'open' | 'accepted' | 'rejected' | 'expired';
   recorded?: boolean;
+  /** the actions the owner may choose between, least to most exposure (hedge proposals) */
+  options?: DecisionOption[];
+  /** until when it can be accepted (ms) */
+  expiresAt?: number;
   /** HYPERNEAR_TEST=1 only: the action was forced; modelAction is what the models proposed */
   forced?: { modelAction: string };
 }
@@ -63,6 +67,9 @@ export const proposalEvent = (r: ProposalRecord) => ({
   rationale: r.proposal.rationale,
   latencyMs: r.proposal.latencyMs,
   model: r.proposal.model,
+  at: r.at,
+  ...(r.expiresAt ? { expiresAt: r.expiresAt } : {}),
+  ...(r.options ? { options: r.options } : {}),
   ...(r.proposal.error ? { error: r.proposal.error } : {}),
   ...(r.recorded ? { recorded: true } : {}),
   ...(r.forced ? { forced: true, modelAction: r.forced.modelAction } : {}),
@@ -105,6 +112,10 @@ export class Decider {
 
   #now() {
     return (this.d.now ?? Date.now)();
+  }
+
+  #ttl() {
+    return this.d.ttlMs ?? this.d.intervalMs ?? PROPOSE_INTERVAL_MS;
   }
 
   start() {
@@ -176,7 +187,7 @@ export class Decider {
     this.#busy.add(key);
     try {
       const proposal = await this.d.proposeStrategy!(input);
-      const r: ProposalRecord = { proposal, owner: input.owner, coin: input.coin, at: this.#now(), status: 'open' };
+      const r: ProposalRecord = { proposal, owner: input.owner, coin: input.coin, at: this.#now(), status: 'open', expiresAt: this.#now() + this.#ttl() };
       this.remember(r);
       if (announceContinue || proposal.action !== 'continue_strategy' || proposal.flagged) this.d.bus.emit(DECISION_EVENTS.proposed, proposalEvent(r));
       return r;
@@ -194,7 +205,7 @@ export class Decider {
       const modelProposal = await this.d.propose(input);
       const forced = forceAction && forceAction !== modelProposal.action ? { modelAction: modelProposal.action } : undefined;
       const proposal = forced ? { ...modelProposal, action: forceAction!, rationale: `TEST forceAction ${forceAction} (models: ${modelProposal.action}). ${modelProposal.rationale}` } : modelProposal;
-      const r: ProposalRecord = { proposal, owner: input.owner, coin: input.coin, at: this.#now(), status: 'open', ...(forced ? { forced } : {}) };
+      const r: ProposalRecord = { proposal, owner: input.owner, coin: input.coin, at: this.#now(), status: 'open', options: decisionOptions(input.ctx), expiresAt: this.#now() + this.#ttl(), ...(forced ? { forced } : {}) };
       this.remember(r);
       this.d.bus.emit(DECISION_EVENTS.proposed, proposalEvent(r));
       // auto: same policy checks as a signed accept; flagged (disagreement, degraded) and hold stay open for the owner
@@ -219,14 +230,22 @@ export class Decider {
     const r = this.get(id);
     if (cmd.owner !== r.owner) throw new HttpError(403, 'command.owner is not the proposal owner');
     if (cmd.action !== action || cmd.coin !== r.coin) throw new HttpError(400, `command must be ${action} on ${r.coin}`);
-    if (r.status === 'open' && this.#now() - r.at > (this.d.ttlMs ?? this.d.intervalMs ?? PROPOSE_INTERVAL_MS)) r.status = 'expired';
+    if (r.status === 'open' && this.#now() - r.at > this.#ttl()) r.status = 'expired';
     if (r.status !== 'open') throw new HttpError(409, `proposal is ${r.status}`);
     return r;
   }
 
+  /** The action a signed accept must carry: the owner's chosen option when the proposal lists it, else the proposal's own. */
+  actionFor(id: string, option?: unknown): string {
+    const r = this.get(id);
+    if (option === undefined || isStrategy(r)) return r.proposal.action;
+    if (typeof option !== 'string' || !r.options?.some((o) => o.action === option)) throw new HttpError(400, `option must be one of ${(r.options ?? []).map((o) => o.action).join(', ') || 'none (this proposal has no options)'}`);
+    return option;
+  }
+
   async accept(id: string, cmd: Command) {
-    const r = this.#open(id, cmd, this.get(id).proposal.action);
-    return isStrategy(r) ? this.#executeStrategy(r) : this.#execute(r, false);
+    const r = this.#open(id, cmd, this.actionFor(id, cmd.action === this.get(id).proposal.action ? undefined : cmd.action));
+    return isStrategy(r) ? this.#executeStrategy(r) : this.#execute(r, false, cmd.action as Action);
   }
 
   /** continue: acknowledged, nothing to do. pause / adjust: the strategy is paused (an adjusted one needs a new draft and a signed start). */
@@ -255,15 +274,16 @@ export class Decider {
     return { ...out, status: r.status };
   }
 
-  async #execute(r: ProposalRecord, auto: boolean) {
+  async #execute(r: ProposalRecord, auto: boolean, chosen?: Action) {
     r.status = 'accepted'; // claimed before any await: a second accept gets 409
-    const base = { id: r.proposal.id, owner: r.owner, coin: r.coin, action: r.proposal.action, auto };
+    const action = chosen ?? (r.proposal.action as Action);
+    const base = { id: r.proposal.id, owner: r.owner, coin: r.coin, action, auto, ...(action !== r.proposal.action ? { proposed: r.proposal.action } : {}) };
     try {
       await this.d.checkOwner(r.owner);
       // fresh state: the proposal's snapshot is up to one interval old
-      const plan = planDecision(await this.d.legs.snapshot(r.owner), r.proposal.action, r.coin, this.d.policy);
+      const plan = planDecision(await this.d.legs.snapshot(r.owner), action, r.coin, this.d.policy);
       if (!plan.ok) throw new HedgeRefused(plan.reason);
-      const result = plan.orders.length ? await this.d.execute(r.owner, r.proposal.action, r.coin, plan.orders) : null;
+      const result = plan.orders.length ? await this.d.execute(r.owner, action, r.coin, plan.orders) : null;
       this.d.bus.emit(DECISION_EVENTS.accepted, { ...base, orders: plan.orders, result });
       return { ...base, status: r.status, orders: plan.orders, result };
     } catch (e) {
