@@ -12,7 +12,9 @@ An owner (any ordinary EVM wallet) gets several Hyperliquid accounts ("legs"); t
 
 **For:** anyone who lets a bot, a desk or an AI agent trade a Hyperliquid account and wants a withdraw lock, spending caps and a kill switch the operator cannot bypass. Trading stays at native Hyperliquid speed with per-leg API wallets; only owner-level moves (transfers, approvals, withdrawals, freeze) go through the NEAR contract, ~8 s each (C6).
 
-Track: **security** first, **defi** second. License: MIT.
+The project was first called HyperNear, then HyperNear. The deployed testnet contract (`leash-spike-1107.testnet`), the `@hypernear/*` packages, the `HYPERNEAR_*` variables and the EIP-712 domain keep that name so the deployed contract and existing signatures stay valid.
+
+Tracks: **security** (AI Security & Defense), **defi** (Unstoppable DeFi), **agents** (Agent Economy). License: MIT.
 
 ## The problem
 
@@ -36,7 +38,7 @@ A Hyperliquid master key is a bare EOA. Whoever holds it can approve any agent, 
 - **Agent permissions.** The owner names one NEAR agent account, with a daily cap and a cooldown. That account's access key is a NEAR function-call key limited to `rebalance` and `agent_usd_class_transfer`. `rebalance` can only move USDC to another registered leg of the same owner. Each leg also gets its own Hyperliquid API wallet for trading.
 - **Margin guard.** The agent watches the legs and, when one nears liquidation, moves USDC from a healthier leg through the contract. Trigger: margin at or below 2x maintenance, or liquidation closer than a plausible price move over the rebalance latency (`agent/src/guard.ts`).
 - **Hedge.** `open hedge` shorts a ratio of leg 0's position on leg 1; `close hedge` closes both. The agent checks leverage, notional and coin before trading.
-- **Trade.** Every leg can trade on its own, so a position need not be a hedge: market, limit, stop and take-profit, a take-profit and stop-loss bracket, TWAP and trailing-stop orders, at the leverage and margin mode the owner picks per leg (a hedge's leg 1 can differ from leg 0). Each order is a signed command that carries its exact spec (`specHash`, like a strategy start), the agent re-checks it against the order policy, and Hyperliquid holds the protective orders itself (`agent/src/order.ts`, `agent/src/orders.ts`). A market or limit order can carry its own take-profit and stop-loss (one Hyperliquid `normalTpsl` group: reduce-only triggers for the same size), and a resting limit order can be moved to a new price (`modifyOrder`, Hyperliquid `modify`: same size and client id; the exchange gives it a new order id), each checked against the same policy as a new order. Every order carries a client id (`agent/src/cloid.ts`), so history can label each fill (hedge, one-sided, protective, strategy, outside) from Hyperliquid's own records with nothing stored.
+- **Trade.** Every leg can trade on its own, so a position need not be a hedge: market, limit, stop and take-profit, a take-profit and stop-loss bracket, TWAP and trailing-stop orders, at the leverage and margin mode the owner picks per leg (a hedge's leg 1 can differ from leg 0). Each order is a signed command that carries its exact spec (`specHash`, like a strategy start), the agent re-checks it against the order policy, and Hyperliquid holds the protective orders itself (`agent/src/order.ts`, `agent/src/orders.ts`). A market or limit order can carry its own take-profit and stop-loss (one Hyperliquid `normalTpsl` group: reduce-only triggers for the same size), and a resting limit order can be moved to a new price (`modifyOrder`, Hyperliquid `modify`: same size and client id; the exchange gives it a new order id), each checked against the same policy as a new order. Every order carries a client id (`agent/src/cloid.ts`), so history can label each fill (hedge, one-sided, protective, strategy, outside) from Hyperliquid's own records with nothing stored. Setting TP/SL on an open position or on both legs of a hedge (`setProtection`, `agent/src/orders.ts`) and the limit close are covered by unit and dry-run tests (`agent/tests/protect.test.ts`, `web/e2e/round3.mjs`); they have not yet been run on live testnet.
 - **Hedged open in one action.** The Trade ticket's Hedge mode can open a NEW hedge (long or short, size, ratio, leverage and margin mode per leg) instead of mirroring an existing position: one signed command (`placeHedge`, `agent/src/hedgePair.ts`) sends both market (IOC) orders at the same moment off one order-book read, so their entry prices differ by little more than the book spread (3.5 bps against a 4.6 bps book on testnet). Two accounts cannot share one exchange request, so it is not atomic on Hyperliquid: if only one leg fills, or the fills are out of ratio, the surplus is closed again with reduce-only orders; a lost reply is settled from the leg's position, and anything that cannot be settled is reported as `unbalanced` rather than hidden. A 1-click session may open hedges only if the owner ticks that box, and a session counts both legs against its notional cap.
 - **Leverage follows the market.** The ticket's maximum is the market's own (BTC 40x, ETH 25x on testnet), capped by the operator policy `HYPERNEAR_MAX_LEVERAGE` (default 5; set it to 100 to let each market's maximum rule). Positions show their leverage beside the market maximum.
 - **Live data.** The page opens one Hyperliquid WebSocket per tab (Hyperliquid allows 10 per IP) and subscribes to each leg's account state, open orders and fills; the agent view is polled every 30 s while it is live, every 10 s otherwise, and a Live / Polling chip shows which. A fill or order change refetches the fees, funding and history, which the agent computes (`web/src/hlSocket.ts`, `web/src/liveLegs.ts`).
@@ -98,6 +100,13 @@ Also used: **Jev** by TypeSafe AI (decision layer), **Claude** (escalation and c
 ## Run it (no keys needed)
 
 Needs Node 22.18 or newer (the agent runs TypeScript directly), pnpm 11.15.1 (the version the fresh clone used), and Rust with `cargo` for the contract tests. Expected results were recorded on a fresh clone on Ubuntu 24.04 (Node 22.23, pnpm 11.15.1, Rust 1.99) at the commit this README was written for; counts change as tests are added.
+
+**0. Get the code.**
+
+```bash
+git clone https://github.com/0xMaxyz/HyperNear.git
+cd HyperNear
+```
 
 **1. Install.**
 
@@ -163,7 +172,7 @@ In a second terminal:
 pnpm --filter @hypernear/web dev
 ```
 
-Expected: Vite prints `Local: http://localhost:5173/`. Open that URL and click **Explore recorded data**. Expected: a `dry-run data` badge and a Legs table with leg 0 `BTC long 0.0004` (3x cross), leg 1 `BTC short 0.0002`, leg 2 flat, an Overview tab with the hedge and its PnL lines, a Decision panel and the guard and decision log. Login is disabled without `VITE_PRIVY_APP_ID`; the recorded data still works.
+Expected: Vite prints `Local: http://localhost:5173/`. Open that URL and click **Explore recorded data**. Expected: a `dry-run data` badge and the tabs **Easy**, **Trade**, **Portfolio**, **Fund** and **Safety**. Login is disabled without `VITE_PRIVY_APP_ID`; the recorded data still works.
 
 Optional automated check of that click-through (needs a Chromium download, with the agent and Vite still running):
 
@@ -179,6 +188,8 @@ Expected: five `PASS page shows "..."` lines and exit code 0.
 The video is a scripted screen recording (`web/e2e/demo-video.mjs`) of the real web page against the agent in `--dry-run --serve`. Every click and every signature in it is real and verified by the agent; the on-chain events it shows are replayed from the live testnet runs in `agent/results/` (NEAR and Hyperliquid tx links in [docs/claims.md](docs/claims.md)). No model and no network is called while recording. It is a replay, not a live session.
 
 ## Live evidence (NEAR testnet and Hyperliquid testnet, 2026-11-07)
+
+A one-page index for judges: [docs/submission/claims-for-judges.md](docs/submission/claims-for-judges.md).
 
 Every claim has a committed test or script and a result file; the full ledger with all numbers is [docs/claims.md](docs/claims.md). Contract: `leash-spike-1107.testnet`.
 
@@ -274,12 +285,34 @@ Mainnet: [docs/mainnet-runbook.md](docs/mainnet-runbook.md). Every mainnet step 
 
 ## Baseline and disclosure
 
-Rules Q-002 to Q-005: earlier code on another chain is allowed if disclosed, and only the NEAR integration built in the window is judged.
+Rules Q-002 to Q-005: earlier code on another chain is allowed if disclosed, and only the NEAR integration built in the window is judged. PerpX is our existing Hyperliquid trading product; it has no NEAR code.
 
 - **Baseline (pre-hackathon, Q-003):** [`packages/core`](packages/core) is a stripped copy of `packages/core` from PerpX (`maxperp/hl` commit `ef584538`, authored 2026-09-05, before the 2026-10-19 announcement): the `HlClient` import closure and the pure liquidation helpers. Tag `pre-hackathon`. Nothing else was copied from it in the baseline.
 - **Ported in the window (2026-11, disclosed):** `HlClient.trailingStopOpen` and its raw-L1 shell (`#executeRawL1`) in `packages/core/src/hl/HlClient.ts`, with its wire-format test `packages/core/tests/trailing-stop/`, from the same PerpX repository (commit `4737a56b`, authored 2026-11-09, so inside the window, not baseline). It is Hyperliquid client code with no NEAR integration in it, and it is listed here so the diff is honest. The pinned Hyperliquid SDK has no trailing-stop helper; the order is accepted on testnet and unverified on mainnet.
 - **Built in the window (2026-11-07 to 2026-11-14):** everything else: the NEAR contract, `packages/hypernear-client`, `agent/`, `web/`, `validation/`, the docs.
-- **Diff:** [`pre-hackathon...hackathon-submission`](https://github.com/0xMaxyz/hypernear/compare/pre-hackathon...hackathon-submission). The tag `hackathon-submission` will be created on the final commit.
+- **Diff:** [`pre-hackathon...hackathon-submission`](https://github.com/0xMaxyz/HyperNear/compare/pre-hackathon...hackathon-submission). `pre-hackathon` is commit `ff5b51d` (the stripped PerpX client, nothing else); `hackathon-submission` is the submitted commit. The history has a second root: the four commits `8af8d93` to `e058d29` (2026-11-07) re-create the same baseline package step by step and end with the same files as `ff5b51d`, so they add no code to the diff. All other commits are dated 2026-11-07 to 2026-11-14, inside the window that opened with the 2026-10-19 announcement.
+
+## Libraries, services and AI use
+
+**AI-written code.** Most of the code, tests and docs in this repo were written with Claude Code (Anthropic's coding agent) under the author's direction, and reviewed and tested by the author. Design and code reviews were also done by Claude models (Fable 5.2 and Opus 5.5). The live testnet runs and their result files are real runs, not generated text.
+
+**Rust (contract):** `near-sdk` 5.30 (with `unstable` for `env::ecrecover`), `hex`, `shade-attestation` (vendored in `contract/vendor/shade-attestation`, which includes the `dcap-qvl` TDX quote verifier); tests: `k256`.
+
+**TypeScript:**
+
+| Package | Libraries |
+|---|---|
+| `packages/core` (baseline, from PerpX) | `@nktkas/hyperliquid` 0.33.1, `viem` 2.54.3, `@msgpack/msgpack` 3.1.3 (tests) |
+| `packages/hypernear-client` | `near-api-js` 7.4.0, `viem` 2.54.3 |
+| `agent` | `@anthropic-ai/sdk`, `@typesafe-ai/sdk` 0.7.0 (Jev), `@near-js/crypto` 2.5.1, `@neardefi/shade-agent-js` 2.2.0, `@phala/dstack-sdk` 0.5.7, `near-seed-phrase` 0.2.1, `viem` 2.54.3 |
+| `web` | `react` 18.3.1, `vite` 7, `@privy-io/react-auth` 3.51.3, `@solana/kit` 8.6.0, `lightweight-charts` 5.2.1, `viem` 2.54.3; tests: `@playwright/test` 1.65.0 |
+| tooling | `typescript`, `tsup`, `vitest`, `esbuild`, pnpm 11.15.1 |
+
+**Services:** NEAR testnet and the MPC signer `v1.signer-prod.testnet`, FastNEAR RPC, Hyperliquid testnet API, NEAR Intents 1Click (dry quotes only), Jev by TypeSafe AI, the Anthropic Claude API, Privy.
+
+**Vendored or copied third-party code:** `contract/vendor/shade-attestation` is `shade-attestation` 0.2.0 from NearDeFi/shade-agent-framework at commit `3366bc9` (source unmodified, version pins relaxed, `dcap-qvl` 0.5.2). The recorded TDX quote in `contract/tests/tee/attestation.json` comes from the near/mpc repository's test assets (`crates/test-utils/assets/public_data.json` at `50328c6`). Source: `validation/results/T0.json`.
+
+**Templates and boilerplate:** none beyond the PerpX baseline above.
 
 ## License
 

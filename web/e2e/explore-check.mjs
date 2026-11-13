@@ -11,7 +11,7 @@ await page.reload();
 await page.getByRole('button', { name: 'Explore recorded data' }).click();
 
 let ok = true;
-for (const text of ['Legs', 'BTC long', 'BTC short', 'Break-even', 'dry-run data']) {
+for (const text of ['dry-run data', 'Trade', 'Portfolio', 'Fund', 'Safety']) {
   const seen = await page.getByText(text, { exact: false }).first().waitFor({ timeout: 15000 }).then(() => true, () => false);
   console.log(`${seen ? 'PASS' : 'FAIL'} page shows "${text}"`);
   ok &&= seen;
