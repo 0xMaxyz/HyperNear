@@ -166,8 +166,10 @@ interface Fill {
   sz: number;
   px: number;
   error?: string;
-  /** neither a fill nor an exchange verdict (network error, timeout): look the order up by its cloid */
+  /** neither a fill nor an exchange verdict (network error, timeout): the leg's position says what happened */
   unknown?: boolean;
+  /** the position could not be read either, so nobody knows */
+  unresolved?: boolean;
 }
 
 function outcomeOf(r: PromiseSettledResult<HlOrderResult>): Fill {
@@ -190,16 +192,26 @@ export class HedgePairExecutor {
   readonly legs: Legs;
   readonly policy: OrderPolicy;
   readonly bus?: EventBus;
-  constructor(legs: Legs, policy: OrderPolicy, bus?: EventBus) {
+  /** how long to wait before trusting a position read after a lost reply */
+  readonly settleMs: number;
+  constructor(legs: Legs, policy: OrderPolicy, bus?: EventBus, settleMs = 1500) {
     this.legs = legs;
     this.policy = policy;
     this.bus = bus;
+    this.settleMs = settleMs;
   }
 
   /** `spec` and `plan` come from validateHedgePairSpec on a fresh snapshot of `owner`. */
   async open(owner: Hex, spec: HedgePairSpec, plan: HedgePairPlan): Promise<HedgePairResult> {
     const { coin } = spec;
     const { asset, szDecimals, isBuyA } = plan;
+    // leverage first (it takes a round trip), then the book, so the prices come from the freshest read
+    await Promise.all([
+      this.legs.tradingClient(owner, 0).updateLeverage({ asset, isCross: plan.leverageA.isCross, leverage: plan.leverageA.value }),
+      this.legs.tradingClient(owner, 1).updateLeverage({ asset, isCross: plan.leverageB.isCross, leverage: plan.leverageB.value }),
+    ]).catch((e) => {
+      throw new OrderRefused(`could not set the leverage: ${e instanceof RelayRejectionError ? e.reason : (e as Error).message}; nothing was sent`);
+    });
     const book = await this.legs.hl.l2Book({ coin });
     const bid = Number(book?.levels[0][0]?.px);
     const ask = Number(book?.levels[1][0]?.px);
@@ -212,42 +224,40 @@ export class HedgePairExecutor {
     // the same book for both legs: a buy crosses at the ask, a sell at the bid, plus the buffer
     const px = (isBuy: boolean) => roundPx(isBuy ? ask * (1 + buf) : bid * (1 - buf), szDecimals);
     const group = newGroup();
-    await Promise.all([
-      this.legs.tradingClient(owner, 0).updateLeverage({ asset, isCross: plan.leverageA.isCross, leverage: plan.leverageA.value }),
-      this.legs.tradingClient(owner, 1).updateLeverage({ asset, isCross: plan.leverageB.isCross, leverage: plan.leverageB.value }),
-    ]).catch((e) => {
-      throw new OrderRefused(`could not set the leverage: ${e instanceof RelayRejectionError ? e.reason : (e as Error).message}; nothing was sent`);
-    });
 
     const cloids = [makeCloid('hedgeOpen', group), makeCloid('hedgeOpen', group)] as const;
     const sides = [isBuyA, !isBuyA] as const;
     const sizes = [plan.sizeA, plan.sizeB] as const;
-    const t0 = Date.now();
     const sent = await Promise.allSettled(
       ([0, 1] as const).map((i) => this.legs.tradingClient(owner, i).limitOrderOpen({ asset, isBuy: sides[i], price: px(sides[i]), size: sizes[i], tif: 'Ioc', c: cloids[i] })),
     );
+    // a lost reply (network error, timeout) says nothing about the fill: the leg was flat, so its position afterwards is the fill
     const fills = await Promise.all(
       sent.map(async (r, i) => {
         const o = outcomeOf(r);
-        // a lost reply may still have filled: the fills know. Nothing found keeps the original error.
-        const found = o.unknown ? await this.fillByCloid(plan.addresses[i], cloids[i]!, t0) : undefined;
-        return found && found.sz > 0 ? found : o;
+        if (!o.unknown) return o;
+        const held = await this.heldAfterDoubt(plan.addresses[i]!, coin);
+        return held === undefined ? { ...o, unresolved: true } : held.sz > 0 ? held : o;
       }),
     );
     const outcome = (i: 0 | 1, f: Fill): LegOutcome => ({ leg: i, isBuy: sides[i], requested: sizes[i], filled: f.sz, avgPx: f.sz > 0 ? f.px : null, ...(f.error && f.sz < Number(sizes[i]) ? { error: f.error } : {}) });
     const legsOut: [LegOutcome, LegOutcome] = [outcome(0, fills[0]!), outcome(1, fills[1]!)];
 
-    const result = await this.reconcile(owner, spec, plan, legsOut, { bid, ask });
+    // if a leg's outcome is unknown, do nothing more: closing the other leg could leave this one naked
+    const lost = ([0, 1] as const).filter((i) => fills[i]!.unresolved);
+    const result: Omit<HedgePairResult, 'book'> = lost.length
+      ? { status: 'unbalanced', legs: legsOut, unwind: [], spreadBps: null, open: [legsOut[0].filled, legsOut[1].filled], notes: [`could not tell whether leg ${lost.join(' and ')} filled (${fills[lost[0]!]!.error}); look at Positions now. Nothing was closed.`] }
+      : await this.reconcile(owner, spec, plan, legsOut, { bid, ask });
     this.bus?.emit('hedge', { owner, op: 'pair', coin, status: result.status, legs: result.legs, unwind: result.unwind, spreadBps: result.spreadBps, open: result.open });
     return { ...result, book: { bid, ask, spreadBps: bps(spreadBps) } };
   }
 
-  /** What an order filled, by its cloid, when the reply was lost. Undefined if the fills cannot be read. */
-  private async fillByCloid(address: Hex, cloid: Hex, since: number): Promise<Fill | undefined> {
+  /** What the leg holds in `coin` (absolute size and entry price) after a short wait; undefined if it cannot be read. */
+  private async heldAfterDoubt(address: Hex, coin: string): Promise<Fill | undefined> {
+    await new Promise((r) => setTimeout(r, this.settleMs));
     try {
-      const mine = (await this.legs.hl.userFills({ user: address })).filter((f) => f.cloid?.toLowerCase() === cloid.toLowerCase() && f.time >= since - 5_000);
-      const sz = mine.reduce((s, f) => s + Number(f.sz), 0);
-      return sz > 0 ? { sz, px: mine.reduce((s, f) => s + Number(f.sz) * Number(f.px), 0) / sz } : { sz: 0, px: 0, error: 'no fill found for the order' };
+      const p = position(await this.legs.hl.clearinghouseState({ user: address }), coin);
+      return { sz: Math.abs(Number(p?.szi ?? 0)), px: Number(p?.entryPx ?? 0) };
     } catch {
       return undefined;
     }
@@ -292,7 +302,16 @@ export class HedgePairExecutor {
     const size = surplus.whole ? (l === 0 ? a : b).toFixed(szDecimals) : surplus.size.toFixed(szDecimals);
     const group = newGroup();
     const r = await Promise.allSettled([this.legs.tradingClient(owner, l).limitOrderOpen({ asset, isBuy: !wasBuy, price, size, tif: 'Ioc', reduceOnly: true, c: makeCloid('hedgeClose', group) })]);
-    const f = outcomeOf(r[0]!);
+    let f = outcomeOf(r[0]!);
+    if (f.unknown) {
+      // the reply was lost: the position says how much of the surplus is gone
+      const held = await this.heldAfterDoubt(plan.addresses[l], spec.coin);
+      if (!held) {
+        notes.push(`could not tell whether the surplus on leg ${l} was closed (${f.error}); look at Positions now`);
+        return { status: 'unbalanced', legs, unwind, spreadBps, open, notes };
+      }
+      f = { sz: Math.max(0, open[l] - held.sz), px: held.px, ...(open[l] - held.sz > 0 ? {} : { error: f.error }) };
+    }
     unwind.push({ leg: l, isBuy: !wasBuy, requested: size, filled: f.sz, avgPx: f.sz > 0 ? f.px : null, ...(f.error && f.sz < Number(size) ? { error: f.error } : {}) });
     open[l] = Math.max(0, open[l] - f.sz);
     const remaining = l === 0 ? open[0] - dp(open[1] / ratio) : open[1] - dp(open[0] * ratio);

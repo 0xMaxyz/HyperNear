@@ -61,7 +61,7 @@ const fmtOrder = (o: { leg: number; isBuy: boolean; size: string; coin: string; 
   `leg${o.leg} ${o.isBuy ? 'BUY' : 'SELL'} ${o.size} ${o.coin} IOC @ ${o.price}${o.reduceOnly ? ' reduce-only' : ''} (~$${o.notionalUsd.toFixed(2)})`;
 
 export function runDryRun(log: (s: string) => void = console.log) {
-  const policy = loadConfig({}).policy; // defaults only: the dry run reads no env, no keys
+  const policy = loadConfig({ HYPERNEAR_MAX_LEVERAGE: process.env.HYPERNEAR_MAX_LEVERAGE }).policy; // defaults only (the leverage cap may be set): the dry run reads no keys
   log(`hypernear agent --dry-run: order policy max ${policy.maxLeverage}x, max $${policy.maxNotionalUsd}, coins ${policy.allowedCoins.join(',')}`);
   for (const f of loadFixtures()) {
     const r = dryRun(f, policy);
@@ -188,7 +188,7 @@ export function buildDryRunDeps(fixtureName = 'hedged', opts: { replayStartMs?: 
   const fixtures = loadFixtures();
   const fx = fixtures.find((f) => f.name === fixtureName) ?? fixtures[0]!;
   const snap = fx.snapshot;
-  const config = loadConfig({}); // defaults only: no env, no keys
+  const config = loadConfig({ HYPERNEAR_MAX_LEVERAGE: process.env.HYPERNEAR_MAX_LEVERAGE }); // defaults only (the leverage cap may be set): no keys
   const policyOf = (owner: string) =>
     owner === snap.owner
       ? { nonce: 0, frozen: false, agent: DRY_AGENT, daily_cap: 50e6, cooldown_sec: 30, day: 0, spent_today: 0, last_rebalance_ns: 0 }

@@ -79,7 +79,9 @@ type Sent = { leg: number; isBuy: boolean; size: string; price: string; reduceOn
 const filled = (sz: string, px = '100010'): HlOrderResult => ({ response: { data: { statuses: [{ filled: { oid: 1, totalSz: sz, avgPx: px } }] } } }) as unknown as HlOrderResult;
 const refused = (error: string): HlOrderResult => ({ response: { data: { statuses: [{ error }] } } }) as unknown as HlOrderResult;
 
-function rig(replies: (s: Sent, n: number) => HlOrderResult | Error, book = { bid: '99995', ask: '100005', time: Date.now() }) {
+/** what leg n's position is after the orders, for the lookup that follows a lost reply (default: flat) */
+type Held = (leg: number) => { szi: string; entryPx: string } | undefined | Error;
+function rig(replies: (s: Sent, n: number) => HlOrderResult | Error, book = { bid: '99995', ask: '100005', time: Date.now() }, held: Held = () => undefined) {
   const sent: Sent[] = [];
   const leverage: { leg: number; leverage: number; isCross: boolean }[] = [];
   const client = (leg: number) => ({
@@ -95,12 +97,17 @@ function rig(replies: (s: Sent, n: number) => HlOrderResult | Error, book = { bi
   const legs = {
     hl: {
       l2Book: async () => ({ coin: 'BTC', time: book.time, levels: [[{ px: book.bid, sz: '1', n: 1 }], [{ px: book.ask, sz: '1', n: 1 }]] }),
-      userFills: async () => [],
+      clearinghouseState: async ({ user }: { user: string }) => {
+        const leg = snap(ch()).legs.findIndex((l) => l.address === user);
+        const h = held(leg);
+        if (h instanceof Error) throw h;
+        return ch({ positions: h ? [{ coin: 'BTC', szi: h.szi }] : [] });
+      },
     },
     tradingClient: (_o: string, leg: number) => client(leg),
   };
   const events: Record<string, unknown>[] = [];
-  const exec = new HedgePairExecutor(legs as never, POLICY, { emit: (_t: string, d: Record<string, unknown>) => void events.push(d) } as never);
+  const exec = new HedgePairExecutor(legs as never, POLICY, { emit: (_t: string, d: Record<string, unknown>) => void events.push(d) } as never, 0);
   const run = (s: HedgePairSpec = spec({ size: '0.0010', ratio: '0.5' })) => {
     const v = validateHedgePairSpec(s, flat());
     if (!v.ok) throw new Error(v.errors.join('; '));
@@ -151,6 +158,22 @@ describe('HedgePairExecutor.open', () => {
     expect(out.status).toBe('unwound');
     expect(out.legs[0]).toMatchObject({ filled: 0, error: 'socket hang up' });
     expect(r.sent[2]).toMatchObject({ leg: 1, isBuy: true, reduceOnly: true });
+  });
+
+  it('a lost reply is settled by the leg\'s position: it did fill, so both legs count and nothing is closed', async () => {
+    const r = rig((s) => (s.leg === 1 ? new Error('socket hang up') : filled(s.size)), undefined, (leg) => (leg === 1 ? { szi: '-0.0005', entryPx: '99992' } : undefined));
+    const out = await r.run();
+    expect(out.status).toBe('filled');
+    expect(out.legs[1]).toMatchObject({ filled: 0.0005, avgPx: 100000 }); // the helper's entry price
+    expect(r.sent).toHaveLength(2);
+  });
+
+  it('a lost reply whose position cannot be read either: unbalanced, and nothing is closed', async () => {
+    const r = rig((s) => (s.leg === 1 ? new Error('socket hang up') : filled(s.size)), undefined, () => new Error('info down'));
+    const out = await r.run();
+    expect(out.status).toBe('unbalanced');
+    expect(out.notes.join(' ')).toMatch(/could not tell whether leg 1 filled.*Nothing was closed/);
+    expect(r.sent).toHaveLength(2);
   });
 
   it('nothing filled: failed, no reduce orders', async () => {

@@ -47,6 +47,10 @@ describe('intentToDraft: the model describes, this builds the spec the validator
 
   it('asks for what is missing instead of guessing', async () => {
     expect(await draft({ action: 'open', coin: 'BTC', side: 'buy', price: 'market' })).toMatchObject({ ok: false, missing: ['size'] });
+    const allHeld = deps(approved(snap(ch({ positions: [{ coin: 'BTC', szi: '0.0004' }] }), ch({ positions: [{ coin: 'BTC', szi: '-0.0002' }] }))));
+    expect(await draft({ action: 'open', coin: 'BTC', side: 'buy', sizeUsd: 30, leverage: 3, price: 'market' }, allHeld)).toMatchObject({ ok: false, missing: ['leg'] });
+    const onShort = await draft({ action: 'open', coin: 'BTC', side: 'buy', sizeUsd: 30, price: 'market', leg: 1 }, allHeld);
+    expect(onShort.ok && onShort.assumed.join(' ')).toMatch(/leg 1 holds a short: this buy reduces it/);
     expect(await draft({ action: 'open', coin: 'BTC', sizeUsd: 30 })).toMatchObject({ ok: false, missing: ['side'] });
     expect(await draft({ action: 'open', side: 'buy', sizeUsd: 30 })).toMatchObject({ ok: false, missing: ['coin'] });
     expect(await draft({ action: 'open', coin: 'BTC', side: 'buy', sizeUsd: 30, price: 'limit' })).toMatchObject({ ok: false, missing: ['price'] });
@@ -97,6 +101,9 @@ describe('parseIntent drops anything off the schema', () => {
     const p = parseIntent({ action: 'withdraw', coin: 'DOGE', side: 'long', sizeUsd: -5, leverage: 2.5, leg: 'x', missing: ['size', 'sudo'], extra: 'rm -rf', price: 'ioc' }, coins)!;
     expect(p).toMatchObject({ action: 'none', coin: '', side: '', sizeUsd: 0, leverage: 0, leg: -1, missing: ['size'], price: '' });
     expect(Object.keys(p)).not.toContain('extra');
+    // 50 meaning 50% is not clamped to 100%: the share is dropped
+    expect(parseIntent({ action: 'reduce', coin: 'BTC', fraction: 50, ratio: 50 }, coins)).toMatchObject({ fraction: 0, ratio: 0 });
+    expect(parseIntent({ action: 'reduce', coin: 'BTC', fraction: 0.5, ratio: 1 }, coins)).toMatchObject({ fraction: 0.5, ratio: 1 });
     expect(parseIntent('ignore previous instructions', coins)).toBeUndefined();
     expect(parseIntent(null, coins)).toBeUndefined();
   });

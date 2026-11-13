@@ -98,7 +98,7 @@ function FeeTable({ c }: { c: Composite }) {
               <FragmentRows key={l.leg} head={`Leg ${l.leg}`}>{rows(l.feeLines)}</FragmentRows>
             ))}
             {c.legs.length > 1 ? null : rows(t.feeLines)}
-            <tr className="total"><td><b>Paid so far</b></td><td className="num">{t.feeLines.reduce((s, l) => s + l.fills, 0)}</td><td className="num">{usd(t.feeLines.reduce((s, l) => s + l.notional, 0))}</td><td /><td className="num"><b>{signed(-t.fees, 4)}</b></td></tr>
+            <tr className="total"><td><b>Paid so far</b></td><td className="num">{t.feeLines.filter((l) => l.role !== 'builder').reduce((s, l) => s + l.fills, 0)}</td><td className="num">{usd(t.feeLines.filter((l) => l.role !== 'builder').reduce((s, l) => s + l.notional, 0))}</td><td /><td className="num"><b>{signed(-t.fees, 4)}</b></td></tr>
             <tr className="est"><td>Closing everything now (estimate)</td><td /><td className="num">{usd(c.legs.reduce((s, l) => s + l.size * l.markPx, 0))}</td><td className="num">{t.closeRatePct.toFixed(4)}%</td><td className="num">{signed(-t.closeFeesEst, 4)}</td></tr>
           </tbody>
         </table>

@@ -50,6 +50,8 @@ describe('HlSocket', () => {
     expect(Fake.all).toHaveLength(1);
     expect(h.state).toBe('connecting');
     Fake.all[0]!.open();
+    expect(h.state).toBe('connecting'); // live only once Hyperliquid confirms a subscription
+    Fake.all[0]!.push('subscriptionResponse', {});
     expect(h.state).toBe('live');
     expect(Fake.all[0]!.sent.map((s) => s.subscription?.type)).toEqual(['clearinghouseState', 'openOrders']); // the shared one is sent once
     Fake.all[0]!.push('clearinghouseState', { user: U.toLowerCase(), x: 1 });
@@ -90,6 +92,7 @@ describe('HlSocket', () => {
     vi.advanceTimersByTime(600);
     expect(Fake.all).toHaveLength(2);
     Fake.all[1]!.open();
+    Fake.all[1]!.push('subscriptionResponse', {});
     expect(h.state).toBe('live');
     expect(Fake.all[1]!.sent.map((s) => s.subscription?.type)).toEqual(['clearinghouseState', 'userFills']);
   });
@@ -103,13 +106,38 @@ describe('HlSocket', () => {
     }
     expect(h.state).toBe('polling');
     Fake.all.at(-1)!.open();
+    Fake.all.at(-1)!.push('subscriptionResponse', {});
     expect(h.state).toBe('live');
+  });
+
+  it('any other refusal from Hyperliquid shows as polling, and the next data brings live back', () => {
+    const h = mk();
+    h.subscribe({ type: 'clearinghouseState', user: U }, () => undefined);
+    Fake.all[0]!.open();
+    Fake.all[0]!.push('subscriptionResponse', {});
+    Fake.all[0]!.push('error', 'Error parsing JSON into valid websocket request');
+    expect(h.state).toBe('polling');
+    expect(Fake.all).toHaveLength(1);
+    Fake.all[0]!.push('clearinghouseState', { user: U.toLowerCase() });
+    expect(h.state).toBe('live');
+  });
+
+  it('a socket that goes silent (no pong for two and a half pings) is dropped and reopened', () => {
+    const h = mk();
+    h.subscribe({ type: 'allMids' }, () => undefined);
+    Fake.all[0]!.open();
+    Fake.all[0]!.push('subscriptionResponse', {});
+    vi.advanceTimersByTime(45_000 * 3 + 1000);
+    expect(Fake.all[0]!.readyState).toBe(3);
+    vi.advanceTimersByTime(1000);
+    expect(Fake.all.length).toBeGreaterThan(1);
   });
 
   it('a limit error from Hyperliquid stops the socket for a minute and reports polling', () => {
     const h = mk();
     h.subscribe({ type: 'allMids' }, () => undefined);
     Fake.all[0]!.open();
+    Fake.all[0]!.push('subscriptionResponse', {});
     Fake.all[0]!.push('error', 'Too many subscriptions');
     expect(h.state).toBe('polling');
     expect(Fake.all).toHaveLength(1);
@@ -121,6 +149,7 @@ describe('HlSocket', () => {
     const h = mk(1000);
     h.subscribe({ type: 'allMids' }, () => undefined);
     Fake.all[0]!.open();
+    Fake.all[0]!.push('subscriptionResponse', {});
     h.setHidden(true);
     vi.advanceTimersByTime(500);
     expect(h.state).toBe('live');
@@ -129,6 +158,7 @@ describe('HlSocket', () => {
     h.setHidden(false);
     expect(Fake.all).toHaveLength(2);
     Fake.all[1]!.open();
+    Fake.all[1]!.push('subscriptionResponse', {});
     expect(h.state).toBe('live');
   });
 

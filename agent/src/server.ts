@@ -61,6 +61,9 @@ import { specHash } from './strategy/spec.ts';
 import { bootTee, enrollTeeOwner, hlLedgerPort, OwnerScope, shadeBackend } from './tee.ts';
 import { pinAccount, teeAccount } from './teeAccount.ts';
 
+/** owners whose hedge pair is opening right now (see POST /hedge/pair) */
+const pairsInFlight = new Set<string>();
+
 export interface Deps {
   config: AgentConfig;
   client: HyperNearClient;
@@ -376,7 +379,14 @@ export function handler(d: Deps) {
           return reply(200, await d.dryRun.hedgePair(cmd.owner, v.spec, v.plan));
         }
         if (!d.pairs) throw new HttpError(503, 'hedge pairs off');
-        return reply(200, await d.pairs.open(cmd.owner, v.spec, v.plan));
+        // two signed commands must not both pass the flat check and double the position: one pair per owner at a time
+        if (pairsInFlight.has(cmd.owner)) throw new HttpError(409, 'another hedge for this owner is still opening');
+        pairsInFlight.add(cmd.owner);
+        try {
+          return reply(200, await d.pairs.open(cmd.owner, v.spec, v.plan));
+        } finally {
+          pairsInFlight.delete(cmd.owner);
+        }
       }
       if (req.method === 'POST' && url.pathname === '/session/start') {
         const body = (await readJson(req)) as { spec?: unknown };

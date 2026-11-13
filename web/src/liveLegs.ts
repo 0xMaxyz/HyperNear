@@ -40,18 +40,25 @@ export function useLiveLegs(view: OwnerView | undefined): Live {
     const offState = hub.onState(setState);
     setState(hub.state);
     const bump = () => {
-      clearTimeout(timer.current);
-      timer.current = setTimeout(() => setEventAt(Date.now()), REFETCH_DEBOUNCE_MS);
+      if (timer.current) return; // joins the refetch already scheduled, so a steady stream cannot postpone it forever
+      timer.current = setTimeout(() => {
+        timer.current = undefined;
+        setEventAt(Date.now());
+      }, REFETCH_DEBOUNCE_MS);
     };
     const offs = addresses.split(',').flatMap((user) => {
-      let seenOrders = false;
+      let lastOrders: string | undefined;
       return [
         hub.subscribe({ type: 'clearinghouseState', user }, (d) => {
           const c = (d as { clearinghouseState?: Clearinghouse & { time?: number } }).clearinghouseState;
           if (c) setLegs((l) => ({ ...l, [user]: { at: c.time ?? Date.now(), ch: c } }));
         }),
-        // the first openOrders message is the snapshot; every later one means an order was placed, filled or cancelled
-        hub.subscribe({ type: 'openOrders', user }, () => (seenOrders ? bump() : void (seenOrders = true))),
+        // the first openOrders message is the snapshot; a later one counts only when the orders differ from the last one
+        hub.subscribe({ type: 'openOrders', user }, (d) => {
+          const sig = JSON.stringify(((d as { orders?: { oid: number; sz: string; limitPx: string }[] }).orders ?? []).map((o) => [o.oid, o.sz, o.limitPx]));
+          if (lastOrders !== undefined && sig !== lastOrders) bump();
+          lastOrders = sig;
+        }),
         hub.subscribe({ type: 'userFills', user }, (d) => !(d as { isSnapshot?: boolean }).isSnapshot && bump()),
       ];
     });
@@ -59,6 +66,7 @@ export function useLiveLegs(view: OwnerView | undefined): Live {
       offs.forEach((f) => f());
       offState();
       clearTimeout(timer.current);
+      timer.current = undefined;
     };
   }, [enabled, network, addresses]);
 
@@ -71,7 +79,9 @@ export function overlayLive(view: OwnerView | undefined, live: Live): OwnerView 
   const base = view.snapshot.at;
   const legs = view.snapshot.legs.map((l) => {
     const p = live.legs[l.address.toLowerCase()];
-    return p && p.at > base ? { ...l, clearinghouse: p.ch } : l;
+    // both sides carry Hyperliquid's own `time`; the agent's snapshot clock is only the fallback
+    const polledAt = (l.clearinghouse as { time?: number }).time ?? base;
+    return p && p.at > polledAt ? { ...l, clearinghouse: p.ch } : l;
   });
   return { ...view, snapshot: { ...view.snapshot, legs, at: Math.max(base, live.eventAt) } };
 }

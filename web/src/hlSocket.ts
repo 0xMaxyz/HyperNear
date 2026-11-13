@@ -51,6 +51,7 @@ export class HlSocket {
   #retry?: ReturnType<typeof setTimeout>;
   #hiddenTimer?: ReturnType<typeof setTimeout>;
   #attempt = 0;
+  #lastMessage = 0;
   #connects: number[] = [];
   #hidden = false;
 
@@ -154,9 +155,14 @@ export class HlSocket {
     this.#ws = ws;
     ws.onopen = () => {
       this.#attempt = 0;
+      this.#lastMessage = Date.now();
       for (const { sub } of this.#subs.values()) this.#send('subscribe', sub);
-      this.#ping = setInterval(() => ws.readyState === OPEN && ws.send(JSON.stringify({ method: 'ping' })), PING_MS);
-      this.#set('live');
+      this.#ping = setInterval(() => {
+        // HL answers every ping with a pong, so silence for two pings means a half-open socket: drop it and reconnect
+        if (Date.now() - this.#lastMessage > 2.5 * PING_MS) return ws.close();
+        if (ws.readyState === OPEN) ws.send(JSON.stringify({ method: 'ping' }));
+      }, PING_MS);
+      // 'live' comes with the first confirmation or data (#message), not with the open
     };
     ws.onmessage = (e) => this.#message(e.data);
     ws.onerror = () => ws.close();
@@ -184,15 +190,22 @@ export class HlSocket {
       return;
     }
     const ch = msg.channel;
-    if (!ch || ch === 'pong' || ch === 'subscriptionResponse') return;
+    if (!ch) return;
+    this.#lastMessage = Date.now();
     if (ch === 'error') {
       // a limit error means this IP has no room: stop asking for a while and let the page poll
       if (/too many|limit|exceed/i.test(String(msg.data))) {
         this.#stop('polling');
         this.#retry = setTimeout(() => this.#connect(), POLLING_RETRY_MS);
+      } else if (!/already subscribed/i.test(String(msg.data))) {
+        // any other refusal (a subscription HL did not accept): the data cannot be trusted to be complete, so the page keeps polling
+        this.#set('polling');
       }
       return;
     }
+    if (ch === 'pong') return;
+    if (this.#ws) this.#set('live');
+    if (ch === 'subscriptionResponse') return;
     const d = (msg.data ?? {}) as { user?: string; coin?: string };
     const entry = this.#subs.get(subKey({ type: ch, user: d.user, coin: ch === 'activeAssetCtx' ? d.coin : undefined }));
     if (entry) for (const h of entry.handlers) h(msg.data);
