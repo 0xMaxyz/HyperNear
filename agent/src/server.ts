@@ -88,7 +88,7 @@ export interface Deps {
   guardLoop?: GuardLoop;
   /** proposals, accept, modes; its loop runs only with TYPESAFE_API_KEY and ANTHROPIC_API_KEY set (or in the dry run) */
   decider?: Decider;
-  /** Phase 2 strategy runners (absent in the dry run) */
+  /** Strategy runners (absent in the dry run) */
   strategies?: StrategyManager;
   /** after a relayed freeze: clear every leg's resting orders through the contract's cancel_orders (absent: no sweep) */
   sweeper?: (owner: Hex) => Promise<LegSweep[]>;

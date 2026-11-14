@@ -170,7 +170,7 @@ export async function getJson<T>(path: string): Promise<T> {
   }
 }
 
-// ---- Phase 2: strategies (agent/src/strategy/*)
+// ---- strategies (agent/src/strategy/*)
 export interface StrategySpec {
   id: string;
   type: 'grid' | 'twap';

@@ -1,6 +1,6 @@
-# Phase 2: strategies on the HyperNear primitive
+# Strategies on the HyperNear primitive
 
-Status: built and run on testnet (branch `phase2`). Goal, demo 2 of the primitive, "one account per bot with capped top-ups": every strategy runs on its own leg, so its losses stay on that leg, the contract's cap and cooldown bound how much the margin guard can top it up, and `freeze` stops all of it. Everything is in `agent/src/strategy/`; evidence is in `agent/results/`.
+Status: built and run on testnet. Goal, demo 2 of the primitive, "one account per bot with capped top-ups": every strategy runs on its own leg, so its losses stay on that leg, the contract's cap and cooldown bound how much the margin guard can top it up, and `freeze` stops all of it. Everything is in `agent/src/strategy/`; evidence is in `agent/results/`.
 
 ## What was built
 

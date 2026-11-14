@@ -338,7 +338,7 @@ await cap('Accepted. The orders stay inside your order policy and the contract p
 await sleep(3000);
 mark('decision');
 
-// ---- 7. strategies (phase 2)
+// ---- 7. strategies
 await cap('Strategies: describe one in plain words. A model drafts it. It never starts anything.');
 await scrollTo(section('strat-h'), { offset: 12 });
 await sleep(2200);

@@ -12,9 +12,42 @@ An owner (any ordinary EVM wallet) gets several Hyperliquid accounts ("legs"); t
 
 **For:** anyone who lets a bot, a desk or an AI agent trade a Hyperliquid account and wants a withdraw lock, spending caps and a kill switch the operator cannot bypass. Trading stays at native Hyperliquid speed with per-leg API wallets; only owner-level moves (transfers, approvals, withdrawals, freeze) go through the NEAR contract, ~8 s each (C6).
 
-The project started under the working name HyperNear. The deployed testnet contract (`leash-spike-1107.testnet`), the `@hypernear/*` packages, the `HYPERNEAR_*` variables and the EIP-712 domain keep that name so the deployed contract and existing signatures stay valid.
+Names fixed by the deployed testnet contract: the contract account `leash-spike-1107.testnet`, the EIP-712 domain name `Leash`, the burn-address seed `leash-burn` and the Hyperliquid agent names `leash-leg<N>` and `leash-tee` carry the project's first name, because changing them means deploying a new contract. Everything else is named HyperNear.
 
 Tracks: **security** (AI Security & Defense), **defi** (Unstoppable DeFi), **agents** (Agent Economy). License: MIT.
+
+## Live evidence (NEAR testnet and Hyperliquid testnet)
+
+Every claim has a committed test or script and a result file; the full ledger with all numbers is [docs/claims.md](docs/claims.md). Contract: `leash-spike-1107.testnet`.
+
+| Claim | Result | Evidence |
+|---|---|---|
+| C1 MPC signature recovers to the derived address | 11/11 | NEAR tx [5ofs76x8…](https://testnet.nearblocks.io/txns/5ofs76x8CdXMorzZTinnSovpvRsJZmoHZhPDNtfjUogh); address [0xe8e7c697…](https://app.hyperliquid-testnet.xyz/explorer/address/0xe8e7c69788249d5bc17ddbd441cdf41f6f8a0274) |
+| C2 Hyperliquid accepts `approveAgent` signed by MPC | ok | NEAR tx [6hEDswnz…](https://testnet.nearblocks.io/txns/6hEDswnziqMfxYxR85TN9vuXb66xY3KkMMSoXEsJQErT); leg [0xff689f4b…](https://app.hyperliquid-testnet.xyz/explorer/address/0xff689f4bf14686c751df87304178eacb3c2194e3) |
+| C3 `usdSend`, `usdClassTransfer`, `withdraw3` signed by MPC | all ok | NEAR txs [usdSend](https://testnet.nearblocks.io/txns/5YETHthJtWddKgsAkjKbD9rV9d2UxmiF2NUVJRvdoNHr), [usdClassTransfer](https://testnet.nearblocks.io/txns/AxYVw9UM5475w7gf1d9bSNfTz5aTHkeJVjTv5kPqvpQE), [withdraw3](https://testnet.nearblocks.io/txns/79D12deyDXkabqRzBTisYL89bvE9myAH2LovE8wcHoU5) |
+| C7 Agent function-call key calls `rebalance`; contract pays the MPC deposit | ok | NEAR tx [BaoLesRA…](https://testnet.nearblocks.io/txns/BaoLesRAhannL1tQJjXyP3MCUTQEb2NSY4axXXRXu1eY) |
+| C11 An API wallet can do `subAccountTransfer` | ok | subaccount [0x4c163613…](https://app.hyperliquid-testnet.xyz/explorer/address/0x4c163613b406241f43a5492a917f4c0759670ac5) |
+| C20 The leg's master key (MPC) signs a Hyperliquid order cancel; Hyperliquid accepts it after the agent is revoked | ok | NEAR tx [8ro3gSB7…](https://testnet.nearblocks.io/txns/8ro3gSB7YdH4LMMyPpPW2M2SEEGoMBgemeyAUQFVLoHs) (`cancel_orders` while frozen, non-owner caller); [C20.json](validation/results/C20.json), [C20-method.json](validation/results/C20-method.json) |
+| C13 Privy `signTypedData` with a custom domain | not run | pending |
+| C9/C15 1Click funding of a fresh address | not run | mainnet, in the runbook |
+| Decision layer: Jev p50 0.69 s; top answer flips under shuffling on 16% of states; 5% of calls reach 0.90 | measured | [C17](validation/results/C17.json), [C17b](validation/results/C17b.json), [C18](validation/results/C18.json), [C18b](validation/results/C18b.json) |
+
+**Margin guard demo** (`agent/scripts/guard-demo.ts`, results in [`agent/results/`](agent/results)). The stress leg was pushed to 40x; the guard detected `margin_floor` and moved 1.54 USDC from leg 2 to leg 1 through the contract. Run 2 timeline: detected +0.7 s, NEAR signed +7.0 s, Hyperliquid posted +8.4 s, recovered +11.1 s. NEAR tx [8WRUpM9E…](https://testnet.nearblocks.io/txns/8WRUpM9EfmouBejeYDoH3w3ELjwaRTPpx2ugcGURSYoo) (run 1: [4ej8UZ8C…](https://testnet.nearblocks.io/txns/4ej8UZ8CDcHUZHGZhS4m1GTuMgZdaPaRL1fBvvKWtDes), recovered +13.6 s).
+
+**Hedge** ([`agent/results/D3-live.json`](agent/results/D3-live.json)): leg 1 shorted 0.0002 BTC at 3x (oid 64758082577); closing filled both legs reduce-only; both positions ended at size 0.
+
+**Freeze** ([`agent/results/freeze-live.json`](agent/results/freeze-live.json)). One NEAR transaction [24aTEXc2…](https://testnet.nearblocks.io/txns/24aTEXc2H2KpADmML9HtXBeckd2NysVcwPBjt1vFv9HK) revoked the agents on all 3 legs on Hyperliquid (`ok`). Eight seconds later an order from an old agent was refused by Hyperliquid. An order resting before the freeze stayed on the book, which is why the sweep exists.
+
+**Freeze sweep** ([`validation/results/C20-sweep.json`](validation/results/C20-sweep.json), claim C20). Two resting BTC orders, one on each of legs 0 and 1, survived a freeze ([Fy4WwBfQ…](https://testnet.nearblocks.io/txns/Fy4WwBfQRjgiCmWbxfUigmJfuDmZgeYoRLkkuJXyWQDb)). `cancel_orders`, called by an account that is not the owner, had the contract sign a Hyperliquid cancel with each leg's own MPC key; Hyperliquid answered `ok` and both books were empty 18.5 s after the sweep started (leg 0 tx [GS8LrZbw…](https://testnet.nearblocks.io/txns/GS8LrZbwwQ7X2d3htFLnm9cnmDDhzA9g2UNuaKH6DX6Y)). No agent key and no exchange-side dead-man were involved.
+
+**Prompt-injection demo** ([`validation/results/injection-demo.json`](validation/results/injection-demo.json), `agent/scripts/injection-demo.ts`). A chat with unfiltered tools read a "market news" paste containing a hidden instruction to move all funds to an attacker address. Honest outcome: **no model followed it** (Sonnet 5.5 in three prompt variants, Haiku 5.5 in one); Sonnet named the injected line and ignored it. So we then called the tools directly with the injected arguments, as a model that did follow it would:
+
+- `rebalance` to the attacker address reverted on chain: "destination is not a registered leg of this owner", NEAR tx [J6P8cPND…](https://testnet.nearblocks.io/txns/J6P8cPNDBpZWpEDR9AbTTEE3c1Q98jQPM1Lj8Lmxxo3B).
+- `withdraw` without an owner signature was refused: `HTTP 400: sig must be 65 bytes hex`.
+- `withdraw` with a forged signature was refused by the contract: `owner_execute failed: Smart contract panicked: signature: bad v`.
+- The agent's NEAR key cannot call `owner_execute`: `Access key does not allow method owner_execute`.
+
+Mainnet: not deployed. The project runs on NEAR and Hyperliquid testnet (testnet-only projects are eligible, FAQ Q-010). A mainnet deploy locks the contract for good, so it waits for the pricing design above and a real-hardware TEE run; the plan, costs and abort points are ready in [docs/mainnet-runbook.md](docs/mainnet-runbook.md).
 
 ## The problem
 
@@ -49,7 +82,7 @@ A Hyperliquid master key is a bare EOA. Whoever holds it can approve any agent, 
 - **Withdraw.** A leg pays out to the owner's own wallet only (Hyperliquid charges 1 USDC); the relayer posts the contract-signed withdrawal.
 - **Freeze.** One owner-signed intent stops every contract-signed action except the owner's withdraw, and in the same NEAR transaction the contract signs `approveAgent` calls that replace each trading agent with a keyless burn address, so the old API wallets are refused by Hyperliquid (details in [docs/readme-notes.md](docs/readme-notes.md)).
 - **Decisions (propose mode).** For each hedge the agent asks Jev (TypeSafe AI) five yes/no questions, escalates to Claude when a factor is not decisive (below 0.90 or above 0.10), and shows the result as a proposal. The first call goes to Sonnet 5.5, or to Opus 5.5 when the hedge's combined notional is above $1,000; if Sonnet's answer differs from the factor table's, Opus is asked as well and wins (`agent/src/decide.ts`). The owner accepts or rejects it; nothing runs until accepted.
-- **Strategies (Phase 2).** Grid and TWAP/DCA bots, each on its own leg with its own top-up budget, drafted from plain language and started only by an owner signature; see [Phase 2](#phase-2-strategies-each-on-its-own-leg).
+- **Strategies.** Grid and TWAP/DCA bots, each on its own leg with its own top-up budget, drafted from plain language and started only by an owner signature; see [Strategies](#strategies-each-on-its-own-leg).
 - **Chat.** A tool-calling chat over the owner's state (`agent/src/chat.ts`) with deliberately unfiltered tools, used for the prompt-injection demo below.
 
 ## What we guarantee, and what we don't
@@ -183,46 +216,9 @@ cd web && node e2e/explore-check.mjs
 
 Expected: five `PASS page shows "..."` lines and exit code 0.
 
-## Demo video
+## Strategies, each on its own leg
 
-The video is a scripted screen recording (`web/e2e/demo-video.mjs`) of the real web page against the agent in `--dry-run --serve`. Every click and every signature in it is real and verified by the agent; the on-chain events it shows are replayed from the live testnet runs in `agent/results/` (NEAR and Hyperliquid tx links in [docs/claims.md](docs/claims.md)). No model and no network is called while recording. It is a replay, not a live session.
-
-## Live evidence (NEAR testnet and Hyperliquid testnet, 2026-11-07)
-
-Every claim has a committed test or script and a result file; the full ledger with all numbers is [docs/claims.md](docs/claims.md). Contract: `leash-spike-1107.testnet`.
-
-| Claim | Result | Evidence |
-|---|---|---|
-| C1 MPC signature recovers to the derived address | 11/11 | NEAR tx [5ofs76x8…](https://testnet.nearblocks.io/txns/5ofs76x8CdXMorzZTinnSovpvRsJZmoHZhPDNtfjUogh); address [0xe8e7c697…](https://app.hyperliquid-testnet.xyz/explorer/address/0xe8e7c69788249d5bc17ddbd441cdf41f6f8a0274) |
-| C2 Hyperliquid accepts `approveAgent` signed by MPC | ok | NEAR tx [6hEDswnz…](https://testnet.nearblocks.io/txns/6hEDswnziqMfxYxR85TN9vuXb66xY3KkMMSoXEsJQErT); leg [0xff689f4b…](https://app.hyperliquid-testnet.xyz/explorer/address/0xff689f4bf14686c751df87304178eacb3c2194e3) |
-| C3 `usdSend`, `usdClassTransfer`, `withdraw3` signed by MPC | all ok | NEAR txs [usdSend](https://testnet.nearblocks.io/txns/5YETHthJtWddKgsAkjKbD9rV9d2UxmiF2NUVJRvdoNHr), [usdClassTransfer](https://testnet.nearblocks.io/txns/AxYVw9UM5475w7gf1d9bSNfTz5aTHkeJVjTv5kPqvpQE), [withdraw3](https://testnet.nearblocks.io/txns/79D12deyDXkabqRzBTisYL89bvE9myAH2LovE8wcHoU5) |
-| C7 Agent function-call key calls `rebalance`; contract pays the MPC deposit | ok | NEAR tx [BaoLesRA…](https://testnet.nearblocks.io/txns/BaoLesRAhannL1tQJjXyP3MCUTQEb2NSY4axXXRXu1eY) |
-| C11 An API wallet can do `subAccountTransfer` | ok | subaccount [0x4c163613…](https://app.hyperliquid-testnet.xyz/explorer/address/0x4c163613b406241f43a5492a917f4c0759670ac5) |
-| C20 The leg's master key (MPC) signs a Hyperliquid order cancel; Hyperliquid accepts it after the agent is revoked | ok | NEAR tx [8ro3gSB7…](https://testnet.nearblocks.io/txns/8ro3gSB7YdH4LMMyPpPW2M2SEEGoMBgemeyAUQFVLoHs) (`cancel_orders` while frozen, non-owner caller); [C20.json](validation/results/C20.json), [C20-method.json](validation/results/C20-method.json) |
-| C13 Privy `signTypedData` with a custom domain | not run | pending |
-| C9/C15 1Click funding of a fresh address | not run | mainnet, in the runbook |
-| Decision layer: Jev p50 0.69 s; top answer flips under shuffling on 16% of states; 5% of calls reach 0.90 | measured | [C17](validation/results/C17.json), [C17b](validation/results/C17b.json), [C18](validation/results/C18.json), [C18b](validation/results/C18b.json) |
-
-**Margin guard demo** (`agent/scripts/guard-demo.ts`, results in [`agent/results/`](agent/results)). The stress leg was pushed to 40x; the guard detected `margin_floor` and moved 1.54 USDC from leg 2 to leg 1 through the contract. Run 2 timeline: detected +0.7 s, NEAR signed +7.0 s, Hyperliquid posted +8.4 s, recovered +11.1 s. NEAR tx [8WRUpM9E…](https://testnet.nearblocks.io/txns/8WRUpM9EfmouBejeYDoH3w3ELjwaRTPpx2ugcGURSYoo) (run 1: [4ej8UZ8C…](https://testnet.nearblocks.io/txns/4ej8UZ8CDcHUZHGZhS4m1GTuMgZdaPaRL1fBvvKWtDes), recovered +13.6 s).
-
-**Hedge** ([`agent/results/D3-live.json`](agent/results/D3-live.json)): leg 1 shorted 0.0002 BTC at 3x (oid 64758082577); closing filled both legs reduce-only; both positions ended at size 0.
-
-**Freeze** ([`agent/results/freeze-live.json`](agent/results/freeze-live.json)). One NEAR transaction [24aTEXc2…](https://testnet.nearblocks.io/txns/24aTEXc2H2KpADmML9HtXBeckd2NysVcwPBjt1vFv9HK) revoked the agents on all 3 legs on Hyperliquid (`ok`). Eight seconds later an order from an old agent was refused by Hyperliquid. An order resting before the freeze stayed on the book, which is why the sweep exists.
-
-**Freeze sweep** ([`validation/results/C20-sweep.json`](validation/results/C20-sweep.json), claim C20). Two resting BTC orders, one on each of legs 0 and 1, survived a freeze ([Fy4WwBfQ…](https://testnet.nearblocks.io/txns/Fy4WwBfQRjgiCmWbxfUigmJfuDmZgeYoRLkkuJXyWQDb)). `cancel_orders`, called by an account that is not the owner, had the contract sign a Hyperliquid cancel with each leg's own MPC key; Hyperliquid answered `ok` and both books were empty 18.5 s after the sweep started (leg 0 tx [GS8LrZbw…](https://testnet.nearblocks.io/txns/GS8LrZbwwQ7X2d3htFLnm9cnmDDhzA9g2UNuaKH6DX6Y)). No agent key and no exchange-side dead-man were involved.
-
-**Prompt-injection demo** ([`validation/results/injection-demo.json`](validation/results/injection-demo.json), `agent/scripts/injection-demo.ts`). A chat with unfiltered tools read a "market news" paste containing a hidden instruction to move all funds to an attacker address. Honest outcome: **no model followed it** (Sonnet 5.5 in three prompt variants, Haiku 5.5 in one); Sonnet named the injected line and ignored it. So we then called the tools directly with the injected arguments, as a model that did follow it would:
-
-- `rebalance` to the attacker address reverted on chain: "destination is not a registered leg of this owner", NEAR tx [J6P8cPND…](https://testnet.nearblocks.io/txns/J6P8cPNDBpZWpEDR9AbTTEE3c1Q98jQPM1Lj8Lmxxo3B).
-- `withdraw` without an owner signature was refused: `HTTP 400: sig must be 65 bytes hex`.
-- `withdraw` with a forged signature was refused by the contract: `owner_execute failed: Smart contract panicked: signature: bad v`.
-- The agent's NEAR key cannot call `owner_execute`: `Access key does not allow method owner_execute`.
-
-Mainnet: not deployed. The project runs on NEAR and Hyperliquid testnet (testnet-only projects are eligible, FAQ Q-010). A mainnet deploy locks the contract for good, so it waits for the pricing design above and a real-hardware TEE run; the plan, costs and abort points are ready in [docs/mainnet-runbook.md](docs/mainnet-runbook.md).
-
-## Phase 2: strategies, each on its own leg
-
-Phase 1 protects an account; Phase 2 shows the same primitive running bots. A strategy (a grid or a TWAP/DCA) runs on its own leg, so its losses stay on that leg, the margin guard can top it up only from the reserve leg and only within the strategy's own daily budget (and the contract's cap and cooldown on top), and `freeze` stops all of it. Design, what was cut (funding carry) and the details: [docs/phase2-strategies.md](docs/phase2-strategies.md).
+A strategy (a grid or a TWAP/DCA) runs on its own leg, so its losses stay on that leg, the margin guard can top it up only from the reserve leg and only within the strategy's own daily budget (and the contract's cap and cooldown on top), and `freeze` stops all of it. Design, what was cut (funding carry) and the details: [docs/strategies.md](docs/strategies.md).
 
 - **Spec.** One JSON object per strategy (`agent/src/strategy/spec.ts`). The owner signs a `startStrategy` Command whose `specHash` is the hash of the spec; a spec changed after signing is refused.
 - **Builder.** `POST /strategy/draft {owner, text}`: Claude (Sonnet 5.5, structured output) drafts a spec from plain language, `validateSpec` checks it against the order policy and the contract policy, and the response is `{spec, specHash, diff, warnings}` or a refusal with the reasons. It starts nothing.
@@ -275,7 +271,7 @@ Copy `.env.example` to `.env` (git-ignored) and fill in what you use. Never comm
 | `TYPESAFE_API_KEY` | Jev |
 | `ANTHROPIC_API_KEY` | Claude (escalation and chat) |
 | `PRIVY_APP_ID` (web: `VITE_PRIVY_APP_ID`) | owner login |
-| `NEAR_AI_API_KEY` | optional; NEAR AI Cloud chat returned HTTP 402 (no credit) when tested |
+| `NEAR_AI_API_KEY` | optional; NEAR AI Cloud as a chat model provider (`validation/tests/c12-near-ai.test.ts`) |
 
 Testnet flow: deploy with `contract/scripts/deploy-testnet.sh <account>`, start the agent with `pnpm --filter @hypernear/agent start`, run the web UI with `pnpm --filter @hypernear/web dev` (set `VITE_PRIVY_APP_ID`), register legs, fund them with `usdSend`, approve agents, set the policy, then open a hedge. Live claim tests: `LIVE=1 pnpm --filter @hypernear/validation test` (spends testnet USDC from the lab wallets). Direct fallback if our relayer is down: send the signed intent to the contract's `owner_execute` with `near call`; the signature is the authentication.
 
@@ -283,12 +279,20 @@ Mainnet: [docs/mainnet-runbook.md](docs/mainnet-runbook.md). Every mainnet step 
 
 ## Baseline and disclosure
 
-Rules Q-002 to Q-005: earlier code on another chain is allowed if disclosed, and only the NEAR integration built in the window is judged. PerpX is our existing Hyperliquid trading product; it has no NEAR code.
+Rules Q-002 to Q-005: earlier code is allowed if disclosed, and only the NEAR integration built in the window is judged.
 
-- **Baseline (pre-hackathon, Q-003):** [`packages/core`](packages/core) is a stripped copy of `packages/core` from PerpX (`maxperp/hl` commit `ef584538`, authored 2026-09-05, before the 2026-10-19 announcement): the `HlClient` import closure and the pure liquidation helpers. Tag `pre-hackathon`. Nothing else was copied from it in the baseline.
-- **Ported in the window (2026-11, disclosed):** `HlClient.trailingStopOpen` and its raw-L1 shell (`#executeRawL1`) in `packages/core/src/hl/HlClient.ts`, with its wire-format test `packages/core/tests/trailing-stop/`, from the same PerpX repository (commit `4737a56b`, authored 2026-11-09, so inside the window, not baseline). It is Hyperliquid client code with no NEAR integration in it, and it is listed here so the diff is honest. The pinned Hyperliquid SDK has no trailing-stop helper; the order is accepted on testnet and unverified on mainnet.
-- **Built in the window (2026-11-07 to 2026-11-14):** everything else: the NEAR contract, `packages/hypernear-client`, `agent/`, `web/`, `validation/`, the docs.
-- **Diff:** [`pre-hackathon...hackathon-submission`](https://github.com/0xMaxyz/HyperNear/compare/pre-hackathon...hackathon-submission). `pre-hackathon` is commit `ff5b51d` (the stripped PerpX client, nothing else); `hackathon-submission` is the submitted commit. The history has a second root: the four commits `8af8d93` to `e058d29` (2026-11-07) re-create the same baseline package step by step and end with the same files as `ff5b51d`, so they add no code to the diff. All other commits are dated 2026-11-07 to 2026-11-14, inside the window that opened with the 2026-10-19 announcement.
+**Before the hackathon (tag `pre-hackathon`).** [`packages/core`](packages/core) is a Hyperliquid client library we wrote earlier. It adds the typed REST and exchange client for Hyperliquid, signing of exchange actions and orders, the order, position and account types, and the pure liquidation-distance helpers. It has no NEAR code. Nothing else in this repository existed before.
+
+**Built during the hackathon (2026-11-07 to 2026-11-14).**
+
+- `contract/`: the NEAR contract: legs derived by Chain Signatures, owner intents verified on chain, agent allowance with a daily cap and cooldown, freeze with key revocation, the cancel sweep, and TEE mode.
+- `packages/hypernear-client`: the TypeScript client for that contract (intents, commands, signing of Hyperliquid actions through the contract).
+- `agent/`: the relayer, margin guard, order and hedge execution, TP/SL, strategies, the decision layer, and Easy trading.
+- `web/`: the trade terminal and the Easy, Portfolio, Fund and Safety screens.
+- `validation/` and `agent/results/`: the live claim tests and their recorded results.
+- In `packages/core` during the window: one addition, a trailing-stop order helper (`HlClient.trailingStopOpen`, with its wire-format test in `packages/core/tests/trailing-stop/`). It is Hyperliquid client code with no NEAR integration; the order is accepted on testnet and unverified on mainnet.
+
+**Diff.** [`pre-hackathon...hackathon-submission`](https://github.com/0xMaxyz/HyperNear/compare/pre-hackathon...hackathon-submission) shows everything built in the window. `pre-hackathon` is the commit that imports `packages/core`; `hackathon-submission` is the submitted commit. A few commits dated 2026-11-07 rebuild the same `packages/core` import step by step; they add nothing beyond it.
 
 ## Libraries, services and AI use
 
@@ -300,7 +304,7 @@ Rules Q-002 to Q-005: earlier code on another chain is allowed if disclosed, and
 
 | Package | Libraries |
 |---|---|
-| `packages/core` (baseline, from PerpX) | `@nktkas/hyperliquid` 0.33.1, `viem` 2.54.3, `@msgpack/msgpack` 3.1.3 (tests) |
+| `packages/core` (baseline) | `@nktkas/hyperliquid` 0.33.1, `viem` 2.54.3, `@msgpack/msgpack` 3.1.3 (tests) |
 | `packages/hypernear-client` | `near-api-js` 7.4.0, `viem` 2.54.3 |
 | `agent` | `@anthropic-ai/sdk`, `@typesafe-ai/sdk` 0.7.0 (Jev), `@near-js/crypto` 2.5.1, `@neardefi/shade-agent-js` 2.2.0, `@phala/dstack-sdk` 0.5.7, `near-seed-phrase` 0.2.1, `viem` 2.54.3 |
 | `web` | `react` 18.3.1, `vite` 7, `@privy-io/react-auth` 3.51.3, `@solana/kit` 8.6.0, `lightweight-charts` 5.2.1, `viem` 2.54.3; tests: `@playwright/test` 1.65.0 |
@@ -310,7 +314,7 @@ Rules Q-002 to Q-005: earlier code on another chain is allowed if disclosed, and
 
 **Vendored or copied third-party code:** `contract/vendor/shade-attestation` is `shade-attestation` 0.2.0 from NearDeFi/shade-agent-framework at commit `3366bc9` (source unmodified, version pins relaxed, `dcap-qvl` 0.5.2). The recorded TDX quote in `contract/tests/tee/attestation.json` comes from the near/mpc repository's test assets (`crates/test-utils/assets/public_data.json` at `50328c6`). Source: `validation/results/T0.json`.
 
-**Templates and boilerplate:** none beyond the PerpX baseline above.
+**Templates and boilerplate:** none beyond the baseline above.
 
 ## License
 

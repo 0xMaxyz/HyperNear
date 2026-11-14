@@ -94,7 +94,7 @@ export const FREEZE_LIVE = new URL('../results/freeze-live.json', import.meta.ur
 export const C18B = new URL('../../validation/results/C18b.json', import.meta.url);
 /** The recorded freeze sweep (C20): `refs.event` is the orders.swept payload. */
 export const SWEEP_LIVE = new URL('../../validation/results/C20-sweep.json', import.meta.url);
-/** Recorded Phase 2 runs: the grid and the TWAP on leg 3, and the strategy builder's drafts (live Claude). */
+/** Recorded strategy runs: the grid and the TWAP on leg 3, and the strategy builder's drafts (live Claude). */
 export const GRID_LIVE = new URL('../results/grid-live.json', import.meta.url);
 export const TWAP_LIVE = new URL('../results/twap-live.json', import.meta.url);
 export const DRAFT_LIVE = new URL('../results/draft-live.json', import.meta.url);

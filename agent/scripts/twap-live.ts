@@ -1,4 +1,4 @@
-// Phase 2 live run (testnet): a DCA/TWAP on strategy leg 3, with a service restart in the middle.
+// Live run (testnet): a DCA/TWAP on strategy leg 3, with a service restart in the middle.
 //   NEAR_NETWORK=testnet node agent/scripts/twap-live.ts
 // Needs leg 3 registered, funded and approved (run agent/scripts/grid-live.ts once first). Steps: validate + start a 4-slice BTC buy
 // (one IOC slice per 15 s, never above limitPx) -> after 2 slices pause and stop the service -> leave a resting order on the leg

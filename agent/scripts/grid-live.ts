@@ -1,4 +1,4 @@
-// Phase 2 live run (testnet): one grid on a fresh strategy leg (leg 3) through the real validation, runner and kill switch.
+// Live run (testnet): one grid on a fresh strategy leg (leg 3) through the real validation, runner and kill switch.
 //   LAB_WALLETS_PATH=~/secrets/lab-wallets.json NEAR_NETWORK=testnet node agent/scripts/grid-live.ts [--check]
 // Steps: register leg 3 -> fund it from lab wallet #3 (usdSend) -> owner approves its HL API wallet -> validate (contract policy,
 // order policy, reserved legs) and start a 5-level grid centred on the BTC mid -> wait for a buy fill, the runner's reduce-only

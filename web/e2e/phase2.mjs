@@ -1,4 +1,4 @@
-// Phase 2 UI against the REAL agent in `--dry-run --serve`, nothing injected: leg detail with the recorded candles, the
+// Legs and strategies UI against the REAL agent in `--dry-run --serve`, nothing injected: leg detail with the recorded candles, the
 // strategies panel (recorded drafts from draft-live.json, a simulated strategy list, start/pause/resume/stop verified by the
 // agent) and the recorded strategy events. The signer is the public example key behind the fixtures' demo owner (dry-run
 // only). Signed requests are also checked here with the page's own builders. Run from web/ with vite on :5173.

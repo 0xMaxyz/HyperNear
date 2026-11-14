@@ -1,4 +1,4 @@
-// Strategy spec (Phase 2): declarative, validated, checked against the order policy and the contract policy.
+// Strategy spec: declarative, validated, checked against the order policy and the contract policy.
 // Each strategy runs on its own leg, so its losses stay on that leg and the contract's cap and cooldown bound how much
 // the margin guard may top it up. Hand-rolled validation, like parseRelayBody: no dependency, every error listed.
 import { specHashOfJson, type OwnerState } from '@hypernear/client';

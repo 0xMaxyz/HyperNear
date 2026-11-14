@@ -15,7 +15,7 @@ import { hlPort, type TradingPort } from './port.ts';
 import { StrategyRunner, type Emit, type RunnerSaved } from './runner.ts';
 import { specHash, validateSpec, type SpecResult, type StrategySpec } from './spec.ts';
 
-/** Legs 0 and 1 are the hedge pair, leg 2 is the guard's reserve (docs/phase2-strategies.md). */
+/** Legs 0 and 1 are the hedge pair, leg 2 is the guard's reserve (docs/strategies.md). */
 export const RESERVED_LEGS = [0, 1, 2];
 
 /** Another strategy holds the leg, or this id already runs: a start that lost the race. The server answers 409. */
