@@ -21,11 +21,13 @@ if (config.network !== 'testnet') throw new Error('testnet only');
 if (!config.relayer || !config.nearAgent) throw new Error('needs HYPERNEAR_RELAYER_* and HYPERNEAR_AGENT_* in the environment (source ~/work/hl.env)');
 const d = buildDeps(config);
 
-const ownerKey = generatePrivateKey();
+// OWNER_FILE=~/secrets/rebalance-live-<time>.json resumes a run with the same throwaway owner (funded legs are not funded again)
+const resumed = process.env.OWNER_FILE ? (JSON.parse(readFileSync(process.env.OWNER_FILE, 'utf8')) as { ownerKey: Hex }) : undefined;
+const ownerKey = resumed?.ownerKey ?? generatePrivateKey();
 const acct = privateKeyToAccount(ownerKey);
 const owner = acct.address.toLowerCase() as Hex;
 mkdirSync(join(homedir(), 'secrets'), { recursive: true });
-writeFileSync(join(homedir(), 'secrets', `rebalance-live-${Date.now()}.json`), JSON.stringify({ owner, ownerKey }), { mode: 0o600 });
+if (!resumed) writeFileSync(join(homedir(), 'secrets', `rebalance-live-${Date.now()}.json`), JSON.stringify({ owner, ownerKey }), { mode: 0o600 });
 console.log(`throwaway owner ${owner}; contract ${config.contractId}; agent ${config.nearAgent.accountId}`);
 
 const cfg = await d.client.getConfig();
@@ -50,10 +52,12 @@ const total = async (a: Hex) => {
 };
 let from: (typeof lab)[number] | undefined;
 for (const w of lab) if ((await total(privateKeyToAccount(w.privateKey as Hex).address.toLowerCase() as Hex)) >= 26) { from = w; break; }
-if (!from) throw new Error('no lab wallet holds 26 USDC');
-const labHl = hlClient('testnet', { master: agentKeySigner(from.privateKey as Hex) });
+if (!from && !resumed) throw new Error('no lab wallet holds 26 USDC');
+const labHl = hlClient('testnet', { master: agentKeySigner((from ?? lab[0]!).privateKey as Hex) });
 for (const [leg, amount] of [[0, '15'], [1, '5']] as const) {
-  await labHl.usdSend({ destination: regs.find((l) => l.leg === leg)!.address, amount });
+  const address = regs.find((l) => l.leg === leg)!.address;
+  if ((await total(address)) > 0) continue; // resumed run: already funded
+  await labHl.usdSend({ destination: address, amount });
 }
 for (let i = 0; i < 60 && ((await total(regs[0]!.address)) <= 0 || (await total(regs[1]!.address)) <= 0); i++) await sleep(1000);
 

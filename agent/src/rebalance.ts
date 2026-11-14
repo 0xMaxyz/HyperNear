@@ -71,6 +71,12 @@ const DEFAULTS = {
   maxWaitSec: 600,
 };
 const DAY_MS = 86_400_000;
+/** The Hyperliquid SDK wraps a signer failure as "Failed to sign the typed data using the wallet"; the contract's or NEAR's own message is in `cause`. */
+const errText = (e: unknown): string => {
+  const err = e as Error & { cause?: unknown };
+  const inner = err.cause instanceof Error ? err.cause.message : typeof err.cause === 'string' ? err.cause : '';
+  return inner && !err.message.includes(inner) ? `${err.message}: ${inner}` : err.message;
+};
 const cents = (usd: number) => Math.round(usd * 100);
 const usd = (c: number) => c / 100;
 const fixed = (c: number) => (c / 100).toFixed(2);
@@ -318,7 +324,7 @@ export class Rebalancer {
           await sleep(3000); // let Hyperliquid book the transfer before the next plan reads the balances
         } catch (e) {
           step.status = 'failed';
-          step.error = (e as Error).message.slice(0, 300);
+          step.error = errText(e).slice(0, 300);
           return finish('failed', step.error);
         }
       }
