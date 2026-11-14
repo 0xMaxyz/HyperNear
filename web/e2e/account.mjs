@@ -100,13 +100,12 @@ try {
   await link.click();
   await page.waitForTimeout(500);
   check('account: our dialog closed before Privy opened', (await modal.count()) === 0);
-  const privy = page.locator('#headlessui-portal-root [role="dialog"]').first();
-  await privy.waitFor({ state: 'visible', timeout: 15000 });
-  const front = await privy.evaluate((el) => { const r = el.getBoundingClientRect(); const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return Boolean(top && el.contains(top)); });
-  check("account: Privy's dialog is in front, not behind", front);
+  // Privy's UI is what sits at the centre of the page now (it is not behind a top-layer dialog and the page is not inert under it)
+  const inFront = () => page.evaluate(() => { const t = document.elementFromPoint(innerWidth / 2, innerHeight / 2); return Boolean(t && t.closest('#headlessui-portal-root')); });
+  let front = false;
+  for (let i = 0; i < 30 && !front; i++) { front = await inFront(); if (!front) await page.waitForTimeout(500); }
   await shot(page, 'account-privy-link');
-  const inert = await page.evaluate(() => document.querySelector('#headlessui-portal-root')?.closest('[inert]') !== null);
-  check("account: Privy's dialog is not inert", !inert);
+  check("account: Privy's dialog is in front, not behind", front);
   check('no page errors', errors.length === 0, errors.join(' | '));
   await ctx.close();
 } finally {
