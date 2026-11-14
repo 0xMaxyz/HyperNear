@@ -547,7 +547,7 @@ export function LegAccount({ leg, snap, guardFloor, onGo }: { leg: number; snap?
           <dl className="t-kv">
             <dt>Equity</dt><dd className="t-num">{usd(value)}</dd>
             <dt>Withdrawable</dt><dd className="t-num">{usd(ch?.withdrawable)}</dd>
-            <dt>Spot USDC (not trading)</dt><dd className="t-num">{usd(snap.spotUsdc)}</dd>
+            {snap.abstraction !== 'unifiedAccount' && <><dt>Spot USDC (not trading)</dt><dd className="t-num">{usd(snap.spotUsdc)}</dd></>}
             <dt>Unrealized PnL</dt><dd className={`t-num ${tone(unreal)}`}>{signedUsd(unreal)}</dd>
           </dl>
           <div className="t-health">
