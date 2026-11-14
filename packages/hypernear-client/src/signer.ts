@@ -41,6 +41,7 @@ function amountOf(m: Record<string, unknown>): string {
 /** HL user-signed payload -> what the contract call needs. Throws HyperNearUnsupportedActionError for anything else. */
 type Mapped =
   | { kind: 'rebalance'; toAddress: Hex; amount: string; hlTime: number }
+  | { kind: 'rebalanceSpot'; toAddress: Hex; amount: string; hlNonce: number }
   | { kind: 'agentUsdClassTransfer'; amount: string; hlNonce: number }
   | { kind: 'owner'; intent: OwnerIntent };
 
@@ -62,6 +63,14 @@ export function mapHlPayload(
       // destination is hashed as a string: the contract only signs lowercase ones
       const toAddress = assertLowerOrThrow(String(m.destination), 'usdSend destination');
       return { kind: 'rebalance', toAddress, amount: amountOf(m), hlTime: Number(m.time) };
+    }
+    case 'HyperliquidTransaction:SendAsset': {
+      if (mode !== 'agent') return unsupported('sendAsset has no owner intent (owners withdraw; agents rebalance between legs)');
+      // the contract signs only spot -> spot USDC with no sub-account, so refuse anything else before a NEAR transaction is spent
+      if (m.sourceDex !== 'spot' || m.destinationDex !== 'spot' || m.fromSubAccount !== '') unsupported('sendAsset must be spot to spot, with no sub-account');
+      if (!/^USDC:0x[0-9a-f]{32}$/.test(String(m.token))) unsupported(`sendAsset token must be spot USDC: ${String(m.token)}`);
+      const toAddress = assertLowerOrThrow(String(m.destination), 'sendAsset destination');
+      return { kind: 'rebalanceSpot', toAddress, amount: amountOf(m), hlNonce: Number(m.nonce) };
     }
     case 'HyperliquidTransaction:UsdClassTransfer': {
       if (String(m.amount).includes('subaccount')) unsupported('subaccount transfers are not supported');
@@ -132,6 +141,9 @@ export class NearMasterSigner implements HlAsyncSigner {
     if (mapped.kind === 'rebalance') {
       method = 'rebalance';
       r = await client.rebalance({ owner, fromLeg: leg, toAddress: mapped.toAddress, amount: mapped.amount, hlTime: mapped.hlTime });
+    } else if (mapped.kind === 'rebalanceSpot') {
+      method = 'rebalance_spot';
+      r = await client.rebalanceSpot({ owner, fromLeg: leg, toAddress: mapped.toAddress, amount: mapped.amount, hlNonce: mapped.hlNonce });
     } else if (mapped.kind === 'agentUsdClassTransfer') {
       method = 'agent_usd_class_transfer';
       r = await client.agentUsdClassTransfer({ owner, leg, amount: mapped.amount, toPerp: true, hlNonce: mapped.hlNonce });

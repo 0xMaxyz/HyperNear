@@ -3,6 +3,7 @@ import type { IRequestTransport } from '@nktkas/hyperliquid';
 import { createL1ActionHash, getWalletAddress, signL1Action } from '@nktkas/hyperliquid/signing';
 import {
   ApiRequestError,
+  agentSetAbstraction as sdkAgentSetAbstraction,
   approveAgent as sdkApproveAgent,
   approveBuilderFee as sdkApproveBuilderFee,
   batchModify as sdkBatchModify,
@@ -23,6 +24,7 @@ import {
   scheduleCancel as sdkScheduleCancel,
   updateLeverage as sdkUpdateLeverage,
   usdSend as sdkUsdSend,
+  userSetAbstraction as sdkUserSetAbstraction,
   withdraw3 as sdkWithdraw3,
 } from '@nktkas/hyperliquid/api/exchange';
 import type {
@@ -180,10 +182,12 @@ import type {
   HlTwapOrderResult,
   HlUpdateIsolatedMarginParams,
   HlScheduleCancelParams,
+  HlAbstractionCode,
   HlUpdateLeverageParams,
   HlUsdSendParams,
   HlUserAbstractionParams,
   HlUserAbstractionResult,
+  HlUserSetAbstractionParams,
   HlUserFillsParams,
   HlUserFillsResult,
   HlUserFeesParams,
@@ -1074,6 +1078,21 @@ export class HlClient {
       opts?.signal
     );
     return result as HlUserAbstractionResult;
+  }
+
+  /**
+   * Set the account's abstraction mode as an L1 action signed by an approved agent wallet (`i` disabled, `u` unified,
+   * `p` portfolio margin). Hyperliquid accepts it only while the account is still in default mode. Requires config.agentSigner.
+   */
+  async agentSetAbstraction(abstraction: HlAbstractionCode, opts?: HlL1RequestOptions): Promise<HlSuccessResult> {
+    const result = await this.#relayed(() => sdkAgentSetAbstraction(this.#tierConfig('agent'), { abstraction }, opts));
+    return result as HlSuccessResult;
+  }
+
+  /** The same change signed by the account's own master key (user-signed EIP-712). Requires config.masterSigner. */
+  async userSetAbstraction(params: HlUserSetAbstractionParams, opts?: HlRequestOptions): Promise<HlSuccessResult> {
+    const result = await this.#relayed(() => sdkUserSetAbstraction(this.#tierConfig('master'), params, opts));
+    return result as HlSuccessResult;
   }
 
   /**

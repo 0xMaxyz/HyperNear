@@ -17,7 +17,9 @@ import {
   REGISTER_LEG_DEPOSIT,
   type OwnerIntent,
 } from '../src';
-import { CONFIG, fakeSignOut, hlPayload, HL_TYPES, LEG0, LEG1, mockBackend, OWNER } from './helpers';
+import { CONFIG, fakeSignOut, hlPayload, HL_TYPES, LEG0, LEG1, mockBackend, OWNER, USDC_TESTNET } from './helpers';
+
+const sendAsset = (o: Record<string, unknown> = {}) => ({ type: 'sendAsset', destination: LEG1, sourceDex: 'spot', destinationDex: 'spot', token: USDC_TESTNET, amount: '1', fromSubAccount: '', nonce: 5, ...o });
 
 const vectors = (name: string) => JSON.parse(readFileSync(new URL(`../../../contract/tests/vectors/${name}`, import.meta.url), 'utf8'));
 // well-known PUBLIC web3 test key (same as the contract vectors): never funded
@@ -87,7 +89,20 @@ describe('NearMasterSigner, agent mode', () => {
     expect(t.calls[0]).toMatchObject({ method: 'agent_usd_class_transfer', args: { owner: OWNER, leg: 0, amount: '2', to_perp: true, hl_nonce: 5 } });
   });
 
+  it('sendAsset spot USDC -> rebalance_spot (the unified-account move)', async () => {
+    const t = setup({ mode: 'agent' });
+    await t.sign(hlPayload(sendAsset({ amount: '2.5', nonce: 77 })));
+    expect(t.calls).toHaveLength(1);
+    expect(t.calls[0]).toMatchObject({ method: 'rebalance_spot', args: { owner: OWNER, from_leg: 0, to_address: LEG1, amount: '2.5', hl_nonce: 77 } });
+    expect(t.calls[0].opts?.deposit ?? 0n).toBe(0n);
+  });
+
   it.each([
+    ['sendAsset from a perp dex', sendAsset({ sourceDex: '' })],
+    ['sendAsset to a perp dex', sendAsset({ destinationDex: '' })],
+    ['sendAsset from a sub-account', sendAsset({ fromSubAccount: LEG0 })],
+    ['sendAsset of another token', sendAsset({ token: 'PURR:0xc1fb593aeffbeb02f85e0308e9956a90' })],
+    ['sendAsset to a checksummed destination', sendAsset({ destination: getAddress(LEG1) })],
     ['perp -> spot', { type: 'usdClassTransfer', amount: '2', toPerp: false, nonce: 5 }],
     ['withdraw', { type: 'withdraw3', destination: OWNER, amount: '2', time: 5 }],
     ['approveAgent', { type: 'approveAgent', agentAddress: LEG1, agentName: 'x', nonce: 5 }],

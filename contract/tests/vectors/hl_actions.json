@@ -91,6 +91,34 @@
         "nonce": 1794050000007
       },
       "digest": "0xf3c2598d2153a173f9bca5d4d0ba20719d206ccce41b05f17e04f7ae478f2b97"
+    },
+    {
+      "hyperliquidChain": "Testnet",
+      "action": {
+        "type": "sendAsset",
+        "destination": "0x8ba1f109551bd432803012645ac136ddd64dba72",
+        "sourceDex": "spot",
+        "destinationDex": "spot",
+        "token": "USDC:0xeb62eee3685fc4c43992febcd9e75443",
+        "amount": "4",
+        "fromSubAccount": "",
+        "nonce": 1794050000008
+      },
+      "digest": "0xd3c90f64df15d5050b26c3e259b16a895f9391581525a2a2bc2c5896c7f66a1b"
+    },
+    {
+      "hyperliquidChain": "Mainnet",
+      "action": {
+        "type": "sendAsset",
+        "destination": "0x8ba1f109551bd432803012645ac136ddd64dba72",
+        "sourceDex": "spot",
+        "destinationDex": "spot",
+        "token": "USDC:0x6d1e7cde53ba9467b783cb7c530ce054",
+        "amount": "12.345678",
+        "fromSubAccount": "",
+        "nonce": 1794050000009
+      },
+      "digest": "0x3c17156f771aeb268939e72d218ea13b3f3d6862f0a442e6dc3307e6024a6b25"
     }
   ]
 }

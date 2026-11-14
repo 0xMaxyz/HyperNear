@@ -17,6 +17,11 @@ const WITHDRAW_TYPE: &[u8] =
     b"HyperliquidTransaction:Withdraw(string hyperliquidChain,string destination,string amount,uint64 time)";
 const USD_CLASS_TRANSFER_TYPE: &[u8] =
     b"HyperliquidTransaction:UsdClassTransfer(string hyperliquidChain,string amount,bool toPerp,uint64 nonce)";
+const SEND_ASSET_TYPE: &[u8] = b"HyperliquidTransaction:SendAsset(string hyperliquidChain,string destination,string sourceDex,string destinationDex,string token,string amount,string fromSubAccount,uint64 nonce)";
+
+/// The only token the contract signs a sendAsset for: HL's spot USDC, whose token id differs per network.
+const USDC_TOKEN_TESTNET: &str = "USDC:0xeb62eee3685fc4c43992febcd9e75443";
+const USDC_TOKEN_MAINNET: &str = "USDC:0x6d1e7cde53ba9467b783cb7c530ce054";
 
 /// A Hyperliquid user-signed action, in HL's own `/exchange` JSON shape minus
 /// `signatureChainId` / `hyperliquidChain` (the contract adds those).
@@ -37,6 +42,11 @@ pub enum HlAction {
     Withdraw { destination: String, amount: String, time: u64 },
     #[serde(rename = "usdClassTransfer", rename_all = "camelCase")]
     UsdClassTransfer { amount: String, to_perp: bool, nonce: u64 },
+    /// Spot USDC to another account. A unified account refuses usdSend, spotSend and usdClassTransfer but accepts this
+    /// (measured on testnet), so it is how the agent moves money between unified legs. `digest` only accepts spot -> spot,
+    /// the network's USDC token and no sub-account.
+    #[serde(rename = "sendAsset", rename_all = "camelCase")]
+    SendAsset { destination: String, source_dex: String, destination_dex: String, token: String, amount: String, from_sub_account: String, nonce: u64 },
     /// L1 action (l1.rs): its digest is the phantom-agent one and its nonce travels beside the action.
     #[serde(rename = "cancel")]
     Cancel { cancels: Vec<crate::l1::HlCancel> },
@@ -141,6 +151,18 @@ impl HlAction {
                 parse_usd(amount);
                 hash_struct(USD_CLASS_TRANSFER_TYPE, &[c, word_str(amount), word_bool(*to_perp), word_u64(*nonce)])
             }
+            HlAction::SendAsset { destination, source_dex, destination_dex, token, amount, from_sub_account, nonce } => {
+                parse_addr(destination);
+                parse_usd(amount);
+                let usdc = if hl_chain == "Mainnet" { USDC_TOKEN_MAINNET } else { USDC_TOKEN_TESTNET };
+                if source_dex != "spot" || destination_dex != "spot" || token != usdc || !from_sub_account.is_empty() {
+                    env::panic_str("sendAsset must be spot USDC to spot, with no sub-account");
+                }
+                hash_struct(
+                    SEND_ASSET_TYPE,
+                    &[c, word_str(destination), word_str(source_dex), word_str(destination_dex), word_str(token), word_str(amount), word_str(from_sub_account), word_u64(*nonce)],
+                )
+            }
             HlAction::Cancel { .. } => env::panic_str("cancel is an L1 action: use l1::cancel_digest"),
         };
         typed_digest(hl_domain_separator(HL_SIGNATURE_CHAIN_ID), struct_hash)
@@ -170,7 +192,43 @@ mod tests {
             kinds.insert(c["action"]["type"].as_str().unwrap().to_string());
             assert_eq!(action.digest(c["hyperliquidChain"].as_str().unwrap()), h32(c["digest"].as_str().unwrap()), "case {c}");
         }
-        assert_eq!(kinds.len(), 4, "every action type has a vector");
+        assert_eq!(kinds.len(), 5, "every action type has a vector");
+    }
+
+    fn send_asset(token: &str, dest_dex: &str, sub: &str) -> HlAction {
+        HlAction::SendAsset {
+            destination: "0x8ba1f109551bd432803012645ac136ddd64dba72".into(),
+            source_dex: "spot".into(),
+            destination_dex: dest_dex.into(),
+            token: token.into(),
+            amount: "1".into(),
+            from_sub_account: sub.into(),
+            nonce: 1,
+        }
+    }
+
+    #[test]
+    fn send_asset_accepts_only_spot_usdc() {
+        send_asset(USDC_TOKEN_TESTNET, "spot", "").digest("Testnet");
+        send_asset(USDC_TOKEN_MAINNET, "spot", "").digest("Mainnet");
+    }
+
+    #[test]
+    #[should_panic(expected = "sendAsset must be spot USDC")]
+    fn send_asset_rejects_another_network_token() {
+        send_asset(USDC_TOKEN_MAINNET, "spot", "").digest("Testnet");
+    }
+
+    #[test]
+    #[should_panic(expected = "sendAsset must be spot USDC")]
+    fn send_asset_rejects_a_perp_dex() {
+        send_asset(USDC_TOKEN_TESTNET, "", "").digest("Testnet");
+    }
+
+    #[test]
+    #[should_panic(expected = "sendAsset must be spot USDC")]
+    fn send_asset_rejects_a_sub_account() {
+        send_asset(USDC_TOKEN_TESTNET, "spot", "0x8ba1f109551bd432803012645ac136ddd64dba72").digest("Testnet");
     }
 
     #[test]

@@ -24,6 +24,8 @@ export const HL_TYPES = {
   usdSend: ["HyperliquidTransaction:UsdSend", [chain, { name: "destination", type: "string" }, { name: "amount", type: "string" }, { name: "time", type: "uint64" }]],
   withdraw3: ["HyperliquidTransaction:Withdraw", [chain, { name: "destination", type: "string" }, { name: "amount", type: "string" }, { name: "time", type: "uint64" }]],
   usdClassTransfer: ["HyperliquidTransaction:UsdClassTransfer", [chain, { name: "amount", type: "string" }, { name: "toPerp", type: "bool" }, { name: "nonce", type: "uint64" }]],
+  // field order checked against @nktkas/hyperliquid 0.33.1 SendAssetTypes
+  sendAsset: ["HyperliquidTransaction:SendAsset", [chain, { name: "destination", type: "string" }, { name: "sourceDex", type: "string" }, { name: "destinationDex", type: "string" }, { name: "token", type: "string" }, { name: "amount", type: "string" }, { name: "fromSubAccount", type: "string" }, { name: "nonce", type: "uint64" }]],
 };
 
 /** action = HL /exchange action JSON ({type, ...fields}); numbers may be number or bigint. */
@@ -81,6 +83,8 @@ if (import.meta.url === `file://${process.argv[1]}` && process.argv[2] === "owne
     ["Mainnet", { type: "withdraw3", destination: a, amount: "1000000", time: 1794050000005 }],
     ["Testnet", { type: "usdClassTransfer", amount: "3", toPerp: true, nonce: 1794050000006 }],
     ["Mainnet", { type: "usdClassTransfer", amount: "0.5", toPerp: false, nonce: 1794050000007 }],
+    ["Testnet", { type: "sendAsset", destination: a, sourceDex: "spot", destinationDex: "spot", token: "USDC:0xeb62eee3685fc4c43992febcd9e75443", amount: "4", fromSubAccount: "", nonce: 1794050000008 }],
+    ["Mainnet", { type: "sendAsset", destination: a, sourceDex: "spot", destinationDex: "spot", token: "USDC:0x6d1e7cde53ba9467b783cb7c530ce054", amount: "12.345678", fromSubAccount: "", nonce: 1794050000009 }],
   ];
   const domainSeparator = hashDomain({ domain: HL_DOMAIN, types: EIP712_DOMAIN_TYPES });
   console.log(JSON.stringify({

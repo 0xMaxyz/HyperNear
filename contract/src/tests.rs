@@ -429,6 +429,49 @@ fn rebalance_cap_and_cooldown() {
 }
 
 #[test]
+fn rebalance_spot_signs_a_spot_usdc_send_asset_under_the_same_limits() {
+    let mut c = contract();
+    let (o, other) = (owner(1), owner(2));
+    set_policy(&mut c, &o, "10", 600);
+    register(&mut c, &o, 0, 20);
+    let leg1 = register(&mut c, &o, 1, 21);
+    let foreign = register(&mut c, &other, 0, 22);
+    let day0 = (T0 / 86_400 + 1) * 86_400;
+
+    ctx(AGENT, day0);
+    expect_panic("not a registered leg of this owner", || {
+        let _ = c.rebalance_spot(o.addr.clone(), 0, foreign.clone(), "1".into(), 1);
+    });
+    ctx("mallory.testnet", day0);
+    expect_panic("not this owner's agent", || {
+        let _ = c.rebalance_spot(o.addr.clone(), 0, leg1.clone(), "1".into(), 1);
+    });
+    ctx(AGENT, day0);
+    let _ = c.rebalance_spot(o.addr.clone(), 0, leg1.clone(), "4".into(), 11);
+    let want = hl(HlAction::SendAsset {
+        destination: leg1.clone(),
+        source_dex: "spot".into(),
+        destination_dex: "spot".into(),
+        token: "USDC:0xeb62eee3685fc4c43992febcd9e75443".into(),
+        amount: "4".into(),
+        from_sub_account: String::new(),
+        nonce: 11,
+    });
+    assert_eq!(signed(), vec![(format!("{}/leg0", o.addr), want)]);
+    assert_eq!(c.get_owner(o.addr.clone()).unwrap().spent_today, 4_000_000);
+
+    // one cooldown clock and one daily cap, shared with `rebalance`
+    ctx(AGENT, day0 + 599);
+    expect_panic("cooldown", || {
+        let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "1".into(), 12);
+    });
+    ctx(AGENT, day0 + 600);
+    expect_panic("daily cap exceeded", || {
+        let _ = c.rebalance_spot(o.addr.clone(), 0, leg1.clone(), "7".into(), 13);
+    });
+}
+
+#[test]
 fn failed_mpc_sign_gives_back_rebalance_cap_and_cooldown() {
     let mut c = contract();
     let o = owner(1);

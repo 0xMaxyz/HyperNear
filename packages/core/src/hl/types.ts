@@ -1318,6 +1318,15 @@ export type HlUserAbstractionResult =
   | 'disabled'
   | 'dexAbstraction';
 
+/** `agentSetAbstraction` codes: `i` disabled, `u` unified account, `p` portfolio margin. */
+export type HlAbstractionCode = 'i' | 'u' | 'p';
+
+/** `userSetAbstraction` (master key): the account (or one of its sub-accounts) and the mode to set. */
+export interface HlUserSetAbstractionParams {
+  user: HexAddress;
+  abstraction: 'disabled' | 'unifiedAccount' | 'portfolioMargin';
+}
+
 export interface HlExtraAgent {
   address: HexAddress;
   name: string;

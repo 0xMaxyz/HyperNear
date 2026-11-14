@@ -8,7 +8,10 @@ export const HL_TYPES: Record<string, [string, { name: string; type: string }[]]
   usdSend: ['HyperliquidTransaction:UsdSend', [chain, { name: 'destination', type: 'string' }, { name: 'amount', type: 'string' }, { name: 'time', type: 'uint64' }]],
   withdraw3: ['HyperliquidTransaction:Withdraw', [chain, { name: 'destination', type: 'string' }, { name: 'amount', type: 'string' }, { name: 'time', type: 'uint64' }]],
   usdClassTransfer: ['HyperliquidTransaction:UsdClassTransfer', [chain, { name: 'amount', type: 'string' }, { name: 'toPerp', type: 'bool' }, { name: 'nonce', type: 'uint64' }]],
+  sendAsset: ['HyperliquidTransaction:SendAsset', [chain, { name: 'destination', type: 'string' }, { name: 'sourceDex', type: 'string' }, { name: 'destinationDex', type: 'string' }, { name: 'token', type: 'string' }, { name: 'amount', type: 'string' }, { name: 'fromSubAccount', type: 'string' }, { name: 'nonce', type: 'uint64' }]],
 };
+
+export const USDC_TESTNET = 'USDC:0xeb62eee3685fc4c43992febcd9e75443';
 
 /** The payload shape the HL SDK hands a signer for a user-signed action. */
 export function hlPayload(
