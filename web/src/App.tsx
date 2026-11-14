@@ -8,7 +8,8 @@ import { Activity, DecisionCard, decisionText, FreezeSteps, nearScan, short, sum
 import { NotificationsList, toast, ToastHost, useToasts } from './toast';
 import { OverviewTab } from './overview';
 import { TradeTab } from './trade';
-import type { HedgeSpec } from './trading';
+import { rebalanceLegs, type HedgeSpec } from './trading';
+import type { RebalanceSpec } from './rebalance';
 import { LegCards } from './legcards';
 import { StrategiesPanel } from './strategies';
 import { dryApply, inTeeMode, loadTee, lookupTeeAgent, priceMicro, type TeeState, ZERO_HASH } from './tee';
@@ -215,6 +216,13 @@ export function App({ auth }: { auth: Auth }) {
   /** Leg to the owner's own wallet; Hyperliquid keeps 1 USDC of it. */
   const withdrawLeg = (leg: number, amount: string) =>
     run('withdraw', async () => done(hlResult(await ownerIntent({ type: 'withdraw', leg, amount, hlTime: Date.now() })), `Withdrew ${amount} USDC from leg ${leg} to your wallet (you receive ${(Number(amount) - 1).toFixed(2)})`));
+
+  /** The owner signs the shares (never a session key); the agent then makes the moves between the owner's own legs. */
+  const rebalance = (spec: RebalanceSpec) =>
+    run('rebalance', async () => {
+      const out = await rebalanceLegs(walletSign, owner!, spec);
+      return done(out, `Rebalance started: ${(out.plan as { moves: unknown[] }).moves.length} move(s) between legs ${spec.legs.map((l) => l.leg).join(', ')}`);
+    });
 
   /** Registering a leg is permissionless: the relayer pays, no signature. */
   const addLeg = (leg: number) =>
@@ -654,7 +662,7 @@ export function App({ auth }: { auth: Auth }) {
 
           {route.tab === 'fund' && (
             <Panel id="fund">
-              <FundTab view={view} owner={owner} leg={route.params.get('leg') === null ? undefined : Number(route.params.get('leg'))} canSign={canSign} dry={dry} locked={locked} busy={busy} why={why} onGo={go} onMove={moveToTrading} onWithdraw={withdrawLeg} onChanged={() => void refresh()} />
+              <FundTab view={view} owner={owner} leg={route.params.get('leg') === null ? undefined : Number(route.params.get('leg'))} canSign={canSign} dry={dry} locked={locked} busy={busy} why={why} onGo={go} onMove={moveToTrading} onWithdraw={withdrawLeg} onChanged={() => void refresh()} onRebalance={rebalance} />
             </Panel>
           )}
 

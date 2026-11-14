@@ -835,3 +835,6 @@ details.fees tr.est { color: var(--muted); }
 .row-i { display: flex; gap: 6px; align-items: center; }
 .row-i select { flex: 1; min-width: 0; }
 .easy-step { border: 1px solid var(--line); border-radius: 8px; padding: 0.75rem 1rem; margin: 0.5rem 0; background: var(--surface); }
+.rb-pct { width: 5.5rem; }
+.rb-moves { margin: 0.5rem 0; padding-left: 1.2rem; }
+.rb-table label { display: inline-flex; gap: 6px; align-items: center; }

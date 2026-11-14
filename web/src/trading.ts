@@ -88,6 +88,8 @@ export async function sendSpec(sign: Sign, owner: Hex, action: CommandAction, pa
   const command = newCommand(owner, action, coin, ratio, 30, Date.now(), specHashOfJson(spec));
   return post(path, { command, sig: await sign(command), spec });
 }
+/** Redistributes the pool of the listed legs to their percentages: the owner's own signature only (never a session key). */
+export const rebalanceLegs = (sign: Sign, owner: Hex, spec: { legs: { leg: number; pct: number }[] }) => sendSpec(sign, owner, 'rebalanceLegs', '/rebalance', spec);
 export const placeOrder = (sign: Sign, owner: Hex, spec: OrderSpec) => sendSpec(sign, owner, 'placeOrder', '/order/place', spec);
 export const placeHedge = (sign: Sign, owner: Hex, spec: HedgePairSpec) => sendSpec(sign, owner, 'placeHedge', '/hedge/pair', spec) as Promise<HedgePairResult & Record<string, unknown>>;
 /** Exit levels for the named legs: `upPx` above the market, `downPx` below it; none given clears the protection. A hedge's legs share the two prices. */

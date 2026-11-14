@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ApiError, getJson, post, type LegSnap, type OwnerView } from './api';
 import { short, usd } from './panels';
+import { RebalanceCard, type RebalanceSpec } from './rebalance';
 
 interface FundToken {
   assetId: string;
@@ -64,6 +65,8 @@ interface Props {
   onWithdraw: (leg: number, amount: string) => void;
   /** a refresh of the owner view (after a simulated credit) */
   onChanged: () => void;
+  /** sign a rebalanceLegs command for these shares; the agent then moves the money */
+  onRebalance: (spec: RebalanceSpec) => void;
 }
 
 
@@ -116,7 +119,7 @@ function WithdrawCard({ leg, owner, network, locked, busy, why, onWithdraw, onMo
   );
 }
 
-export function FundTab({ view, owner, leg: legParam, canSign, dry, locked, busy, why, onGo, onMove, onWithdraw, onChanged }: Props) {
+export function FundTab({ view, owner, leg: legParam, canSign, dry, locked, busy, why, onGo, onMove, onWithdraw, onChanged, onRebalance }: Props) {
   const legs = view?.snapshot.legs ?? [];
   const [legNo, setLegNo] = useState<number | undefined>(legParam);
   const active: LegSnap | undefined = legs.find((l) => l.leg === legNo) ?? legs.find((l) => l.leg === legParam) ?? legs[0];
@@ -329,6 +332,8 @@ export function FundTab({ view, owner, leg: legParam, canSign, dry, locked, busy
       )}
 
       <WithdrawCard leg={active} owner={owner} network={view?.config?.hlNetwork} locked={locked} busy={busy} why={why} onWithdraw={onWithdraw} onMove={onMove} />
+
+      <RebalanceCard view={view} owner={owner} locked={locked} busy={busy} why={why} onRebalance={onRebalance} />
 
       <section className="card" aria-labelledby="addr-h">
         <h2 id="addr-h">1. Send to a deposit address</h2>
