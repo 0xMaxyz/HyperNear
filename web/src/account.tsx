@@ -23,6 +23,8 @@ interface Props {
   onLogin?: () => void;
   onLeaveDemo?: () => void;
   onGo: (tab: string) => void;
+  /** setup progress; shown as a row that opens the Setup page (where the hidden reminder can be brought back) */
+  setup?: { done: number; total: number };
 }
 
 const short = (a: string) => (a.length > 14 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a);
@@ -44,7 +46,7 @@ function Mark({ addr }: { addr: string }) {
   );
 }
 
-export function AccountMenu({ open, onClose, owner, signedIn, account, network, mode, onLogout, onLogin, onLeaveDemo, onGo }: Props) {
+export function AccountMenu({ open, onClose, owner, signedIn, account, network, mode, onLogout, onLogin, onLeaveDemo, onGo, setup }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const [copied, setCopied] = useState<string>();
 
@@ -175,6 +177,7 @@ export function AccountMenu({ open, onClose, owner, signedIn, account, network, 
             </details>
           )}
           <ul className="plain acct-links">
+            {setup && <li><button onClick={() => go('setup')}>Setup · {setup.done} of {setup.total} done<span aria-hidden="true">›</span></button></li>}
             <li><button onClick={() => go('fund')}>Fund a leg<span aria-hidden="true">›</span></button></li>
             <li><button onClick={() => go('learn')}>How it works<span aria-hidden="true">›</span></button></li>
           </ul>
