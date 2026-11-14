@@ -1,6 +1,7 @@
 // The NEAR transport seam: HyperNearClient only talks to this interface, so tests can mock it.
-import { Account, JsonRpcProvider, teraToGas, type KeyPairString } from 'near-api-js';
+import { Account, teraToGas, type KeyPairString } from 'near-api-js';
 import { HyperNearContractError } from './errors';
+import { ResilientProvider } from './rpc';
 
 export const DEFAULT_RPC: Record<'testnet' | 'mainnet', string> = {
   testnet: 'https://test.rpc.fastnear.com',
@@ -21,7 +22,7 @@ export interface NearBackend {
 }
 
 export function nearApiBackend(opts: { rpcUrl: string; sender?: Account }): NearBackend {
-  const provider = new JsonRpcProvider({ url: opts.rpcUrl });
+  const provider = new ResilientProvider(opts.rpcUrl);
   return {
     async view<T>(contractId: string, method: string, args: Record<string, unknown>) {
       return (await provider.callFunction({ contractId, method, args })) as T;
@@ -51,5 +52,5 @@ export function nearApiBackend(opts: { rpcUrl: string; sender?: Account }): Near
 
 /** A near-api-js Account that signs with `secretKey` (full-access for a relayer, function-call for an agent). */
 export function nearAccount(accountId: string, secretKey: string, rpcUrl: string): Account {
-  return new Account(accountId, new JsonRpcProvider({ url: rpcUrl }), secretKey as KeyPairString);
+  return new Account(accountId, new ResilientProvider(rpcUrl), secretKey as KeyPairString);
 }

@@ -4,6 +4,7 @@ export * from './commands';
 export * from './specHash';
 export * from './session';
 export { hlPayloadDigest } from './hlDigest';
+export { DEFAULT_TUNING, ResilientProvider, RpcGate, type RpcTuning } from './rpc';
 export { DEFAULT_RPC, nearAccount, nearApiBackend, type CallOptions, type NearBackend } from './near';
 export {
   exchangeBody,
