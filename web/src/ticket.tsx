@@ -196,11 +196,10 @@ export function Ticket(p: TicketProps) {
         f.keepLeverage && pos ? (
           <p className="t-hint">Uses leg {f.leg}'s {pos.leverage.value}x {pos.leverage.type}, set when it opened.</p>
         ) : (
-          <div className="t-row tight" role="group" aria-label="Leverage">
+          <div className="t-lev" role="group" aria-label="Leverage">
             <span className="muted small">Leverage</span>
-            <div className="t-fracs grow">
-              {[1, 2, 3, 5, 10].filter((x) => x <= maxLev).map((x) => <button key={x} aria-pressed={lev === x} onClick={() => set({ leverage: String(x), keepLeverage: false })}>{x}x</button>)}
-            </div>
+            <input type="range" min={1} max={maxLev} step={1} value={Math.min(Math.max(lev || 1, 1), maxLev)} aria-label="Leverage" aria-valuetext={`${lev || 1}x`} onChange={(e) => set({ leverage: e.target.value, keepLeverage: false })} />
+            <span className="t-num t-levval">{lev || 1}x</span>
           </div>
         )
       )}
@@ -409,7 +408,6 @@ function NewHedge(p: TicketProps) {
       return p.done(out, pairMessage(out));
     });
 
-  const chips = [1, 2, 3, 5, 10].filter((x) => x <= maxLev);
   return (
     <>
       <p className="t-hint"><b>Protect against price moves.</b> Opens a long on leg 0 and a short on leg 1 at once, so a move on one side is cancelled by the other.</p>
@@ -431,9 +429,10 @@ function NewHedge(p: TicketProps) {
         <input type="range" min={10} max={100} step={5} value={ratio} onChange={(e) => setRatio(Number(e.target.value))} aria-label="Protected share" />
         <div className="t-fracs">{[25, 50, 75, 100].map((x) => <button key={x} aria-pressed={ratio === x} onClick={() => setRatio(x)}>{x}%</button>)}</div>
       </div>
-      <div className="t-row tight" role="group" aria-label="Leverage">
+      <div className="t-lev" role="group" aria-label="Leverage">
         <span className="muted small">Leverage</span>
-        <div className="t-fracs grow">{chips.map((x) => <button key={x} aria-pressed={levA === x} onClick={() => setLevA(x)}>{x}x</button>)}</div>
+        <input type="range" min={1} max={maxLev} step={1} value={Math.min(Math.max(levA, 1), maxLev)} aria-label="Leverage" aria-valuetext={`${levA}x`} onChange={(e) => setLevA(Number(e.target.value))} />
+        <span className="t-num t-levval">{levA}x</span>
       </div>
       {Math.max(levA, levBn) >= 10 && <p className="t-hint" role="note">At {Math.max(levA, levBn)}x a {(100 / Math.max(levA, levBn)).toFixed(0)}% move against a leg liquidates it.</p>}
       <p className="t-hint t-num">{sizeA ? `Fees about ${usd(feeEst, 2)} to open.` : 'Fees are shown once you enter an amount.'}</p>
