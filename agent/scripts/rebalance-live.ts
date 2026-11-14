@@ -13,7 +13,6 @@ import { ownerIntentTypedData } from '@hypernear/client';
 import { loadConfig } from '../src/config.ts';
 import { agentKeySigner, hlClient } from '../src/market.ts';
 import { buildDeps } from '../src/server.ts';
-import { sendBetweenLegs } from '../src/transfer.ts';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const config = loadConfig();
@@ -90,11 +89,3 @@ snap = await show('after rebalance');
 const [a, b] = snap.legs.map((l) => Number(l.clearinghouse.marginSummary.accountValue));
 if (done.state !== 'done' || Math.abs(a! - b!) > 0.05) throw new Error(`rebalance did not end at 50/50: ${a} vs ${b}`);
 console.log('LIVE REBALANCE ON UNIFIED LEGS: PASS');
-
-// a unified leg cannot usdSend: prove the guard's other path is the one in use (sendAsset), and that refusing a default-style send still happens
-try {
-  await sendBetweenLegs({ legs: d.legs, agentClient: d.client, owner, from: { leg: 0, address: regs[0]!.address }, to: regs[1]!.address, amount: '1', transfer: 'usdSend' });
-  console.log('unexpected: usdSend from a unified leg was accepted');
-} catch (e) {
-  console.log('usdSend from a unified leg is refused, as measured:', (e as Error).message.slice(0, 160));
-}

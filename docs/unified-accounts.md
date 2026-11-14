@@ -30,6 +30,14 @@ So conversion is one-way, and it breaks the contract's leg-to-leg move (`rebalan
 - **Conversion.** `Legs.convertToUnified` converts an approved, funded leg that is still in default mode, with its own agent key and no owner signature. The guard loop runs it for every watched owner **only when `HYPERNEAR_CONVERT_UNIFIED=1`**: it is off by default because it cannot be undone and it changes how balances show on live legs. A refusal is reported on the event bus (`legs.unified.failed`) and retried after 10 minutes.
 - **Dry run.** `HYPERNEAR_DRY_UNIFIED=1` makes the dry-run legs unified: one balance, `usdClassTransfer` refused.
 
+## Checked live on testnet (2026-11-14)
+
+`agent/scripts/rebalance-live.ts`, through the redeployed contract (`leash-spike-1107.testnet`, state and leg addresses kept) with a throwaway owner and two new legs:
+
+- the owner signed `setPolicy` and two `approveAgent` intents; two lab wallets funded the legs (14.00 and 4.00 USDC after Hyperliquid's activation fee);
+- `Legs.convertToUnified` converted both legs with their own agent keys: `converted`, then `unifiedAccount` on the next read, balances unchanged and shown through the normalized view;
+- the owner's rebalance to 50/50 ran as one move: the agent called `rebalance` with `spot: true`, the MPC key signed a `sendAsset`, Hyperliquid accepted it, and the legs ended at 9.00 and 9.00.
+
 ## Not built
 
 - **Master-key conversion** (`userSetAbstraction`, signed by the leg through the contract). The agent-key path worked in every case tested, including with a position open, so it was not needed. If Hyperliquid refuses the agent path somewhere (mainnet has not been tried), the contract would need an owner intent and an `HlAction::UserSetAbstraction` with the type `HyperliquidTransaction:UserSetAbstraction(string hyperliquidChain,address user,string abstraction,uint64 nonce)`.
