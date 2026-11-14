@@ -33,7 +33,8 @@ services:
       PORT: "8787"
       HYPERNEAR_DATA_DIR: /data
       # ---- MEASURED: order policy (the agent refuses anything outside it before signing)
-      HYPERNEAR_MAX_LEVERAGE: "5"
+      # 100 is above every market's own maximum, so each market's maximum rules (BTC 40x, ETH 25x on testnet); the agent still refuses above it
+      HYPERNEAR_MAX_LEVERAGE: "100"
       HYPERNEAR_MAX_NOTIONAL_USD: "100"
       HYPERNEAR_ALLOWED_COINS: BTC,ETH
       HYPERNEAR_SLIPPAGE: "0.03"
