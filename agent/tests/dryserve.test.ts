@@ -53,7 +53,7 @@ describe('--dry-run --serve', () => {
     const r = await (await fetch(`${url}/owner/${OWNER}`)).json();
     expect(r.snapshot.legs.map((l: any) => l.abstraction)).toEqual(['unifiedAccount', 'unifiedAccount', 'unifiedAccount']);
     expect(r.snapshot.legs.every((l: any) => l.spotUsdc === 0)).toBe(true);
-    const move = await post(`${url}/relay`, { owner: OWNER, intent: { type: 'usdClassTransfer', leg: 2, amount: '1', toPerp: true, hlNonce: 1 } });
+    const move = await post(`${url}/relay`, { owner: OWNER, nonce: 0, intent: { type: 'usdClassTransfer', leg: 2, amount: '1', toPerp: true, hlNonce: 1 }, sig: `0x${'11'.repeat(65)}` });
     expect(move.status).toBe(422);
     expect((await move.json()).error).toMatch(/unified account/);
   });
