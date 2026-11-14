@@ -32,7 +32,7 @@ const check = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ?
 const shot = (page, name) => page.screenshot({ path: `${OUT}${name}.png`, fullPage: true });
 
 async function withAgent(fn) {
-  const p = spawn('node', ['agent/src/server.ts', '--dry-run', '--serve'], { cwd: REPO, env: { ...process.env, HYPERNEAR_DRY_FIXTURE: 'hedged', PORT: '8787' }, stdio: ['ignore', 'pipe', 'inherit'] });
+  const p = spawn('node', ['agent/src/server.ts', '--dry-run', '--serve'], { cwd: REPO, env: { ...process.env, HYPERNEAR_DRY_UNIFIED: '0', HYPERNEAR_DRY_FIXTURE: 'hedged', PORT: '8787' }, stdio: ['ignore', 'pipe', 'inherit'] });
   await new Promise((res, rej) => { p.stdout.once('data', res); p.once('exit', (c) => rej(new Error(`agent exited early (${c})`))); });
   try { await fn(); } finally { p.kill(); await new Promise((r) => setTimeout(r, 300)); }
 }

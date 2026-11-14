@@ -47,7 +47,7 @@ const wallet = privateKeyToAccount(DEMO_KEY);
 const owner = wallet.address.toLowerCase();
 
 // ------------------------------------------------------------------ the agent and the stand-in proxy in front of it
-const agent = spawn('node', ['agent/src/server.ts', '--dry-run', '--serve'], { cwd: REPO, env: { ...process.env, HYPERNEAR_DRY_FIXTURE: 'hedged', PORT: '8787' }, stdio: ['ignore', 'pipe', 'inherit'] });
+const agent = spawn('node', ['agent/src/server.ts', '--dry-run', '--serve'], { cwd: REPO, env: { ...process.env, HYPERNEAR_DRY_UNIFIED: '0', HYPERNEAR_DRY_FIXTURE: 'hedged', PORT: '8787' }, stdio: ['ignore', 'pipe', 'inherit'] });
 await new Promise((res, rej) => { agent.stdout.once('data', res); agent.once('exit', (c) => rej(new Error(`agent exited early (${c})`))); });
 const cleanup = () => { try { agent.kill(); } catch {} };
 process.on('exit', cleanup);

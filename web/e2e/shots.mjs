@@ -24,7 +24,7 @@ const results = [];
 const check = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? `: ${detail}` : ''}`); };
 
 async function withAgent(fixture, fn, port = '8787') {
-  const p = spawn('node', ['agent/src/server.ts', '--dry-run', '--serve'], { cwd: REPO, env: { ...process.env, HYPERNEAR_DRY_FIXTURE: fixture, PORT: port }, stdio: ['ignore', 'pipe', 'inherit'] });
+  const p = spawn('node', ['agent/src/server.ts', '--dry-run', '--serve'], { cwd: REPO, env: { ...process.env, HYPERNEAR_DRY_UNIFIED: '0', HYPERNEAR_DRY_FIXTURE: fixture, PORT: port }, stdio: ['ignore', 'pipe', 'inherit'] });
   await new Promise((res, rej) => { p.stdout.once('data', res); p.once('exit', (c) => rej(new Error(`agent exited early (${c})`))); });
   try { await fn(); } finally { p.kill(); await new Promise((r) => setTimeout(r, 300)); }
 }

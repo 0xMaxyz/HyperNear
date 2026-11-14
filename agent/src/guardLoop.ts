@@ -21,7 +21,7 @@ export interface GuardLoopConfig {
   withdrawableShare: number;
   /** A leg with a strategy budget (see planRebalance) is only ever topped up from this leg. */
   reserveLeg: number;
-  /** Convert every approved, funded leg still in default mode to a unified account (one-way on Hyperliquid, so off until switched on). */
+  /** Convert every approved, funded leg still in default mode to a unified account (one-way on Hyperliquid). The service turns it on; the class default is off so unit tests with stub legs never call HL. */
   convertUnified: boolean;
 }
 

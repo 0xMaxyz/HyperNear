@@ -16,8 +16,9 @@ afterEach(() => {
   server?.close();
 });
 
-async function serve(fixture = 'hedged', fetchFn?: typeof fetch) {
-  server = createServer(handler(buildDryRunDeps(fixture, { replayStartMs: 0, replaySpeed: 1000, fetchFn })));
+// the older tests below describe default-mode accounts (spot to trading balance); the unified default has its own tests
+async function serve(fixture = 'hedged', fetchFn?: typeof fetch, unified = false) {
+  server = createServer(handler(buildDryRunDeps(fixture, { replayStartMs: 0, replaySpeed: 1000, fetchFn, unified })));
   await new Promise<void>((r) => server!.listen(0, '127.0.0.1', r));
   return `http://127.0.0.1:${(server!.address() as AddressInfo).port}`;
 }
@@ -43,6 +44,18 @@ describe('--dry-run --serve', () => {
     expect(positions[0].totals.funding).not.toBe(0);
     const { rows } = await (await fetch(`${base}/history/${OWNER}`)).json();
     expect(rows.map((x: any) => x.kind)).toEqual(expect.arrayContaining(['open', 'hedge-open', 'funding']));
+  });
+
+  it('by default every dry-run leg is a unified account: one balance, no move to the trading balance', async () => {
+    server = createServer(handler(buildDryRunDeps('hedged', { replayStartMs: 0, replaySpeed: 1000 })));
+    await new Promise<void>((r) => server!.listen(0, '127.0.0.1', r));
+    const url = `http://127.0.0.1:${(server!.address() as AddressInfo).port}`;
+    const r = await (await fetch(`${url}/owner/${OWNER}`)).json();
+    expect(r.snapshot.legs.map((l: any) => l.abstraction)).toEqual(['unifiedAccount', 'unifiedAccount', 'unifiedAccount']);
+    expect(r.snapshot.legs.every((l: any) => l.spotUsdc === 0)).toBe(true);
+    const move = await post(`${url}/relay`, { owner: OWNER, intent: { type: 'usdClassTransfer', leg: 2, amount: '1', toPerp: true, hlNonce: 1 } });
+    expect(move.status).toBe(422);
+    expect((await move.json()).error).toMatch(/unified account/);
   });
 
   it('commands are verified, then simulated', async () => {

@@ -48,7 +48,7 @@ export interface AgentConfig {
     annualVol: number;
     /** extra owners to watch besides those we hold agent keys for */
     watchOwners: string[];
-    /** convert approved, funded legs to unified accounts (HYPERNEAR_CONVERT_UNIFIED=1). One-way on Hyperliquid, so it is off until switched on. */
+    /** convert approved, funded legs to unified accounts: on by default, HYPERNEAR_CONVERT_UNIFIED=0 turns it off. One-way on Hyperliquid. */
     convertUnified: boolean;
   };
 }
@@ -91,7 +91,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AgentConfig {
       hedgeReserveUsd: num(env.HYPERNEAR_HEDGE_RESERVE_USD, 20),
       annualVol: num(env.HYPERNEAR_GUARD_ANNUAL_VOL, 0.6),
       watchOwners: (env.HYPERNEAR_WATCH_OWNERS ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
-      convertUnified: env.HYPERNEAR_CONVERT_UNIFIED === '1',
+      convertUnified: env.HYPERNEAR_CONVERT_UNIFIED !== '0',
     },
   };
 }

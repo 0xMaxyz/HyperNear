@@ -187,8 +187,8 @@ export function recordedProposals(): Proposal[] {
   }));
 }
 
-export function buildDryRunDeps(fixtureName = 'hedged', opts: { replayStartMs?: number; replaySpeed?: number; fetchFn?: typeof fetch; /** every leg is a unified account (default: HYPERNEAR_DRY_UNIFIED=1) */ unified?: boolean } = {}): Deps {
-  const unifiedDry = opts.unified ?? process.env.HYPERNEAR_DRY_UNIFIED === '1';
+export function buildDryRunDeps(fixtureName = 'hedged', opts: { replayStartMs?: number; replaySpeed?: number; fetchFn?: typeof fetch; /** every leg is a unified account (default on; HYPERNEAR_DRY_UNIFIED=0 keeps the fixtures' default-mode accounts) */ unified?: boolean } = {}): Deps {
+  const unifiedDry = opts.unified ?? process.env.HYPERNEAR_DRY_UNIFIED !== '0';
   const fixtures = loadFixtures();
   const fx = fixtures.find((f) => f.name === fixtureName) ?? fixtures[0]!;
   const snap = fx.snapshot;
