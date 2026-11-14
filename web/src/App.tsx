@@ -4,12 +4,14 @@ import { commandTypedData, newCommand, ownerIntentTypedData, specHashOfJson, typ
 import { AGENT_ACCOUNT, AGENT_URL, CHAIN_TAG, CONTRACT_ID, DEMO_OWNER, TEE_AGENT_URL, getOwner, pointAgentAt, post, streamEvents, type AgentEvent, type Decision, type DecisionMode, type OwnerView } from './api';
 import { LegPanel } from './legpanel';
 import { decisionRows } from './decisions';
-import { Activity, DecisionCard, decisionText, FreezeSteps, nearScan, short, summarize } from './panels';
-import { NotificationsList, toast, ToastHost, useToasts } from './toast';
+import { Activity, DecisionCard, decisionText, FreezeSteps, nearScan, short } from './panels';
+import { toast, ToastHost } from './toast';
+import { NotificationsPanel, useNotifications } from './notifications';
 import { OverviewTab } from './overview';
 import { TradeTab } from './trade';
 import { rebalanceLegs, type HedgeSpec } from './trading';
 import type { RebalanceSpec } from './rebalance';
+import { canApprove, isFunded, setupSteps } from './setup';
 import { LegCards } from './legcards';
 import { StrategiesPanel } from './strategies';
 import { dryApply, inTeeMode, loadTee, lookupTeeAgent, priceMicro, type TeeState, ZERO_HASH } from './tee';
@@ -69,7 +71,6 @@ export function App({ auth }: { auth: Auth }) {
   const [stream, setStream] = useState<'live' | 'down' | 'connecting'>('connecting');
   const [busy, setBusy] = useState<string | null>(null);
   const [bell, setBell] = useState(false);
-  const toasts = useToasts();
   const [dry, setDry] = useState(false);
   const [tee, setTee] = useState<TeeState>();
   const [teeErr, setTeeErr] = useState<string>();
@@ -241,15 +242,21 @@ export function App({ auth }: { auth: Auth }) {
     });
 
   const pending = view?.pendingApprovals ?? [];
-  // Hyperliquid refuses every action, approving a key included, on an account that never received a deposit
-  const unfunded = legs.filter((l) => Number(l.clearinghouse.marginSummary.accountValue) + l.spotUsdc <= 0);
-  const approvalBlocked = pending.some((p) => unfunded.some((l) => l.leg === p.leg));
+  // Hyperliquid refuses every action, approving a key included, on an account that never received a deposit: the funded legs are approved, an empty extra leg waits
+  const unfunded = legs.filter((l) => !isFunded(l));
+  const approvable = pending.filter((p) => canApprove(p.leg, legs));
+  const approvalBlocked = pending.length > 0 && approvable.length === 0;
   const approveAgents = () =>
     run('approve', async () => {
       // each intent is signed exactly as the agent listed it; every one burns the owner's next nonce, so re-read it
       let ok = 0;
       let failed = '';
+      const waiting: number[] = [];
       for (const intent of (await getOwner(owner!)).pendingApprovals ?? []) {
+        if (!canApprove(intent.leg, legs)) {
+          waiting.push(intent.leg);
+          continue;
+        }
         const nonce = (await getOwner(owner!)).policy?.nonce ?? 0;
         const sig = await auth.sign(ownerIntentTypedData({ chainTag, contractId, owner: owner!, nonce, intent }));
         const out = await post('/relay', { owner, nonce, intent, sig });
@@ -261,7 +268,7 @@ export function App({ auth }: { auth: Auth }) {
         else ok++;
       }
       if (failed) throw new Error(`Approved ${ok}. ${failed}`);
-      return `Approved the agent key on ${ok} leg${ok === 1 ? '' : 's'}${dry ? ' (simulated, dry-run)' : ''}.`;
+      return `Approved the agent key on ${ok} leg${ok === 1 ? '' : 's'}${dry ? ' (simulated, dry-run)' : ''}.${waiting.length ? ` Leg ${waiting.join(', ')} has no funds yet and waits.` : ''}`;
     });
 
   const policyOk = agentValue.trim() !== '' && DECIMAL.test(cap) && /^\d+$/.test(cooldown);
@@ -364,29 +371,39 @@ export function App({ auth }: { auth: Auth }) {
     { id: 'protect', label: 'Safety', dot: decision ? 'A decision is waiting for you' : policy?.frozen ? 'The account is frozen' : undefined },
   ];
   // setup: the five steps, done or not (the Setup page and the banner read the same list)
-  const setupDone = [
-    registered.has(0) && registered.has(1),
-    topLegs.length > 0 && needPrepare.length === 0,
-    legs.length > 0 && unfunded.length === 0,
-    legs.length > 0 && legs.every((l) => l.agent?.approvedAt),
-    Boolean(policy?.agent),
-  ];
+  const setupDone = setupSteps({ registered, topLegs, legs, policyAgent: Boolean(policy?.agent) });
   const setupCount = setupDone.filter(Boolean).length;
+  // the "Finish setup" reminder can be hidden per owner; the Account menu and the Setup page bring it back
+  const hideKey = owner ? `hypernear.setup-hidden:${owner}` : '';
+  const [setupHidden, setSetupHidden] = useState(false);
+  useEffect(() => {
+    try {
+      setSetupHidden(Boolean(hideKey && localStorage.getItem(hideKey)));
+    } catch {
+      setSetupHidden(false);
+    }
+  }, [hideKey]);
+  const hideSetup = (hide: boolean) => {
+    setSetupHidden(hide);
+    try {
+      if (hide) localStorage.setItem(hideKey, '1');
+      else localStorage.removeItem(hideKey);
+    } catch {
+      /* the choice then lasts until the tab closes */
+    }
+  };
   // approvals must not hide behind a section: say so on every other page
   const attention =
     decision && route.tab !== 'protect'
       ? { text: `The agent suggests: ${decisionText(decision)}.`, link: 'Review', href: '#/protect' }
-      : pending.length > 0 && route.tab !== 'setup'
+      : approvable.length > 0 && route.tab !== 'setup'
         ? { text: 'An agent key is waiting for your approval.', link: 'Approve it', href: '#/setup' }
-        : view && !dry && canSign && setupCount < 5 && route.tab !== 'setup'
-          ? { text: `Setup: ${setupCount} of 5 steps done.`, link: 'Finish setup', href: '#/setup' }
+        : view && !dry && canSign && setupCount < 5 && route.tab !== 'setup' && !setupHidden
+          ? { text: `Setup: ${setupCount} of 5 steps done.`, link: 'Finish setup', href: '#/setup', dismiss: () => hideSetup(true) }
           : undefined;
-  // the bell: agent events since this page last showed the activity log
-  const [seen, setSeen] = useState(0);
-  useEffect(() => {
-    if (route.tab === 'activity' && mine[0]) setSeen(mine[0].id);
-  }, [route.tab, mine[0]?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-  const unread = mine.filter((e) => e.id > seen).length + toasts.filter((t) => !t.read).length;
+  // the bell: toasts and agent events not yet marked read (the read marker is kept per owner in this browser)
+  const notes = useNotifications(owner, mine);
+  const unread = notes.unread;
   const guardHot = (view?.guard ?? []).filter((g) => g.trigger).length;
   const watched = (view?.guard ?? []).length;
 
@@ -448,12 +465,12 @@ export function App({ auth }: { auth: Auth }) {
           )}
           {owner && view && <span className="pill agent" title={teeMode ? 'Your own TEE agent runs the policy and holds the trading keys' : 'Our server agent runs the policy and holds the trading keys'}>{teeMode ? 'TEE agent' : 'Server agent'}</span>}
           {owner && (
-            <button className="icon-btn" aria-haspopup="dialog" aria-expanded={bell} onClick={() => (setBell((x) => !x), mine[0] && setSeen(mine[0].id))} aria-label={unread ? `Notifications, ${unread} new` : 'Notifications'}>
+            <button className="icon-btn" aria-haspopup="dialog" aria-expanded={bell} onClick={() => setBell((x) => !x)} aria-label={unread ? `Notifications, ${unread} new` : 'Notifications'}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>
               {unread > 0 && <span className="count">{unread > 99 ? '99+' : unread}</span>}
             </button>
           )}
-          {bell && <NotificationsList onClose={() => setBell(false)} extra={mine.slice(0, 8).map((e) => ({ key: `e${e.id}`, text: summarize(e), at: e.at }))} />}
+          {bell && <NotificationsPanel n={notes} onClose={() => setBell(false)} />}
           <a className="icon-btn help" href="#/learn" aria-label="Help and how it works">?</a>
           {owner && (
             <button className="addr" aria-haspopup="dialog" title={`Account ${owner}`} onClick={() => setMenu(true)}>
@@ -484,6 +501,7 @@ export function App({ auth }: { auth: Auth }) {
           onLogin={auth.loginOff ? undefined : () => (setMenu(false), auth.login())}
           onLeaveDemo={demo ? () => setDemo(false) : undefined}
           onGo={go}
+          setup={canSign && !dry ? { done: setupCount, total: 5 } : undefined}
         />
       )}
 
@@ -507,8 +525,11 @@ export function App({ auth }: { auth: Auth }) {
       ) : (
         <main className={route.tab === 'trade' ? 'wide' : undefined}>
           {attention && (
-            <p className="attention" role="status">
-              {attention.text} <a href={attention.href}>{attention.link}</a>
+            <p className={`attention${'dismiss' in attention && attention.dismiss ? ' has-x' : ''}`} role="status">
+              <span>{attention.text} <a href={attention.href}>{attention.link}</a></span>
+              {'dismiss' in attention && attention.dismiss && (
+                <button type="button" className="banner-x" aria-label="Hide the setup reminder" title="Hide this reminder (it stays in your account menu)" onClick={attention.dismiss}>×</button>
+              )}
             </p>
           )}
 
@@ -568,6 +589,9 @@ export function App({ auth }: { auth: Auth }) {
           <Panel id="setup">
             <section className="card" aria-labelledby="setup-h">
               <h2 id="setup-h">Setup · {setupCount} of 5 done</h2>
+              {setupHidden && setupCount < 5 && (
+                <p className="muted small">The reminder at the top is hidden. <button type="button" className="link" onClick={() => hideSetup(false)}>Show it again</button></p>
+              )}
               {!canSign && <p className="state">Read-only: log in to sign setup steps.</p>}
               <ol className="steps">
                 <li>
@@ -591,7 +615,7 @@ export function App({ auth }: { auth: Auth }) {
                     <strong>3. Fund the legs</strong>
                     <p className="muted small">Send USDC to each leg. Hyperliquid will not approve a trading key on an account that has never received a deposit, so this comes before approving.</p>
                   </div>
-                  <span className={legs.length > 0 && unfunded.length === 0 ? 'ok' : 'todo'}>{legs.length > 0 && unfunded.length === 0 ? 'done' : 'to do'}</span>
+                  <span className={setupDone[2] ? 'ok' : 'todo'}>{setupDone[2] ? 'done' : 'to do'}</span>
                   <button disabled={legs.length === 0} onClick={() => go(unfunded[0] ? `fund?leg=${unfunded[0].leg}` : 'fund')}>Open Fund</button>
                 </li>
                 <li>
@@ -599,7 +623,7 @@ export function App({ auth }: { auth: Auth }) {
                     <strong>4. Approve agent</strong>
                     <p className="muted small">You sign one approval per leg exactly as listed; the contract signs it for Hyperliquid and the service posts it.{approvalBlocked && ' Fund the legs first (step 3).'}</p>
                   </div>
-                  <span className={legs.length > 0 && legs.every((l) => l.agent?.approvedAt) ? 'ok' : 'todo'}>{legs.length > 0 && legs.every((l) => l.agent?.approvedAt) ? 'done' : 'to do'}</span>
+                  <span className={setupDone[3] ? 'ok' : 'todo'}>{setupDone[3] ? 'done' : 'to do'}</span>
                   <button disabled={locked || pending.length === 0 || approvalBlocked} title={approvalBlocked ? 'Fund the legs first' : why} onClick={approveAgents}>{busy === 'approve' ? 'Waiting for signature…' : 'Approve agent'}</button>
                 </li>
                 <li className="stack">

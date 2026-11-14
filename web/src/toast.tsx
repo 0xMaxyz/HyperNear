@@ -1,5 +1,5 @@
 // Transient alerts over the app. Success and info toasts close by themselves after 5 s (they pause while hovered or focused) and every toast
-// has a close button; errors stay until closed. Everything is also kept in a short history (this tab only) that the bell opens. Decisions are
+// has a close button; errors stay until closed. Everything is also kept in a short history (this tab only) that the bell (notifications.tsx) lists. Decisions are
 // not toasts: they stay as a banner and a card until the owner acts on them.
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 
@@ -39,13 +39,14 @@ export function dismissToast(id: number) {
   items = items.map((t) => (t.id === id ? { ...t, shown: false, read: true } : t));
   emit();
 }
-export function markAllRead() {
+export function markToastsRead() {
   if (items.every((t) => t.read)) return;
   items = items.map((t) => ({ ...t, read: true }));
   emit();
 }
-/** test helper */
-export function resetToasts() {
+/** the bell's Clear: drops every toast, on screen and in the history */
+export function clearToasts() {
+  if (items.length === 0) return;
   items = [];
   emit();
 }
@@ -88,44 +89,5 @@ export function ToastHost() {
     <div className="toasts" aria-live="polite">
       {shown.map((t) => <ToastView key={t.id} t={t} />)}
     </div>
-  );
-}
-
-const ago = (at: number) => {
-  const s = Math.round((Date.now() - at) / 1000);
-  return s < 60 ? 'now' : s < 3600 ? `${Math.round(s / 60)} min` : new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-};
-
-/** The bell's list: this session's alerts, newest first. */
-export function NotificationsList({ onClose, extra }: { onClose: () => void; extra?: { key: string; text: string; at: number }[] }) {
-  const all = useToasts();
-  useEffect(() => {
-    markAllRead();
-    const esc = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', esc);
-    return () => window.removeEventListener('keydown', esc);
-  }, [onClose]);
-  const rows = [
-    ...all.map((t) => ({ key: `t${t.id}`, text: t.text, at: t.at, kind: t.kind as string })),
-    ...(extra ?? []).map((e) => ({ ...e, kind: 'info' })),
-  ].sort((a, b) => b.at - a.at).slice(0, KEEP);
-  return (
-    <>
-      <div className="pop-backdrop" onClick={onClose} aria-hidden="true" />
-      <div className="pop notifications" role="dialog" aria-label="Notifications">
-        <div className="pop-head"><b>Notifications</b><a href="#/activity" onClick={onClose}>Full log →</a></div>
-        {rows.length === 0 ? <p className="muted small pop-empty">Nothing yet.</p> : (
-          <ul>
-            {rows.map((r) => (
-              <li key={r.key} className={r.kind}>
-                <span>{r.text}</span>
-                <time className="muted small">{ago(r.at)}</time>
-              </li>
-            ))}
-          </ul>
-        )}
-        <p className="muted small pop-foot">Cleared when you close the tab.</p>
-      </div>
-    </>
   );
 }

@@ -390,6 +390,10 @@ ul.plain { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
   --privy-border-radius-lg: 10px;
 }
 #privy-dialog-backdrop { background: rgb(0 0 0 / 0.5); }
+/* Privy pins its "Recent" badge to the right of the email field only while the badge is the wrapper's :last-child. A browser extension that
+   appends its own element to the field (a VPN or password manager icon) breaks that, and the badge drops below the field over the
+   "Continue with a wallet" button. Pin it by sibling instead. */
+#privy-dialog input.login-method-button ~ span { position: absolute; right: 16px; top: 50%; transform: translate(0, -50%); }
 
 .stack-cards { display: grid; gap: 16px; }
 
@@ -665,7 +669,7 @@ main.wide { max-width: none; padding: 8px; gap: 8px; }
 .pill .dot-s { width: 7px; height: 7px; border-radius: 50%; background: var(--buy); }
 .pill.hot { border-color: var(--accent); color: var(--accent); }
 .pill.hot .dot-s { background: var(--accent); }
-.icon-btn { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); text-decoration: none; font-weight: 700; }
+.icon-btn { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; min-height: 0; padding: 0; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); text-decoration: none; font-weight: 700; }
 .icon-btn:hover { color: var(--ink); }
 .icon-btn .count { position: absolute; top: -5px; right: -5px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--accent); color: var(--ink-inverse); font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
 .top .who button.addr { min-height: 34px; }
@@ -810,13 +814,45 @@ details.fees tr.est { color: var(--muted); }
 .toast-text { flex: 1; }
 .toast-x { min-height: 0; padding: 0 6px; border: 0; background: transparent; font-size: 18px; line-height: 1; cursor: pointer; color: var(--muted); }
 .pop-backdrop { position: fixed; inset: 0; z-index: 70; }
-.pop { position: fixed; top: 56px; right: 12px; z-index: 71; width: min(360px, calc(100vw - 24px)); max-height: 70vh; overflow: auto; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4); }
-.pop-head { display: flex; justify-content: space-between; margin-bottom: 6px; }
-.pop ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-.pop li { display: flex; justify-content: space-between; gap: 8px; padding-left: 8px; border-left: 3px solid var(--line); overflow-wrap: anywhere; }
-.pop li.ok { border-left-color: var(--ok); }
-.pop li.err { border-left-color: var(--sell); }
-.pop li.info { border-left-color: var(--info); }
+/* the bell's panel (notifications.tsx): a non-modal popover under the header, a full-width sheet on phones */
+.pop { position: fixed; top: calc(var(--top-h, 52px) + 4px); right: 12px; z-index: 71; width: min(400px, calc(100vw - 24px)); max-height: min(70vh, 640px); overflow: auto; overscroll-behavior: contain; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35); animation: notif-in 120ms ease-out; }
+.pop:focus { outline: none; }
+@keyframes notif-in { from { opacity: 0; transform: translateY(-4px); } }
+.notif-top { position: sticky; top: 0; z-index: 1; display: grid; gap: 6px; padding: 8px 10px 8px 14px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.notif-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0 8px; }
+.notif-head h2 { margin: 0; font-size: 15px; }
+.notif-new { padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 650; background: color-mix(in srgb, var(--info) 16%, transparent); color: var(--info); }
+.notif-acts { display: flex; gap: 2px; margin-left: auto; }
+.notif-acts button { min-height: 44px; padding: 0 10px; border: 0; border-radius: 6px; font-size: 13px; color: var(--info); }
+.notif-acts button:disabled { color: var(--muted); }
+.notif-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 8px; }
+.notif-filter { display: flex; gap: 6px; }
+.notif-filter button { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px; border-color: var(--line); border-radius: 999px; font-size: 13px; color: var(--muted); }
+.notif-filter button[aria-pressed='true'] { border-color: var(--ink); color: var(--ink); font-weight: 650; background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.notif-n { min-width: 18px; padding: 0 5px; border-radius: 999px; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; background: color-mix(in srgb, var(--sell) 18%, transparent); color: var(--sell); }
+.notif-log { display: inline-flex; align-items: center; min-height: 44px; padding: 0 4px; font-size: 13px; color: var(--info); text-underline-offset: 2px; }
+.notif-day { margin: 0; padding: 12px 14px 4px; font-size: 12px; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.notif-list { list-style: none; margin: 0; padding: 0; }
+.notif { display: grid; grid-template-columns: 8px 18px minmax(0, 1fr) auto; align-items: start; gap: 0 10px; padding: 10px 14px 10px 8px; }
+.notif + .notif { border-top: 1px solid var(--grid); }
+.notif.unread { background: color-mix(in srgb, var(--info) 6%, transparent); }
+.notif-dot { width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; }
+.notif.unread .notif-dot { background: var(--info); }
+.notif-icon { width: 18px; height: 18px; margin-top: 1px; }
+.sev-error .notif-icon { color: var(--sell); }
+.sev-warning .notif-icon { color: var(--warn); }
+.sev-success .notif-icon { color: var(--ok); }
+.sev-info .notif-icon { color: var(--info); }
+.notif-main { min-width: 0; }
+.notif-title, .notif-detail { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.notif-title { font-size: 14px; font-weight: 650; line-height: 1.35; }
+.notif-detail { margin-top: 2px; font-size: 13px; line-height: 1.4; color: var(--muted); }
+.notif-time { flex: none; white-space: nowrap; padding-top: 1px; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--muted); }
+.notif-empty { padding: 28px 14px; text-align: center; font-size: 14px; color: var(--muted); }
+.notif-foot { padding: 10px 14px 12px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+@media (max-width: 520px) {
+  .pop { top: var(--top-h, 48px); left: 0; right: 0; width: 100%; max-height: calc(100dvh - var(--top-h, 48px) - 72px); border-width: 0 0 1px; border-radius: 0 0 12px 12px; }
+}
 @media (max-width: 760px) { .toasts { bottom: 72px; } }
 
 /* ---------- dialogs (TP/SL, limit close) ---------- */
@@ -884,3 +920,6 @@ details.fees tr.est { color: var(--muted); }
 .rb-pct { width: 5.5rem; }
 .rb-moves { margin: 0.5rem 0; padding-left: 1.2rem; }
 .rb-table label { display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; }
+.attention.has-x { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.banner-x { flex: none; width: 36px; height: 36px; min-height: 36px; padding: 0; border: 0; background: transparent; color: var(--muted); font-size: 22px; line-height: 1; border-radius: 6px; cursor: pointer; }
+.banner-x:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 9%, transparent); }
