@@ -437,7 +437,8 @@ export async function readLegHistory(hl: HlClient, s: OwnerSnapshot, network: 't
   return Promise.all(
     s.legs.map(async (l) => {
       const [fills, fees, ledger] = await Promise.all([hl.userFills({ user: l.address }), hl.userFees({ user: l.address }), hl.userNonFundingLedgerUpdates({ user: l.address, startTime: 0 }).catch(() => [])]);
-      const funding = await allFunding(hl, l.address, fills.length ? Math.min(...fills.map((f) => f.time)) : Date.now() - 30 * 86_400_000);
+      // no fills: the last 30 days, on a whole hour so the same request body repeats and HL is asked once, not once per call
+      const funding = await allFunding(hl, l.address, fills.length ? Math.min(...fills.map((f) => f.time)) : Math.floor((Date.now() - 30 * 86_400_000) / 3_600_000) * 3_600_000);
       return { leg: l.leg, address: l.address, fills, funding, ledger, takerRate: Number(fees.userCrossRate), activation: l.activation, setupFeeUsd: setupFeePaid(ledger, l.address, network) };
     }),
   );

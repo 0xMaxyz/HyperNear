@@ -106,6 +106,7 @@ import { RelayRejectionError } from '../client/relay-rejection';
 import { encodeAgentName } from './agent-name';
 import { computeSlippagePrice } from './pricing';
 import { HL_API_URLS, HL_DEFAULT_MARKET_SLIPPAGE, HL_SIGNATURE_CHAIN_IDS } from './types';
+import { hlGate, type HlGate } from './rateGate';
 import type {
   HlAllMidsParams,
   HlAllMidsResult,
@@ -241,6 +242,17 @@ function toSdkTransport(transport: HlTransport, network: HlNetwork): IRequestTra
   };
 }
 
+/** Every /info read goes through the shared gate (de-dup, short cache, 429/5xx retry, concurrency cap); /exchange is never cached and is resent only after a 429. */
+function gatedTransport(inner: IRequestTransport, gate: HlGate): IRequestTransport {
+  return {
+    isTestnet: inner.isTestnet,
+    request<T>(endpoint: 'info' | 'exchange', payload: unknown, signal?: AbortSignal): Promise<T> {
+      const send = () => inner.request<T>(endpoint, payload, signal);
+      return endpoint === 'info' ? gate.info(payload, send) : gate.write(send);
+    },
+  };
+}
+
 // Adapts an async signer to the SDK's viem-local-account wallet shape; the
 // signer only ever receives the ready-to-sign EIP-712 payload.
 function toSdkWallet(signer: HlAsyncSigner) {
@@ -273,11 +285,14 @@ export class HlClient {
     if (!this.#transport) {
       this.#transport = this.#config.transport
         ? toSdkTransport(this.#config.transport, this.network)
-        : new HttpTransport({
-            isTestnet: this.network === 'testnet',
-            timeout: this.#config.timeout,
-            apiUrl: this.#config.apiUrl,
-          });
+        : gatedTransport(
+            new HttpTransport({
+              isTestnet: this.network === 'testnet',
+              timeout: this.#config.timeout,
+              apiUrl: this.#config.apiUrl,
+            }),
+            hlGate(this.apiUrl),
+          );
     }
     return this.#transport;
   }

@@ -4,7 +4,7 @@
 // relayed freeze and, with no server at all, by agent/scripts/clear-frozen.ts. A failure on one leg never stops the others.
 import type { Hex } from 'viem';
 import { postL1, type CancelBatch, type HlCancel, type HlExchangeResponse, type HyperNearClient } from '@hypernear/client';
-import type { HlClient } from '@perps-platform/core';
+import { HL_API_URLS, hlExchangeFetch, type HlClient } from '@perps-platform/core';
 
 /** What happened to one leg's book. */
 export interface LegSweep {
@@ -103,7 +103,7 @@ export function livePorts(o: { client: HyperNearClient; hl: Pick<HlClient, 'meta
       return { cancels, skipped };
     },
     cancelFrozen: (args) => o.client.cancelFrozen(args),
-    post: (out) => postL1(out, o.network),
+    post: (out) => postL1(out, o.network, hlExchangeFetch(HL_API_URLS[o.network])),
   };
 }
 

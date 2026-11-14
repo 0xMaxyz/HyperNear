@@ -3,7 +3,7 @@
 // with no registered leg (register_leg itself is the exception: anyone may register, the address comes from MPC).
 import type { Hex } from 'viem';
 import { exchangeBody, HyperNearClient, HyperNearError, HyperNearRelayRefusedError, signOutToHex, type OwnerIntent, type Revoked, type SignOut } from '@hypernear/client';
-import { HL_API_URLS } from '@perps-platform/core';
+import { HL_API_URLS, hlExchangeFetch } from '@perps-platform/core';
 import type { EventBus } from './events.ts';
 
 /** POSTs a contract-signed action to HL /exchange; returns HL's JSON (status ok|err), never throws on status err. */
@@ -11,7 +11,7 @@ export type HlPoster = (body: ReturnType<typeof exchangeBody>) => Promise<unknow
 
 export function hlPoster(network: 'testnet' | 'mainnet'): HlPoster {
   return async (body) => {
-    const r = await fetch(`${HL_API_URLS[network]}/exchange`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const r = await hlExchangeFetch(HL_API_URLS[network])(`${HL_API_URLS[network]}/exchange`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
     const text = await r.text();
     try {
       return JSON.parse(text);
