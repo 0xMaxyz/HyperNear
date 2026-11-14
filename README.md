@@ -5,7 +5,7 @@
 
 # HyperNear
 
-Demo video and X post: `<X_POST_URL>` (TODO: replace before submitting; built at NEAR HACKATHON, @NEARProtocol #NEARHackathon)
+Demo video and X post: https://x.com/iiizanagiii/status/2121696983219876341 (built at NEAR HACKATHON, @NEARProtocol #NEARHackathon)
 
 Live (testnet): the web app at [hypernear.t09.fun](https://hypernear.t09.fun), served by the agent at `https://agent.t09.fun` (NEAR testnet and Hyperliquid testnet, one Hetzner VPS, no TEE). The submitted commit is the tag `hackathon-submission`.
 
