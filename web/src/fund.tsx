@@ -243,6 +243,7 @@ export function FundTab({ view, owner, leg: legParam, canSign, dry, locked, busy
   }
 
   const spot = active.spotUsdc;
+  const unified = active.abstraction === 'unifiedAccount';
   const perp = Number(active.clearinghouse.marginSummary.accountValue);
   const real = info.state === 'ok' && info.data.realDeposits;
   const maxMove = Math.floor(spot * 1e6) / 1e6;
@@ -254,8 +255,13 @@ export function FundTab({ view, owner, leg: legParam, canSign, dry, locked, busy
       <section className="card" aria-labelledby="fund-h">
         <h2 id="fund-h">Fund a leg</h2>
         <p className="muted small">
-          A leg is a Hyperliquid account. Money goes to a leg's <strong>spot balance</strong> in USDC; to trade with it you then move it to the <strong>trading balance</strong> (one signature). Everything you send is swapped to USDC on the way,
-          through the NEAR Intents network.
+          A leg is a Hyperliquid account.{' '}
+          {unified ? (
+            <>This leg is a <strong>unified account</strong>: it has one USDC balance, so money you send is ready to trade at once.</>
+          ) : (
+            <>Money goes to a leg's <strong>spot balance</strong> in USDC; to trade with it you then move it to the <strong>trading balance</strong> (one signature).</>
+          )}{' '}
+          Everything you send is swapped to USDC on the way, through the NEAR Intents network.
         </p>
 
         {info.state === 'ok' && !real && (
@@ -284,10 +290,21 @@ export function FundTab({ view, owner, leg: legParam, canSign, dry, locked, busy
           <dd>
             <code title={active.address}>{short(active.address)}</code> <button className="small-btn" onClick={() => copy(active.address)}>{copied === active.address ? 'Copied' : 'Copy'}</button>
           </dd>
-          <dt>On spot</dt>
-          <dd>{usd(spot)}</dd>
-          <dt>Trading balance</dt>
-          <dd>{usd(perp)}</dd>
+          {unified ? (
+            <>
+              <dt>Balance</dt>
+              <dd>{usd(perp)}</dd>
+              <dt>Free to use</dt>
+              <dd>{usd(Number(active.clearinghouse.withdrawable))}</dd>
+            </>
+          ) : (
+            <>
+              <dt>On spot</dt>
+              <dd>{usd(spot)}</dd>
+              <dt>Trading balance</dt>
+              <dd>{usd(perp)}</dd>
+            </>
+          )}
         </dl>
         {active.activation === 'owed-on-credit' && <p className="flag small">New leg: the first HyperCore deposit activates it. The sender pays Hyperliquid's 1 USDC fee, and the leg owes nothing later (on testnet it comes out of the amount that arrives).</p>}
         {err && <p className="notice err" role="alert">{err}</p>}

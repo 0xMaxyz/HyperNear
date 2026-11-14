@@ -15,6 +15,7 @@ import { Decider, DecisionModes, proposalEvent } from './decisions.ts';
 import { decisionInput } from './facts.ts';
 import { DEFAULT_GUARD_CONFIG, evaluateGuard } from './guard.ts';
 import { HedgeRefused, Hedger, planCloseHedge, planOpenHedge, type ClosePlan, type OpenPlan } from './hedge.ts';
+import { normalizeLeg } from './funds.ts';
 import { guardInputs, Legs, type LegState, type OwnerSnapshot } from './legs.ts';
 import { HttpError, parseRelayBody, RateLimiter, Relayer } from './relayer.ts';
 import type { Deps } from './server.ts';
@@ -185,7 +186,8 @@ export function recordedProposals(): Proposal[] {
   }));
 }
 
-export function buildDryRunDeps(fixtureName = 'hedged', opts: { replayStartMs?: number; replaySpeed?: number; fetchFn?: typeof fetch } = {}): Deps {
+export function buildDryRunDeps(fixtureName = 'hedged', opts: { replayStartMs?: number; replaySpeed?: number; fetchFn?: typeof fetch; /** every leg is a unified account (default: HYPERNEAR_DRY_UNIFIED=1) */ unified?: boolean } = {}): Deps {
+  const unifiedDry = opts.unified ?? process.env.HYPERNEAR_DRY_UNIFIED === '1';
   const fixtures = loadFixtures();
   const fx = fixtures.find((f) => f.name === fixtureName) ?? fixtures[0]!;
   const snap = fx.snapshot;
@@ -218,7 +220,13 @@ export function buildDryRunDeps(fixtureName = 'hedged', opts: { replayStartMs?: 
     return { ...l, spotUsdc: l.spotUsdc + c.spot, clearinghouse: { ...l.clearinghouse, marginSummary: { ...l.clearinghouse.marginSummary, accountValue: perp(l.clearinghouse.marginSummary.accountValue) }, withdrawable: perp(l.clearinghouse.withdrawable) } };
   };
   const book = createDryBook(snap);
-  legs.snapshot = async (owner) => ({ ...snap, owner: owner.toLowerCase() as Hex, at: Date.now(), legs: owner.toLowerCase() === snap.owner ? snap.legs.map((l) => book.overlay(withCredits(l))) : [] });
+  // fixtures are default-mode accounts; a unified dry run converts them the way HL would: all USDC on spot, the clearinghouse view normalized (funds.ts)
+  const withMode = (l: LegState): LegState => {
+    if (!unifiedDry) return { ...l, abstraction: l.abstraction ?? 'default' };
+    const spot = { spotTotal: Number(l.clearinghouse.marginSummary.accountValue) + l.spotUsdc, hold: Number(l.clearinghouse.marginSummary.totalMarginUsed) };
+    return { ...l, abstraction: 'unifiedAccount', ...normalizeLeg('unifiedAccount', l.clearinghouse, spot) };
+  };
+  legs.snapshot = async (owner) => ({ ...snap, owner: owner.toLowerCase() as Hex, at: Date.now(), legs: owner.toLowerCase() === snap.owner ? snap.legs.map((l) => withMode(book.overlay(withCredits(l)))) : [] });
   const bus = new EventBus();
   const recorded = JSON.parse(readFileSync(GUARD_DEMO, 'utf8')) as { timeline: { t: number; event: string; detail?: Record<string, unknown> }[] };
   const revoked = (JSON.parse(readFileSync(FREEZE_LIVE, 'utf8')) as { events: { type: string; data: Record<string, unknown> }[] }).events;
@@ -346,6 +354,7 @@ export function buildDryRunDeps(fixtureName = 'hedged', opts: { replayStartMs?: 
           return { kind: 'payTee', simulated: true, owner: b.owner, intent: b.intent, txHash: null, ok: true };
         }
         const intent = b.intent;
+        if (intent.type === 'usdClassTransfer' && unifiedDry) throw new HttpError(422, 'Action disabled when unified account is active');
         if (intent.type === 'usdClassTransfer') {
           // spot <-> perp on the simulated balances
           const base = snap.legs.find((l) => l.leg === intent.leg);
@@ -373,8 +382,9 @@ export function buildDryRunDeps(fixtureName = 'hedged', opts: { replayStartMs?: 
         const l = snap.legs.find((x) => x.leg === leg);
         if (owner.toLowerCase() !== snap.owner || !l) throw new HttpError(404, `leg ${leg} is not registered for this owner`);
         const c = credited.get(leg) ?? { spot: 0, perp: 0 };
-        credited.set(leg, { ...c, spot: c.spot + amount });
-        return { leg, spotUsdc: l.spotUsdc + c.spot + amount };
+        // a unified account has one balance: a deposit is usable at once
+        credited.set(leg, unifiedDry ? { ...c, perp: c.perp + amount } : { ...c, spot: c.spot + amount });
+        return { leg, spotUsdc: unifiedDry ? 0 : l.spotUsdc + c.spot + amount };
       },
       replayEvents(write) {
         const speed = opts.replaySpeed ?? 1;

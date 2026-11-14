@@ -5,6 +5,7 @@ import type { Hex } from 'viem';
 import { HyperNearClient, NearMasterSigner, type OwnerState } from '@hypernear/client';
 import type { EventBus } from './events.ts';
 import { DEFAULT_GUARD_CONFIG, evaluateGuard, type GuardConfig, type GuardLegResult } from './guard.ts';
+import { USDC_TOKEN, isUnified } from './funds.ts';
 import { guardInputs, type Legs, type OwnerSnapshot } from './legs.ts';
 import { hlClient } from './market.ts';
 
@@ -20,6 +21,8 @@ export interface GuardLoopConfig {
   withdrawableShare: number;
   /** A leg with a strategy budget (see planRebalance) is only ever topped up from this leg. */
   reserveLeg: number;
+  /** Convert every approved, funded leg still in default mode to a unified account (one-way on Hyperliquid, so off until switched on). */
+  convertUnified: boolean;
 }
 
 export const DEFAULT_LOOP_CONFIG: GuardLoopConfig = {
@@ -30,12 +33,13 @@ export const DEFAULT_LOOP_CONFIG: GuardLoopConfig = {
   minUsd: 1,
   withdrawableShare: 0.9,
   reserveLeg: 2,
+  convertUnified: false,
 };
 
 export type RebalancePlan =
   | { kind: 'none' }
   | { kind: 'blocked'; stressedLeg: number; reason: string }
-  | { kind: 'rebalance'; from: { leg: number; address: Hex }; to: { leg: number; address: Hex }; amount: string; reasons: string[]; /** USDC of `amount` that HL keeps as the new leg's activation fee (0 or 1); the leg receives amount - activationFeeUsd */ activationFeeUsd: 0 | 1; /** extra USDC the source leg pays for its first transfer out (not part of `amount`) */ sourceFeeUsd: 0 | 1 };
+  | { kind: 'rebalance'; from: { leg: number; address: Hex }; to: { leg: number; address: Hex }; amount: string; reasons: string[]; /** USDC of `amount` that HL keeps as the new leg's activation fee (0 or 1); the leg receives amount - activationFeeUsd */ activationFeeUsd: 0 | 1; /** extra USDC the source leg pays for its first transfer out (not part of `amount`) */ sourceFeeUsd: 0 | 1; /** unified legs cannot usdSend: they move spot USDC with sendAsset */ transfer: 'usdSend' | 'sendAsset' };
 
 const DAY_MS = 86_400_000;
 
@@ -69,7 +73,10 @@ export function planRebalance(
   const spent = policy.day === Math.floor(nowMs / DAY_MS) ? policy.spent_today : 0;
   const capLeftUsd = Math.max(0, policy.daily_cap - spent) / 1e6;
   const budget = budgetLeftUsd?.(stressed);
+  // a unified leg moves money with sendAsset (spot to spot), a default one with usdSend: the two modes do not mix in one transfer
+  const unified = isUnified(s.legs.find((l) => l.leg === stressed)!.abstraction);
   const sources = s.legs
+    .filter((l) => isUnified(l.abstraction) === unified)
     .filter((l) => !stressedLegs.includes(l.leg))
     .filter((l) => budget === undefined || l.leg === cfg.reserveLeg)
     // a leg with any strategy budget (a running strategy) is never drained to top up another leg
@@ -78,7 +85,7 @@ export function planRebalance(
     .filter((l) => l.withdrawable > 0)
     .sort((a, b) => b.ratio - a.ratio || b.withdrawable - a.withdrawable);
   const src = sources[0];
-  if (!src) return blocked(budget === undefined ? 'no other leg without a strategy has withdrawable USDC' : `reserve leg ${cfg.reserveLeg} has no withdrawable USDC`);
+  if (!src) return blocked(budget === undefined ? `no other leg in ${unified ? 'unified' : 'default'} mode without a strategy has free USDC` : `reserve leg ${cfg.reserveLeg} has no free USDC`);
   const to = s.legs.find((l) => l.leg === stressed)!;
   const fee = to.activation === 'owed-on-credit' ? 1 : 0; // HL keeps 1 USDC of the first credit to a never-seen account (sent on top, so the leg receives what the guard computed); a source leg that has never sent pays 1 more
   if (budget !== undefined && budget < cfg.minUsd + fee) return blocked(`strategy top-up budget used (leg ${stressed}: $${budget.toFixed(2)} left today${fee ? ', 1 USDC of it is the leg HL activation fee' : ''})`);
@@ -95,6 +102,7 @@ export function planRebalance(
     amount: (amount + fee).toFixed(2),
     activationFeeUsd: fee,
     sourceFeeUsd: sourceFee,
+    transfer: unified ? 'sendAsset' : 'usdSend',
     reasons: triggered.filter((r) => r.id.startsWith(`leg${stressed}:`)).flatMap((r) => r.reasons),
   };
 }
@@ -147,12 +155,29 @@ export class GuardLoop {
     this.d.bus.emit(type, { owner, ...data });
   }
 
+  readonly #convertFailedAt = new Map<string, number>();
+
+  /** Self-healing migration: every approved, funded leg still in default mode becomes a unified account. A refusal is reported once and retried after 10 minutes. */
+  async #convertLegs(owner: Hex, snap: OwnerSnapshot, nowMs: number) {
+    for (const l of snap.legs) {
+      const key = `${owner}:${l.leg}`;
+      if (nowMs - (this.#convertFailedAt.get(key) ?? -Infinity) < 600_000) continue;
+      const r = await this.d.legs.convertToUnified(owner, l);
+      if (r === 'converted') this.d.bus.emit('legs.unified', { owner, leg: l.leg, address: l.address });
+      else if (typeof r === 'object') {
+        this.#convertFailedAt.set(key, nowMs);
+        this.d.bus.emit('legs.unified.failed', { owner, leg: l.leg, address: l.address, error: r.failed });
+      }
+    }
+  }
+
   async tick(owner: Hex): Promise<RebalancePlan | undefined> {
     if (this.#busy.has(owner)) return undefined;
     this.#busy.add(owner);
     try {
       const now = this.d.now ?? Date.now;
       const snap = await this.d.legs.snapshot(owner);
+      if (this.cfg.convertUnified) await this.#convertLegs(owner, snap, now());
       const results = evaluateGuard(guardInputs(snap, this.cfg.annualVol), this.cfg.guard);
       const plan = planRebalance(snap, results, await this.d.legs.client.getOwner(owner), this.d.agentId, now(), this.cfg, (leg) => this.d.budgetLeftUsd?.(owner, leg));
       const triggered = results.filter((r) => r.trigger);
@@ -176,7 +201,11 @@ export class GuardLoop {
         legAddress: plan.from.address,
         onNearTx: (tx) => this.d.bus.emit('guard.rebalance.signed', { owner, ...tx, ms: now() - t0 }),
       });
-      const res = await hlClient(this.d.legs.network, { master: signer }).usdSend({ destination: plan.to.address, amount: plan.amount });
+      const hl = hlClient(this.d.legs.network, { master: signer });
+      const res =
+        plan.transfer === 'sendAsset'
+          ? await hl.sendAsset({ destination: plan.to.address, sourceDex: 'spot', destinationDex: 'spot', token: USDC_TOKEN[this.d.legs.network], amount: plan.amount })
+          : await hl.usdSend({ destination: plan.to.address, amount: plan.amount });
       this.d.bus.emit('guard.rebalance.posted', { owner, hl: res, ms: now() - t0 });
       this.d.onTopUp?.(owner, plan.to.leg, Number(plan.amount), plan.activationFeeUsd);
       this.#last.delete(owner); // the next tick reports the new state (ok, or still stressed)

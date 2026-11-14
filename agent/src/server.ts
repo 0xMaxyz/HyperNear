@@ -635,7 +635,7 @@ export function buildDeps(config: AgentConfig, tee?: TeeRuntime): Deps {
     // a strategy leg is topped up only from the reserve leg and within the strategy's own daily budget
     budgetLeftUsd: (o, leg) => d.strategies?.topUpLeft(o, leg),
     onTopUp: (o, leg, usd, fee) => d.strategies?.recordTopUp(o, leg, usd, fee),
-    cfg: { intervalMs: config.guard.intervalSec * 1000, guard: guardConfig, annualVol: config.guard.annualVol },
+    cfg: { intervalMs: config.guard.intervalSec * 1000, guard: guardConfig, annualVol: config.guard.annualVol, convertUnified: config.guard.convertUnified },
   });
   const hedger = new Hedger(legs, config.policy, bus);
   const d: Deps = {

@@ -7,6 +7,7 @@ import type { HlClearinghouseState, HlClient } from '@perps-platform/core';
 import { HyperNearClient, NearMasterSigner, type OwnerIntentTypedData } from '@hypernear/client';
 import { activationStatus, type Activation } from './activation.ts';
 import { agentKeySigner, hlClient, readMarket, type Market } from './market.ts';
+import { canConvert, isUnified, normalizeLeg, type Abstraction, type UnifiedBalance } from './funds.ts';
 import type { GuardLegInput } from './guard.ts';
 
 /** Legs are scanned 0..MAX_LEGS-1 (the contract has no per-owner list). */
@@ -84,6 +85,10 @@ export interface LegState {
   address: Hex;
   /** null until the owner's signed prepareAgents (POST /agents/prepare) creates the key */
   agent: { address: Hex; name: string; approvedAt?: number } | null;
+  /** HL account mode. A unified leg's `clearinghouse` and `spotUsdc` are normalized (funds.ts): accountValue = equity, withdrawable = free */
+  abstraction: Abstraction;
+  /** the raw spot balance of a unified leg (total and the part held as margin) */
+  unified?: UnifiedBalance;
   clearinghouse: HlClearinghouseState;
   spotUsdc: number;
   /** HL's 1 USDC new-account fee: paid, or still owed on the next credit / on the first transfer out (activation.ts) */
@@ -118,19 +123,51 @@ export class Legs {
     return addrs.flatMap((address, leg) => (address ? [{ leg, address }] : []));
   }
 
+  readonly #abstractions = new Map<string, { abstraction: Abstraction; at: number }>();
+
+  /** The account's HL mode. Unified is final (HL refuses a way back), so it is cached for good; anything else for 30 s. A failed read is 'unknown'. */
+  async abstractionOf(address: Hex): Promise<Abstraction> {
+    const hit = this.#abstractions.get(address);
+    if (hit && (isUnified(hit.abstraction) || Date.now() - hit.at < 30_000)) return hit.abstraction;
+    const abstraction: Abstraction = await this.hl.userAbstraction({ user: address }).catch(() => 'unknown' as const);
+    if (abstraction !== 'unknown') this.#abstractions.set(address, { abstraction, at: Date.now() });
+    return abstraction;
+  }
+
+  /**
+   * Converts one approved, funded leg that is still in default mode to a unified account with its own agent key
+   * (`agentSetAbstraction('u')`: no owner signature; HL accepted it with positions open). One-way: HL refuses a switch back.
+   * Never throws: an HL refusal comes back as `failed` so a loop can record it.
+   */
+  async convertToUnified(owner: Hex, l: LegState): Promise<'converted' | 'already' | 'skipped' | { failed: string }> {
+    if (isUnified(l.abstraction)) return 'already';
+    if (!canConvert(l.abstraction)) return 'skipped';
+    if (!l.agent?.approvedAt) return 'skipped'; // no approved agent key yet
+    if (l.activation === 'owed-on-credit') return 'skipped'; // never funded: HL answers "Must deposit before performing actions"
+    try {
+      await this.tradingClient(owner, l.leg).agentSetAbstraction('u');
+      this.#abstractions.delete(l.address);
+      return 'converted';
+    } catch (e) {
+      return { failed: (e as Error).message.slice(0, 300) };
+    }
+  }
+
   /** clearinghouseState (incl. withdrawable) + spot USDC of every registered leg, with the market it was read against. */
   async snapshot(owner: Hex): Promise<OwnerSnapshot> {
     const o = owner.toLowerCase() as Hex;
     const [regs, market] = await Promise.all([this.registered(o), readMarket(this.hl, this.coins)]);
     const legs = await Promise.all(
       regs.map(async ({ leg, address }) => {
-        const [clearinghouse, spot, activation] = await Promise.all([
+        const [raw, spot, activation, abstraction] = await Promise.all([
           this.hl.clearinghouseState({ user: address }),
           this.hl.spotClearinghouseState({ user: address }),
           activationStatus(this.hl, address),
+          this.abstractionOf(address),
         ]);
-        const spotUsdc = Number(spot.balances.find((b) => b.coin === 'USDC')?.total ?? 0);
-        return { leg, address, agent: this.keys.get(o, leg) ?? null, clearinghouse, spotUsdc, activation };
+        const usdc = spot.balances.find((b) => b.coin === 'USDC');
+        const { clearinghouse, spotUsdc, unified } = normalizeLeg(abstraction, raw, { spotTotal: Number(usdc?.total ?? 0), hold: Number(usdc?.hold ?? 0) });
+        return { leg, address, agent: this.keys.get(o, leg) ?? null, abstraction, ...(unified && { unified }), clearinghouse, spotUsdc, activation };
       })
     );
     return { owner: o, at: Date.now(), legs, market };

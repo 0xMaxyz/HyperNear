@@ -81,7 +81,13 @@ export function overlayLive(view: OwnerView | undefined, live: Live): OwnerView 
     const p = live.legs[l.address.toLowerCase()];
     // both sides carry Hyperliquid's own `time`; the agent's snapshot clock is only the fallback
     const polledAt = (l.clearinghouse as { time?: number }).time ?? base;
-    return p && p.at > polledAt ? { ...l, clearinghouse: p.ch } : l;
+    if (!p || p.at <= polledAt) return l;
+    // a unified account's pushed perp numbers are not its money (all USDC sits on spot): keep the agent's normalized balances, take the live positions
+    if (l.abstraction === 'unifiedAccount') {
+      const ch = { ...p.ch, marginSummary: { ...p.ch.marginSummary, accountValue: l.clearinghouse.marginSummary.accountValue }, withdrawable: l.clearinghouse.withdrawable };
+      return { ...l, clearinghouse: ch };
+    }
+    return { ...l, clearinghouse: p.ch };
   });
   return { ...view, snapshot: { ...view.snapshot, legs, at: Math.max(base, live.eventAt) } };
 }

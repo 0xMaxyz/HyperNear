@@ -32,6 +32,8 @@ export interface LegSnap {
   clearinghouse: { marginSummary: { accountValue: string; totalMarginUsed?: string }; crossMaintenanceMarginUsed?: string; withdrawable: string; assetPositions: { position: Position }[] };
   spotUsdc: number;
   activation: Activation;
+  /** Hyperliquid account mode. On a unified leg `clearinghouse.marginSummary.accountValue` is the spot USDC total, `withdrawable` is total minus hold and `spotUsdc` is 0 (agent/src/funds.ts) */
+  abstraction?: 'default' | 'unifiedAccount' | 'portfolioMargin' | 'disabled' | 'dexAbstraction' | 'unknown';
 }
 export interface OwnerPolicy {
   nonce: number;

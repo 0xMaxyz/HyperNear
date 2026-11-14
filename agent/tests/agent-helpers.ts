@@ -37,8 +37,8 @@ export function snap(leg0: HlClearinghouseState, leg1: HlClearinghouseState = ch
     owner: OWNER,
     at: 0,
     legs: [
-      { leg: 0, address: '0xfc5f38a75535cc6a864bb5ba14d9c7f29eecacac', agent: null, clearinghouse: leg0, spotUsdc: 0, activation: 'paid' },
-      { leg: 1, address: '0x8056c4fa3aad69cf04c2ade906c58489e76c9986', agent: null, clearinghouse: leg1, spotUsdc: 0, activation: 'paid' },
+      { leg: 0, address: '0xfc5f38a75535cc6a864bb5ba14d9c7f29eecacac', agent: null, clearinghouse: leg0, spotUsdc: 0, activation: 'paid', abstraction: 'default' },
+      { leg: 1, address: '0x8056c4fa3aad69cf04c2ade906c58489e76c9986', agent: null, clearinghouse: leg1, spotUsdc: 0, activation: 'paid', abstraction: 'default' },
     ],
     market: { assets: [{ name: 'BTC', asset: 3, szDecimals: 5, maxLeverage: 40 }], mids: { BTC: mid } },
   };

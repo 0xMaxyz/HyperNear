@@ -89,7 +89,7 @@ const withAct = (src: Act, dst: Act) => {
 
 // a leg with a strategy budget is topped up from the reserve leg 2 only
 const withReserve = (s: OwnerSnapshot) => {
-  s.legs.push({ leg: 2, address: '0x1111111111111111111111111111111111111111', agent: null, clearinghouse: ch({ accountValue: 30, maint: 0, withdrawable: 30 }), spotUsdc: 0, activation: 'paid' });
+  s.legs.push({ leg: 2, address: '0x1111111111111111111111111111111111111111', agent: null, clearinghouse: ch({ accountValue: 30, maint: 0, withdrawable: 30 }), spotUsdc: 0, activation: 'paid', abstraction: 'default' });
   return s;
 };
 
