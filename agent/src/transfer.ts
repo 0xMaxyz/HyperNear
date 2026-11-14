@@ -1,5 +1,5 @@
 // One USDC move between two legs of the same owner, signed through the contract with the NEAR agent's function-call key
-// (`rebalance` for a default-mode leg, `rebalance_spot` for a unified one). The guard top-up and the owner's rebalance both use it,
+// (`rebalance`, with `spot: true` for a unified leg). The guard top-up and the owner's rebalance both use it,
 // so cap, cooldown and the own-legs-only destination rule are the contract's, not ours.
 import type { Hex } from 'viem';
 import { NearMasterSigner, type HyperNearClient } from '@hypernear/client';

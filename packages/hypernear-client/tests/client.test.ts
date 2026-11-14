@@ -89,11 +89,11 @@ describe('NearMasterSigner, agent mode', () => {
     expect(t.calls[0]).toMatchObject({ method: 'agent_usd_class_transfer', args: { owner: OWNER, leg: 0, amount: '2', to_perp: true, hl_nonce: 5 } });
   });
 
-  it('sendAsset spot USDC -> rebalance_spot (the unified-account move)', async () => {
+  it('sendAsset spot USDC -> rebalance with spot: true (the unified-account move)', async () => {
     const t = setup({ mode: 'agent' });
     await t.sign(hlPayload(sendAsset({ amount: '2.5', nonce: 77 })));
     expect(t.calls).toHaveLength(1);
-    expect(t.calls[0]).toMatchObject({ method: 'rebalance_spot', args: { owner: OWNER, from_leg: 0, to_address: LEG1, amount: '2.5', hl_nonce: 77 } });
+    expect(t.calls[0]).toMatchObject({ method: 'rebalance', args: { owner: OWNER, from_leg: 0, to_address: LEG1, amount: '2.5', hl_time: 77, spot: true } });
     expect(t.calls[0].opts?.deposit ?? 0n).toBe(0n);
   });
 

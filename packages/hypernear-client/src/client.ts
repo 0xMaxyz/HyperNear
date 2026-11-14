@@ -296,14 +296,15 @@ export class HyperNearClient {
     });
   }
 
-  /** Agent: the same move for a leg on a unified account (a spot USDC sendAsset; HL refuses usdSend there). Same cap + cooldown. */
+  /** Agent: the same move for a leg on a unified account (`rebalance` with `spot: true` signs a spot USDC sendAsset; HL refuses usdSend there). Same cap + cooldown. */
   rebalanceSpot(args: { owner: Hex; fromLeg: number; toAddress: Hex; amount: string; hlNonce: number }) {
-    return this.backend.call<SignOut | null>(this.contractId, 'rebalance_spot', {
+    return this.backend.call<SignOut | null>(this.contractId, 'rebalance', {
       owner: args.owner.toLowerCase(),
       from_leg: args.fromLeg,
       to_address: args.toAddress,
       amount: args.amount,
-      hl_nonce: args.hlNonce,
+      hl_time: args.hlNonce,
+      spot: true,
     });
   }
 

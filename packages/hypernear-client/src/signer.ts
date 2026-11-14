@@ -142,7 +142,7 @@ export class NearMasterSigner implements HlAsyncSigner {
       method = 'rebalance';
       r = await client.rebalance({ owner, fromLeg: leg, toAddress: mapped.toAddress, amount: mapped.amount, hlTime: mapped.hlTime });
     } else if (mapped.kind === 'rebalanceSpot') {
-      method = 'rebalance_spot';
+      method = 'rebalance';
       r = await client.rebalanceSpot({ owner, fromLeg: leg, toAddress: mapped.toAddress, amount: mapped.amount, hlNonce: mapped.hlNonce });
     } else if (mapped.kind === 'agentUsdClassTransfer') {
       method = 'agent_usd_class_transfer';

@@ -302,7 +302,7 @@ fn freeze_refuses_everything_but_withdraw_and_unfreeze() {
     });
     ctx(AGENT, T0);
     expect_panic("frozen", || {
-        let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "1".into(), 1);
+        let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "1".into(), 1, None);
     });
     expect_panic("frozen", || {
         let _ = c.agent_usd_class_transfer(o.addr.clone(), 0, "1".into(), true, 1);
@@ -386,21 +386,21 @@ fn rebalance_moves_only_between_own_registered_legs() {
 
     ctx(AGENT, T0);
     expect_panic("not a registered leg of this owner", || {
-        let _ = c.rebalance(o.addr.clone(), 0, owner(99).addr, "1".into(), 1);
+        let _ = c.rebalance(o.addr.clone(), 0, owner(99).addr, "1".into(), 1, None);
     });
     expect_panic("not a registered leg of this owner", || {
-        let _ = c.rebalance(o.addr.clone(), 0, foreign.clone(), "1".into(), 1);
+        let _ = c.rebalance(o.addr.clone(), 0, foreign.clone(), "1".into(), 1, None);
     });
     expect_panic("source equals destination", || {
-        let _ = c.rebalance(o.addr.clone(), 1, leg1.clone(), "1".into(), 1);
+        let _ = c.rebalance(o.addr.clone(), 1, leg1.clone(), "1".into(), 1, None);
     });
     ctx("mallory.testnet", T0);
     expect_panic("not this owner's agent", || {
-        let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "1".into(), 1);
+        let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "1".into(), 1, None);
     });
 
     ctx(AGENT, T0);
-    let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "4".into(), 11);
+    let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "4".into(), 11, None);
     let want = hl(HlAction::UsdSend { destination: leg1.clone(), amount: "4".into(), time: 11 });
     assert_eq!(signed(), vec![(format!("{}/leg0", o.addr), want)]);
     assert_eq!(c.get_owner(o.addr.clone()).unwrap().spent_today, 4_000_000);
@@ -415,7 +415,7 @@ fn rebalance_cap_and_cooldown() {
     let leg1 = register(&mut c, &o, 1, 21);
     let reb = |c: &mut Leash, t: u64, amt: &str| {
         ctx(AGENT, t);
-        let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), amt.into(), t);
+        let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), amt.into(), t, None);
     };
     // start at a day boundary so the whole sequence stays inside one UTC day
     let day0 = (T0 / 86_400 + 1) * 86_400;
@@ -429,7 +429,7 @@ fn rebalance_cap_and_cooldown() {
 }
 
 #[test]
-fn rebalance_spot_signs_a_spot_usdc_send_asset_under_the_same_limits() {
+fn rebalance_with_spot_signs_a_spot_usdc_send_asset_under_the_same_limits() {
     let mut c = contract();
     let (o, other) = (owner(1), owner(2));
     set_policy(&mut c, &o, "10", 600);
@@ -440,14 +440,14 @@ fn rebalance_spot_signs_a_spot_usdc_send_asset_under_the_same_limits() {
 
     ctx(AGENT, day0);
     expect_panic("not a registered leg of this owner", || {
-        let _ = c.rebalance_spot(o.addr.clone(), 0, foreign.clone(), "1".into(), 1);
+        let _ = c.rebalance(o.addr.clone(), 0, foreign.clone(), "1".into(), 1, Some(true));
     });
     ctx("mallory.testnet", day0);
     expect_panic("not this owner's agent", || {
-        let _ = c.rebalance_spot(o.addr.clone(), 0, leg1.clone(), "1".into(), 1);
+        let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "1".into(), 1, Some(true));
     });
     ctx(AGENT, day0);
-    let _ = c.rebalance_spot(o.addr.clone(), 0, leg1.clone(), "4".into(), 11);
+    let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "4".into(), 11, Some(true));
     let want = hl(HlAction::SendAsset {
         destination: leg1.clone(),
         source_dex: "spot".into(),
@@ -463,11 +463,11 @@ fn rebalance_spot_signs_a_spot_usdc_send_asset_under_the_same_limits() {
     // one cooldown clock and one daily cap, shared with `rebalance`
     ctx(AGENT, day0 + 599);
     expect_panic("cooldown", || {
-        let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "1".into(), 12);
+        let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "1".into(), 12, None);
     });
     ctx(AGENT, day0 + 600);
     expect_panic("daily cap exceeded", || {
-        let _ = c.rebalance_spot(o.addr.clone(), 0, leg1.clone(), "7".into(), 13);
+        let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "7".into(), 13, Some(true));
     });
 }
 
@@ -481,7 +481,7 @@ fn failed_mpc_sign_gives_back_rebalance_cap_and_cooldown() {
     let day0 = (T0 / 86_400 + 1) * 86_400;
 
     ctx(AGENT, day0);
-    let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "4".into(), 1);
+    let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "4".into(), 1, None);
     let ok = on_signed_args();
     ctx(CONTRACT, day0 + 5);
     let refund: CapRefund = serde_json::from_value(ok["refund"].clone()).unwrap();
@@ -491,7 +491,7 @@ fn failed_mpc_sign_gives_back_rebalance_cap_and_cooldown() {
 
     let t1 = day0 + 600;
     ctx(AGENT, t1);
-    let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "6".into(), 2);
+    let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "6".into(), 2, None);
     let failed = on_signed_args();
     ctx(CONTRACT, t1 + 5);
     let refund: CapRefund = serde_json::from_value(failed["refund"].clone()).unwrap();
@@ -501,7 +501,7 @@ fn failed_mpc_sign_gives_back_rebalance_cap_and_cooldown() {
     assert_eq!(st.last_rebalance_ns, day0 * 1_000_000_000, "cooldown restarts from the last successful rebalance");
 
     ctx(AGENT, t1 + 10); // would hit "cooldown" if the failed rebalance had restarted it
-    let _ = c.rebalance(o.addr.clone(), 0, leg1, "6".into(), 3);
+    let _ = c.rebalance(o.addr.clone(), 0, leg1, "6".into(), 3, None);
     assert_eq!(c.get_owner(o.addr.clone()).unwrap().spent_today, 10_000_000);
 }
 
@@ -513,7 +513,7 @@ fn rebalance_from_unregistered_source_rejected() {
     let leg1 = register(&mut c, &o, 1, 21);
     ctx(AGENT, T0);
     expect_panic("source leg not registered", || {
-        let _ = c.rebalance(o.addr.clone(), 7, leg1, "1".into(), 1);
+        let _ = c.rebalance(o.addr.clone(), 7, leg1, "1".into(), 1, None);
     });
 }
 
@@ -630,7 +630,7 @@ fn agent_methods_need_no_deposit() {
     register(&mut c, &o, 0, 20);
     let leg1 = register(&mut c, &o, 1, 21);
     ctx_dep(AGENT, T0, NearToken::from_yoctonear(0));
-    let _ = c.rebalance(o.addr.clone(), 0, leg1, "1".into(), 1);
+    let _ = c.rebalance(o.addr.clone(), 0, leg1, "1".into(), 1, None);
     let _ = c.agent_usd_class_transfer(o.addr.clone(), 0, "1".into(), true, 2);
     assert_eq!(signed().len(), 2);
 }
@@ -989,27 +989,27 @@ fn tee_owner_refuses_the_server_agent_and_accepts_its_own_tee_agent() {
     let (o, leg1) = tee_owner(&mut c, 71);
     // before setTee: the server agent works
     ctx(AGENT, T0);
-    let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "1".into(), 1);
+    let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "1".into(), 1, None);
     set_tee(&mut c, &o, &h, TEE_ACC);
     ctx(AGENT, T0 + 100);
     expect_panic("not the owner's TEE agent", || {
-        let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "1".into(), 2);
+        let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "1".into(), 2, None);
     });
     expect_panic("not the owner's TEE agent", || {
         let _ = c.agent_usd_class_transfer(o.addr.clone(), 0, "1".into(), true, 2);
     });
     // the owner's attested instance may, and cap / cooldown still apply
     ctx(TEE_ACC, T0 + 100);
-    let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "1".into(), 3);
+    let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "1".into(), 3, None);
     assert_eq!(signed().len(), 1);
     expect_panic("daily cap exceeded", || {
-        let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "9".into(), 4);
+        let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "9".into(), 4, None);
     });
     let _ = c.agent_usd_class_transfer(o.addr.clone(), 0, "1".into(), true, 5);
     // expired agent
     ctx(TEE_ACC, T0 + 8 * 86_400);
     expect_panic("expired", || {
-        let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "1".into(), 6);
+        let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "1".into(), 6, None);
     });
 }
 
@@ -1022,7 +1022,7 @@ fn a_stranger_running_the_same_image_is_refused() {
     set_tee(&mut c, &o, &h, OTHER_TEE);
     ctx(TEE_ACC, T0);
     expect_panic("not the owner's TEE agent", || {
-        let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "1".into(), 1);
+        let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "1".into(), 1, None);
     });
     expect_panic("not the owner's TEE agent", || {
         let _ = c.tee_approve_agent(o.addr.clone(), 0, owner(80).addr, 1);
@@ -1031,12 +1031,12 @@ fn a_stranger_running_the_same_image_is_refused() {
     set_tee(&mut c, &o, &other_hash(), TEE_ACC);
     ctx(TEE_ACC, T0);
     expect_panic("does not match the owner's", || {
-        let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "1".into(), 1);
+        let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "1".into(), 1, None);
     });
     set_tee(&mut c, &o, &h, OTHER_TEE);
     ctx(OTHER_TEE, T0);
     expect_panic("not a registered TEE agent", || {
-        let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "1".into(), 1);
+        let _ = c.rebalance(o.addr.clone(), 0, leg1.clone(), "1".into(), 1, None);
     });
 }
 
@@ -1168,7 +1168,7 @@ fn a_non_tee_owner_keeps_its_agents_when_another_owner_enters_tee() {
     // the plain owner's server agent and own approvals still work
     ctx(AGENT, T0);
     let leg1 = c.get_leg(plain.addr.clone(), 1).unwrap();
-    let _ = c.rebalance(plain.addr.clone(), 0, leg1, "1".into(), 1);
+    let _ = c.rebalance(plain.addr.clone(), 0, leg1, "1".into(), 1, None);
     ctx(RELAYER, T0);
     plain.exec(&mut c, 2, approve_named(1, "leash-leg1", 97));
     assert_eq!(signed().len(), 1);
@@ -1188,7 +1188,7 @@ fn owner_approve_agent_is_refused_in_tee_mode_and_allowed_after_leaving() {
     assert_eq!(signed().len(), 1);
     ctx(AGENT, T0);
     let leg1 = c.get_leg(o.addr.clone(), 1).unwrap();
-    let _ = c.rebalance(o.addr.clone(), 0, leg1, "1".into(), 1);
+    let _ = c.rebalance(o.addr.clone(), 0, leg1, "1".into(), 1, None);
 }
 
 #[test]

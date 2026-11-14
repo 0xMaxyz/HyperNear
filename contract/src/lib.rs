@@ -455,26 +455,25 @@ impl Leash {
         self.sign_hl(leg_path(&owner, leg), HlAction::UsdClassTransfer { amount, to_perp, nonce: hl_nonce })
     }
 
-    /// usdSend from one of `owner`'s legs to another registered leg of the same owner, within cap and cooldown.
-    pub fn rebalance(&mut self, owner: String, from_leg: u32, to_address: String, amount: String, hl_time: u64) -> Promise {
+    /// usdSend (or, with `spot`, a spot USDC sendAsset) from one of `owner`'s legs to another registered leg of the same owner, within cap and cooldown.
+    pub fn rebalance(&mut self, owner: String, from_leg: u32, to_address: String, amount: String, hl_time: u64, spot: Option<bool>) -> Promise {
         let (from_path, refund) = self.charge_rebalance(&owner, from_leg, &to_address, &amount);
-        let action = HlAction::UsdSend { destination: to_address, amount, time: hl_time };
-        self.mpc_sign(from_path, action.digest(self.hl_chain()), Some(action), None, Some(refund), None)
-    }
-
-    /// The same move for a leg on a unified account: HL refuses usdSend there, so this signs a spot USDC sendAsset
-    /// (spot -> spot, the network's USDC token, no sub-account). Same destination rule, daily cap and cooldown as `rebalance`.
-    pub fn rebalance_spot(&mut self, owner: String, from_leg: u32, to_address: String, amount: String, hl_nonce: u64) -> Promise {
-        let (from_path, refund) = self.charge_rebalance(&owner, from_leg, &to_address, &amount);
-        let token = if self.hl_mainnet { "USDC:0x6d1e7cde53ba9467b783cb7c530ce054" } else { "USDC:0xeb62eee3685fc4c43992febcd9e75443" };
-        let action = HlAction::SendAsset {
-            destination: to_address,
-            source_dex: "spot".into(),
-            destination_dex: "spot".into(),
-            token: token.into(),
-            amount,
-            from_sub_account: String::new(),
-            nonce: hl_nonce,
+        // A unified account refuses usdSend (measured on testnet), so for its legs `spot: true` signs a spot USDC sendAsset instead
+        // (spot -> spot, the network's USDC token, no sub-account: fixed in `HlAction::SendAsset::digest`). Same method, so the agent's
+        // access key and the owners' policies keep working; same destination rule, daily cap and cooldown. `hl_time` is the HL nonce.
+        let action = if spot.unwrap_or(false) {
+            let token = if self.hl_mainnet { "USDC:0x6d1e7cde53ba9467b783cb7c530ce054" } else { "USDC:0xeb62eee3685fc4c43992febcd9e75443" };
+            HlAction::SendAsset {
+                destination: to_address,
+                source_dex: "spot".into(),
+                destination_dex: "spot".into(),
+                token: token.into(),
+                amount,
+                from_sub_account: String::new(),
+                nonce: hl_time,
+            }
+        } else {
+            HlAction::UsdSend { destination: to_address, amount, time: hl_time }
         };
         self.mpc_sign(from_path, action.digest(self.hl_chain()), Some(action), None, Some(refund), None)
     }
@@ -644,7 +643,7 @@ impl Leash {
         Some(joined.unwrap().then(Self::ext(env::current_account_id()).with_static_gas(ON_REVOKED_GAS).on_revoked(meta)))
     }
 
-    /// Shared by `rebalance` and `rebalance_spot`: the caller must be the owner's policy agent, the destination a registered leg
+    /// Used by `rebalance`: the caller must be the owner's policy agent, the destination a registered leg
     /// of the same owner, and the move within cooldown and daily cap. Commits the cap and cooldown before the MPC promise;
     /// `on_signed` gives both back if the sign fails.
     fn charge_rebalance(&mut self, owner: &str, from_leg: u32, to_address: &str, amount: &str) -> (String, CapRefund) {
