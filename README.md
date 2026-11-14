@@ -7,6 +7,8 @@
 
 Demo video and X post: `<X_POST_URL>` (TODO: replace before submitting; built at NEAR HACKATHON, @NEARProtocol #NEARHackathon)
 
+Live (testnet): the web app at [hypernear.t09.fun](https://hypernear.t09.fun), served by the agent at `https://agent.t09.fun` (NEAR testnet and Hyperliquid testnet, one Hetzner VPS, no TEE). The submitted commit is the tag `hackathon-submission`.
+
 Smart accounts for Hyperliquid: the keys are held by NEAR Chain Signatures, and a public NEAR contract decides what may be signed.
 An owner (any ordinary EVM wallet) gets several Hyperliquid accounts ("legs"); the contract lets funds move only between those legs or back to the owner, gives agents a capped allowance, and lets the owner freeze everything.
 
@@ -86,6 +88,9 @@ A Hyperliquid master key is a bare EOA. Whoever holds it can approve any agent, 
 - **Decisions (propose mode).** For each hedge the agent asks Jev (TypeSafe AI) five yes/no questions, escalates to Claude when a factor is not decisive (below 0.90 or above 0.10), and shows the result as a proposal. The first call goes to Sonnet 5.5, or to Opus 5.5 when the hedge's combined notional is above $1,000; if Sonnet's answer differs from the factor table's, Opus is asked as well and wins (`agent/src/decide.ts`). The owner accepts or rejects it; nothing runs until accepted.
 - **Strategies.** Grid and TWAP/DCA bots, each on its own leg with its own top-up budget, drafted from plain language and started only by an owner signature; see [Strategies](#strategies-each-on-its-own-leg).
 - **Chat.** A tool-calling chat over the owner's state (`agent/src/chat.ts`) with deliberately unfiltered tools, used for the prompt-injection demo below.
+- **Notifications.** The bell lists this tab's alerts and the owner's agent events, newest first and grouped by day, each with a severity, a title in plain words and its own time (`web/src/notifications.tsx`). What has been read is kept per owner in the browser as a time, so a reload does not mark everything unread; there is a Mark all read button and a Needs attention filter.
+- **Setup checklist.** Five steps (create legs, prepare agents, fund, approve agents, enable the agent). The Fund step counts as done when legs 0 and 1 hold money, whatever the account mode (`web/src/setup.ts`). The Finish setup banner can be hidden per owner and comes back from the Account menu.
+- **Rate-limit resilience.** Every NEAR RPC call and every Hyperliquid call of the agent goes through a shared gate (`packages/hypernear-client/src/rpc.ts`, `packages/core/src/hl/rateGate.ts`): identical reads in flight share one request, reads are cached for a few seconds (longer for market metadata), and 429 and 5xx answers are retried with jittered backoff. A signed order is re-sent only after an HTTP 429, with the same body, and never after any other answer. A write clears the cache. Added after the free FastNEAR and Hyperliquid testnet endpoints throttled the hosted agent; reads can therefore be a few seconds old (up to 20 s for fills and the ledger).
 
 ## What we guarantee, and what we don't
 
@@ -161,9 +166,9 @@ Expected: exit code 0 and these summary lines (live tests are skipped without cr
 
 ```
 packages/core test:       Tests  294 passed (294)
-packages/hypernear-client test:       Tests  44 passed | 1 skipped (45)
+packages/hypernear-client test:       Tests  50 passed | 1 skipped (51)
 validation test:       Tests  4 passed | 21 skipped (25)
-agent test:       Tests  529 passed | 9 skipped (538)
+agent test:       Tests  612 passed | 9 skipped (621)
 ```
 
 **3. Contract tests.**
@@ -172,7 +177,7 @@ agent test:       Tests  529 passed | 9 skipped (538)
 cd contract && cargo test && cd ..
 ```
 
-Expected: `test result: ok. 74 passed; 0 failed` (78 with `--features spike`). They cover the owner-intent digests against viem signatures, replay and burned nonces, the cap and cooldown, rebalance to a foreign address, freeze, the Hyperliquid digests, the L1 cancel digests against the SDK vectors, and TEE mode (a recorded real TDX quote verifies, a tampered or reused one is refused, a stranger instance and the server agent are refused, keys are burned on a switch, the fee terms the owner signed).
+Expected: `test result: ok. 79 passed; 0 failed` (83 with `--features spike`). They cover the owner-intent digests against viem signatures, replay and burned nonces, the cap and cooldown, rebalance to a foreign address, freeze, the Hyperliquid digests, the L1 cancel digests against the SDK vectors, and TEE mode (a recorded real TDX quote verifies, a tampered or reused one is refused, a stranger instance and the server agent are refused, keys are burned on a switch, the fee terms the owner signed).
 
 **4. Agent dry run (recorded testnet data, no keys, no network).**
 
@@ -231,7 +236,7 @@ A strategy (a grid or a TWAP/DCA) runs on its own leg, so its losses stay on tha
 
 | Limit | Value | Enforced by |
 |---|---|---|
-| Daily cap and cooldown on moves between legs | $50/day, 30 s (testnet setup) | contract |
+| Daily cap and cooldown on moves between legs | $50/day, 30 s or 60 s (testnet setup) | contract |
 | Where funds may go | the owner's registered legs, or the owner | contract |
 | Order policy: leverage, notional per order, coins, slippage | 5x, $100, BTC and ETH, 3% | agent (`checkOrder` on every strategy order) |
 | Strategy limits: `maxNotional`, `maxLeverage` (only tighter than the order policy), `maxDailyLoss` (strategy PnL), `topUpCapPerDay` | per spec | agent (spec validation, runner) |
@@ -312,7 +317,7 @@ Rules Q-002 to Q-005: earlier code is allowed if disclosed, and only the NEAR in
 | `web` | `react` 18.3.1, `vite` 7, `@privy-io/react-auth` 3.51.3, `@solana/kit` 8.6.0, `lightweight-charts` 5.2.1, `viem` 2.54.3; tests: `@playwright/test` 1.65.0 |
 | tooling | `typescript`, `tsup`, `vitest`, `esbuild`, pnpm 11.15.1 |
 
-**Services:** NEAR testnet and the MPC signer `v1.signer-prod.testnet`, FastNEAR RPC, Hyperliquid testnet API, NEAR Intents 1Click (dry quotes only), Jev by TypeSafe AI, the Anthropic Claude API, Privy.
+**Services:** NEAR testnet and the MPC signer `v1.signer-prod.testnet`, FastNEAR RPC, Hyperliquid testnet API, Hetzner Cloud (one VPS for the hosted agent and web, Caddy in front), NEAR Intents 1Click (dry quotes only), Jev by TypeSafe AI, the Anthropic Claude API, Privy.
 
 **Vendored or copied third-party code:** `contract/vendor/shade-attestation` is `shade-attestation` 0.2.0 from NearDeFi/shade-agent-framework at commit `3366bc9` (source unmodified, version pins relaxed, `dcap-qvl` 0.5.2). The recorded TDX quote in `contract/tests/tee/attestation.json` comes from the near/mpc repository's test assets (`crates/test-utils/assets/public_data.json` at `50328c6`). Source: `validation/results/T0.json`.
 
