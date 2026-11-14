@@ -18,8 +18,10 @@ export type DecisionAction = 'hold' | 'close_both' | 'reduce_hedge' | 'add_hedge
  * setProtection: coin "", ratio "0", specHash = specHash(ProtectSpec) (agent/src/order.ts): replaces the position take-profit / stop-loss triggers of the named legs
  *   with the given price levels (upPx above the market, downPx below it; each leg uses them as TP or SL by its own side). Mirrors a hedge's exits onto both legs.
  * placeHedge: coin "", ratio "0", specHash = specHash(HedgePairSpec) (agent/src/hedgePair.ts): opens a new hedge, leg 0 and leg 1 at market together.
+ * rebalanceLegs: coin "", ratio "0", specHash = specHash({legs: [{leg, pct}]}) (agent/src/rebalance.ts): redistributes the pool of the listed legs to those percentages with the contract's
+ *   agent moves. Owner signature only: a session key can never move money between legs.
  * placeOrder / cancelOrder / modifyOrder (and placeHedge, when the session lists it) may also be signed by a live session key of `owner` (session.ts). */
-export type CommandAction = 'openHedge' | 'closeHedge' | DecisionAction | 'setDecisionMode' | 'prepareAgents' | 'reject' | 'startStrategy' | 'pauseStrategy' | 'stopStrategy' | 'placeOrder' | 'cancelOrder' | 'modifyOrder' | 'placeHedge' | 'setProtection' | 'startSession' | 'endSession' | 'continue_strategy' | 'pause_strategy' | 'adjust_strategy';
+export type CommandAction = 'openHedge' | 'closeHedge' | DecisionAction | 'setDecisionMode' | 'prepareAgents' | 'reject' | 'startStrategy' | 'pauseStrategy' | 'stopStrategy' | 'placeOrder' | 'cancelOrder' | 'modifyOrder' | 'placeHedge' | 'setProtection' | 'rebalanceLegs' | 'startSession' | 'endSession' | 'continue_strategy' | 'pause_strategy' | 'adjust_strategy';
 
 export interface Command {
   owner: Hex;

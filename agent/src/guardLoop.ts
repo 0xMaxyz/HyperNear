@@ -2,12 +2,12 @@
 // USDC from the healthiest leg to the stressed one with the contract's `rebalance` (agent function-call key).
 // Deterministic: no model in the loop. Every step goes to the event bus (/events).
 import type { Hex } from 'viem';
-import { HyperNearClient, NearMasterSigner, type OwnerState } from '@hypernear/client';
+import { HyperNearClient, type OwnerState } from '@hypernear/client';
 import type { EventBus } from './events.ts';
 import { DEFAULT_GUARD_CONFIG, evaluateGuard, type GuardConfig, type GuardLegResult } from './guard.ts';
-import { USDC_TOKEN, isUnified } from './funds.ts';
+import { isUnified } from './funds.ts';
 import { guardInputs, type Legs, type OwnerSnapshot } from './legs.ts';
-import { hlClient } from './market.ts';
+import { sendBetweenLegs } from './transfer.ts';
 
 export interface GuardLoopConfig {
   intervalMs: number;
@@ -193,19 +193,16 @@ export class GuardLoop {
       if (plan.kind === 'blocked' || !this.d.agentClient) return plan;
       const t0 = now();
       this.d.bus.emit('guard.rebalance.start', { owner, ...plan });
-      const signer = await NearMasterSigner.create({
-        client: this.d.agentClient,
+      const res = await sendBetweenLegs({
+        legs: this.d.legs,
+        agentClient: this.d.agentClient,
         owner,
-        leg: plan.from.leg,
-        mode: 'agent',
-        legAddress: plan.from.address,
+        from: plan.from,
+        to: plan.to.address,
+        amount: plan.amount,
+        transfer: plan.transfer,
         onNearTx: (tx) => this.d.bus.emit('guard.rebalance.signed', { owner, ...tx, ms: now() - t0 }),
       });
-      const hl = hlClient(this.d.legs.network, { master: signer });
-      const res =
-        plan.transfer === 'sendAsset'
-          ? await hl.sendAsset({ destination: plan.to.address, sourceDex: 'spot', destinationDex: 'spot', token: USDC_TOKEN[this.d.legs.network], amount: plan.amount })
-          : await hl.usdSend({ destination: plan.to.address, amount: plan.amount });
       this.d.bus.emit('guard.rebalance.posted', { owner, hl: res, ms: now() - t0 });
       this.d.onTopUp?.(owner, plan.to.leg, Number(plan.amount), plan.activationFeeUsd);
       this.#last.delete(owner); // the next tick reports the new state (ok, or still stressed)

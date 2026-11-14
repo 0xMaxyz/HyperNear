@@ -16,6 +16,7 @@ import { decisionInput } from './facts.ts';
 import { DEFAULT_GUARD_CONFIG, evaluateGuard } from './guard.ts';
 import { HedgeRefused, Hedger, planCloseHedge, planOpenHedge, type ClosePlan, type OpenPlan } from './hedge.ts';
 import { normalizeLeg } from './funds.ts';
+import { Rebalancer } from './rebalance.ts';
 import { guardInputs, Legs, type LegState, type OwnerSnapshot } from './legs.ts';
 import { HttpError, parseRelayBody, RateLimiter, Relayer } from './relayer.ts';
 import type { Deps } from './server.ts';
@@ -276,6 +277,25 @@ export function buildDryRunDeps(fixtureName = 'hedged', opts: { replayStartMs?: 
     otherTopUpBudget: 0,
   });
   const strategies = dryStrategies(snap.owner, bus, strategyCtx);
+  // owner rebalance on the simulated balances: the same planner and job runner, only the money moves inside this process
+  const bump = (leg: number, usd: number) => {
+    const c = credited.get(leg) ?? { spot: 0, perp: 0 };
+    credited.set(leg, { ...c, perp: c.perp + usd });
+  };
+  const rebalancer = new Rebalancer({
+    legs,
+    bus,
+    annualVol: config.guard.annualVol,
+    agentId: DRY_AGENT,
+    busyLegs: () => [],
+    policy: async (o) => policyOf(o),
+    sleep: async () => undefined,
+    send: async (owner, m) => {
+      bump(m.from.leg, -Number(m.amount) - m.sourceFeeUsd);
+      bump(m.to.leg, Number(m.receives));
+      bus.emit('funds.moved', { owner, leg: m.from.leg, action: 'rebalance', amount: m.amount, to: m.to.leg, ok: true, simulated: true });
+    },
+  });
   // the library answers from the same fixture: real validateSpec, the fixture's prices, no model
   const library = strategyLibrary({ context: async () => strategyCtx(), current: (o, id) => strategies.get(o, id), mids: async () => snap.market.mids, keyReady: () => true });
 
@@ -286,6 +306,7 @@ export function buildDryRunDeps(fixtureName = 'hedged', opts: { replayStartMs?: 
     bus,
     decider,
     strategies,
+    rebalancer,
     drafter,
     library,
     funding: fundingService({ network: 'testnet', fetchFn: opts.fetchFn }),

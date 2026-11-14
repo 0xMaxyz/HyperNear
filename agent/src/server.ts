@@ -60,6 +60,8 @@ import { StartConflict, StrategyManager } from './strategy/manager.ts';
 import { specHash } from './strategy/spec.ts';
 import { bootTee, enrollTeeOwner, hlLedgerPort, OwnerScope, shadeBackend } from './tee.ts';
 import { pinAccount, teeAccount } from './teeAccount.ts';
+import { Rebalancer } from './rebalance.ts';
+import { sendBetweenLegs } from './transfer.ts';
 
 /** owners whose hedge pair is opening right now (see POST /hedge/pair) */
 const pairsInFlight = new Set<string>();
@@ -75,6 +77,8 @@ export interface Deps {
   orders?: OrderExecutor;
   /** new hedged position, both legs at once (placeHedge) */
   pairs?: HedgePairExecutor;
+  /** owner-signed rebalance of the legs' pool to chosen percentages (rebalanceLegs); the dry run moves simulated balances */
+  rebalancer?: Rebalancer;
   /** Easy trading: plain text -> a draft spec the owner then signs (needs ANTHROPIC_API_KEY; the dry run answers its example prompts) */
   tradeDrafter?: (owner: Hex, text: string) => Promise<TradeDraft>;
   /** its own limits, apart from the relay limiter: per IP, per owner, and a daily cap on model calls */
@@ -421,6 +425,27 @@ export function handler(d: Deps) {
           pairsInFlight.delete(cmd.owner);
         }
       }
+      // owner-signed leg rebalance (agent/src/rebalance.ts): preview is read-only, the run needs the owner's own signature (never a session key)
+      if (req.method === 'POST' && url.pathname === '/rebalance/preview') {
+        const body = (await readJson(req)) as { owner?: unknown; spec?: unknown };
+        const owner = ownerOf(body.owner);
+        await assertServed(d, owner);
+        if (!d.rebalancer) throw new HttpError(503, 'rebalance is off');
+        const r = await d.rebalancer.preview(owner, body.spec);
+        return reply(r.ok ? 200 : 422, r.ok ? r : { error: r.errors.join('; '), errors: r.errors });
+      }
+      if (req.method === 'POST' && url.pathname === '/rebalance') {
+        const body = (await readJson(req)) as { spec?: unknown };
+        const cmd = await verifyCommand(verifier(d), body, 'rebalanceLegs');
+        if (specHashOfJson(body.spec) !== cmd.specHash) throw new HttpError(401, 'command.specHash must be the specHash of the rebalance spec (the owner signed another spec)');
+        await assertOptedIn(d, cmd.owner);
+        if (!d.rebalancer) throw new HttpError(503, 'rebalance is off');
+        d.bus.emit('command', { ...cmd });
+        const { job, plan } = await d.rebalancer.start(cmd.owner, body.spec);
+        return reply(202, { job, plan });
+      }
+      const rebalancePath = /^\/rebalance\/(0x[0-9a-fA-F]{40})$/.exec(url.pathname);
+      if (req.method === 'GET' && rebalancePath) return reply(200, { job: d.rebalancer?.job(ownerOf(rebalancePath[1])) ?? null });
       if (req.method === 'POST' && url.pathname === '/session/start') {
         const body = (await readJson(req)) as { spec?: unknown };
         const cmd = await verifyCommand(verifier(d), body, 'startSession');
@@ -626,11 +651,12 @@ export function buildDeps(config: AgentConfig, tee?: TeeRuntime): Deps {
   const guardConfig: GuardConfig = { ...DEFAULT_GUARD_CONFIG, marginFloorMultiple: config.guard.marginFloor, latencyP95Sec: config.guard.latencyP95Sec };
   // the guard signs rebalances with the NEAR agent's function-call key, never with the relayer's
   const agentSender = config.nearAgent && nearAccount(config.nearAgent.accountId, config.nearAgent.secretKey, rpc ?? (config.network === 'mainnet' ? 'https://free.rpc.fastnear.com' : 'https://test.rpc.fastnear.com'));
+  const agentClient = tee ? tee.client : agentSender && new HyperNearClient({ contractId: config.contractId, network: config.network, rpcUrl: rpc, sender: agentSender });
   const guardLoop = new GuardLoop({
     legs,
     bus,
     agentId: tee ? undefined : config.nearAgent?.accountId,
-    agentClient: tee ? tee.client : agentSender && new HyperNearClient({ contractId: config.contractId, network: config.network, rpcUrl: rpc, sender: agentSender }),
+    agentClient,
     owners: () => scope.filter(allOwners()),
     // a strategy leg is topped up only from the reserve leg and within the strategy's own daily budget
     budgetLeftUsd: (o, leg) => d.strategies?.topUpLeft(o, leg),
@@ -661,6 +687,18 @@ export function buildDeps(config: AgentConfig, tee?: TeeRuntime): Deps {
   const strategyClients: StrategyClients | undefined = clients && { ask: jevAskStrategy(), escalate: claudeStrategyEscalator() };
   const strategies = new StrategyManager({ legs, client, policy: config.policy, agentId: tee ? undefined : config.nearAgent?.accountId, hedgeReserveUsd: config.guard.hedgeReserveUsd, dataDir: config.dataDir, served: (o) => scope.stillServes(o), emit: (t, data) => void bus.emit(t, data) });
   d.strategies = strategies;
+  if (agentClient) {
+    d.rebalancer = new Rebalancer({
+      legs,
+      bus,
+      annualVol: config.guard.annualVol,
+      guard: guardConfig,
+      agentId: tee ? undefined : config.nearAgent?.accountId,
+      busyLegs: (o) => strategies.list(o).filter((s) => s.state !== 'stopped').map((s) => s.leg),
+      policy: (o) => client.getOwner(o),
+      send: (owner, m) => sendBetweenLegs({ legs, agentClient, owner, from: m.from, to: m.to.address, amount: m.amount, transfer: m.transfer }),
+    });
+  }
   d.funding = fundingService({ network: config.network, maxUsd: Number(process.env.HYPERNEAR_FUND_MAX_USD) || undefined });
   d.library = strategyLibrary({
     context: (owner, selfId) => strategies.context(owner, selfId),

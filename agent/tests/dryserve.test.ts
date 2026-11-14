@@ -242,6 +242,44 @@ describe('--dry-run --serve: signed orders', () => {
   };
   const legs = async (base: string) => (await (await fetch(`${base}/owner/${OWNER}`)).json()).snapshot.legs as { leg: number; clearinghouse: { assetPositions: { position: { szi: string; leverage: { type: string; value: number } } }[] } }[];
 
+  const balances = async (base: string) => Object.fromEntries(((await (await fetch(`${base}/owner/${OWNER}`)).json()).snapshot.legs as { leg: number; clearinghouse: { marginSummary: { accountValue: string } } }[]).map((l) => [l.leg, Number(Number(l.clearinghouse.marginSummary.accountValue).toFixed(2))]));
+  const settled = async (base: string) => {
+    for (let i = 0; i < 100; i++) {
+      const { job } = await (await fetch(`${base}/rebalance/${OWNER}`)).json();
+      if (job && job.state !== 'running') return job;
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    throw new Error('rebalance did not finish');
+  };
+
+  it.each([[false], [true]])('rebalances legs 1 and 2 to 50/50 (unified legs: %s): preview, a forged spec is refused, the signed run ends at the shares', async (unified) => {
+    server = createServer(handler(buildDryRunDeps('hedged', { replayStartMs: 0, replaySpeed: 1000, unified })));
+    await new Promise<void>((r) => server!.listen(0, '127.0.0.1', r));
+    const base = `http://127.0.0.1:${(server!.address() as AddressInfo).port}`;
+    const spec = { legs: [{ leg: 1, pct: 50 }, { leg: 2, pct: 50 }] };
+    const before = await balances(base);
+    const preview = await (await post(`${base}/rebalance/preview`, { owner: OWNER, spec })).json();
+    expect(preview.plan.moves).toHaveLength(1);
+    expect(preview.plan.moves[0]).toMatchObject({ from: { leg: 1 }, to: { leg: 2 }, transfer: unified ? 'sendAsset' : 'usdSend' });
+    expect((await post(`${base}/rebalance/preview`, { owner: OWNER, spec: { legs: [{ leg: 1, pct: 60 }, { leg: 2, pct: 50 }] } })).status).toBe(422);
+
+    const forged = { ...(await withSpec('rebalanceLegs', spec)), spec: { legs: [{ leg: 1, pct: 10 }, { leg: 2, pct: 90 }] } };
+    expect((await post(`${base}/rebalance`, forged)).status).toBe(401);
+    expect((await post(`${base}/rebalance`, await withSpec('placeOrder', spec))).status).toBe(400); // another action's signature
+
+    const started = await post(`${base}/rebalance`, await withSpec('rebalanceLegs', spec));
+    expect(started.status).toBe(202);
+    const job = await settled(base);
+    expect(job).toMatchObject({ state: 'done', steps: [{ from: 1, to: 2, status: 'sent' }] });
+    const after = await balances(base);
+    const pool = before[1]! + before[2]!;
+    expect(after[1]).toBeCloseTo(pool / 2, 1);
+    expect(after[2]).toBeCloseTo(pool / 2, 1);
+    expect(after[0]).toBe(before[0]); // the other leg is untouched
+    // balanced now: running it again plans nothing
+    expect((await (await post(`${base}/rebalance/preview`, { owner: OWNER, spec })).json()).plan.moves).toEqual([]);
+  });
+
   it('places a market order and a bracket, lists them, cancels them; the book changes', async () => {
     const base = await serve('hedged');
     const open = { leg: 2, coin: 'BTC', side: 'buy', type: 'market', size: '0.0002', leverage: 4, isCross: false };
